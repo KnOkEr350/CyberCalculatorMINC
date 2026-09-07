@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-cybercalc}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cybercalc}
+      POSTGRES_DB: ${DB_NAME:-cybercalc}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cybercalc} -d ${DB_NAME:-cybercalc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Порт наружу не пробрасывается намеренно — доступ к БД только из docker-сети.
+    # Для локальной отладки можно временно раскомментировать:
+    # ports:
+    #   - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-cybercalc}
+      DB_PASSWORD: ${DB_PASSWORD:-cybercalc}
+      DB_NAME: ${DB_NAME:-cybercalc}
+      DB_SSLMODE: disable
+      HTTP_ADDR: ":8080"
+      UPLOAD_DIR: /data/uploads
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-admin@minc.local}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-ChangeMe123!}
+    volumes:
+      - uploads_data:/data/uploads
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+
+volumes:
+  db_data:
+  uploads_data:
