@@ -36,6 +36,14 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if req.Role == "admin" {
+		req.EntityType = "organization"
+		req.PartnerID = nil
+	}
+	if req.EntityType == "" || (req.EntityType == "edu_institution" && req.PartnerID == nil) {
+		middleware.WriteError(w, 400, "назначьте тип профиля и учебное заведение для представителя ОО")
+		return
+	}
 	if req.PartnerID != nil {
 		var exists bool
 		if err := h.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM partners WHERE id::text = $1)`, *req.PartnerID).Scan(&exists); err != nil {
@@ -100,8 +108,10 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 }
 
 type updateUserRequest struct {
-	IsActive *bool   `json:"is_active,omitempty"`
-	Role     *string `json:"role,omitempty"`
+	IsActive   *bool   `json:"is_active,omitempty"`
+	Role       *string `json:"role,omitempty"`
+	EntityType *string `json:"entity_type,omitempty"`
+	PartnerID  *string `json:"partner_id,omitempty"`
 }
 
 func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser, userID string) {
@@ -110,17 +120,85 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
-	if req.IsActive != nil {
-		h.DB.Exec(`UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2`, *req.IsActive, userID)
-	}
 	if req.Role != nil {
 		if *req.Role != string(models.RoleAdmin) && *req.Role != string(models.RoleUser) {
 			middleware.WriteError(w, http.StatusBadRequest, "role должен быть admin или user")
 			return
 		}
-		h.DB.Exec(`UPDATE users SET role = $1, updated_at = now() WHERE id = $2`, *req.Role, userID)
 	}
-	logAudit(h.DB, "user", userID, "update", admin.ID, "", nil, req)
+	if req.EntityType != nil && *req.EntityType != "organization" && *req.EntityType != "edu_institution" {
+		middleware.WriteError(w, 400, "некорректный тип профиля")
+		return
+	}
+	tx, err := h.DB.Begin()
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка транзакции")
+		return
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`SELECT pg_advisory_xact_lock(270004)`); err != nil {
+		middleware.WriteError(w, 500, "ошибка блокировки")
+		return
+	}
+	var active bool
+	var role, entity, partner string
+	if tx.QueryRow(`SELECT is_active,role,COALESCE(entity_type,''),COALESCE(partner_id::text,'') FROM users WHERE id::text=$1 FOR UPDATE`, userID).Scan(&active, &role, &entity, &partner) != nil {
+		middleware.WriteError(w, 404, "пользователь не найден")
+		return
+	}
+	old := map[string]interface{}{"is_active": active, "role": role, "entity_type": entity, "partner_id": partner}
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	if req.Role != nil {
+		role = *req.Role
+	}
+	if req.EntityType != nil {
+		entity = *req.EntityType
+	}
+	if req.PartnerID != nil {
+		partner = *req.PartnerID
+	}
+	if role == "admin" {
+		entity = "organization"
+	}
+	if entity != "edu_institution" {
+		partner = ""
+	}
+	if entity == "edu_institution" && partner == "" {
+		middleware.WriteError(w, 400, "назначьте учебное заведение")
+		return
+	}
+	if partner != "" {
+		var exists bool
+		if tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1)`, partner).Scan(&exists) != nil || !exists {
+			middleware.WriteError(w, 400, "партнёр не найден")
+			return
+		}
+	}
+	if !active || role != "admin" {
+		var count int
+		if tx.QueryRow(`SELECT count(*) FROM users WHERE role='admin' AND is_active AND id::text<>$1`, userID).Scan(&count) != nil {
+			middleware.WriteError(w, 500, "ошибка проверки администраторов")
+			return
+		}
+		if count == 0 {
+			middleware.WriteError(w, 400, "нельзя отключить последнего администратора")
+			return
+		}
+	}
+	if _, err := tx.Exec(`UPDATE users SET is_active=$1,role=$2,entity_type=NULLIF($3,''),partner_id=NULLIF($4,'')::uuid,updated_at=now() WHERE id::text=$5`, active, role, entity, partner, userID); err != nil {
+		middleware.WriteError(w, 500, "ошибка сохранения")
+		return
+	}
+	if logAudit(tx, "user", userID, "update", admin.ID, "", old, req) != nil {
+		middleware.WriteError(w, 500, "ошибка аудита")
+		return
+	}
+	if tx.Commit() != nil {
+		middleware.WriteError(w, 500, "ошибка сохранения")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

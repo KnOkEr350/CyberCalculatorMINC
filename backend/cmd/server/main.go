@@ -81,7 +81,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
 
 	authH := &handlers.AuthHandlers{DB: db}
 	partnerH := &handlers.PartnerHandlers{DB: db}
-	entryH := &handlers.EntryHandlers{DB: db, UploadDir: cfg.UploadDir}
+	entryH := &handlers.EntryHandlers{DB: db}
 	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir}
 	dashH := &handlers.DashboardHandlers{DB: db}
 	adminH := &handlers.AdminHandlers{DB: db}
@@ -96,6 +96,14 @@ func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
 	// --- Партнёры ---
 	mux.HandleFunc("GET /api/partners", middleware.RequireAuth(db, partnerH.List))
 	mux.HandleFunc("POST /api/partners", middleware.RequireAuth(db, partnerH.Create))
+	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
+	mux.HandleFunc("GET /api/mentors", middleware.RequireAuth(db, entryH.Mentors))
+	mux.HandleFunc("POST /api/mentors", middleware.RequireAuth(db, entryH.CreateMentor))
+	mux.HandleFunc("GET /api/obligations", middleware.RequireAuth(db, entryH.Obligations))
+	mux.HandleFunc("GET /api/entries/import-template", middleware.RequireAuth(db, entryH.ImportTemplate))
+	mux.HandleFunc("POST /api/entries/import", middleware.RequireAuth(db, entryH.Import))
+	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireAdmin(db, partnerH.DirectoryTemplate))
+	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireAdmin(db, partnerH.ImportDirectory))
 
 	// --- Категории активностей (справочник с полями формы) ---
 	mux.HandleFunc("GET /api/categories", middleware.RequireAuth(db, entryH.Categories))

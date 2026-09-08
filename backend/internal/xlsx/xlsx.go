@@ -29,14 +29,35 @@ func New() *Workbook {
 }
 
 func (wb *Workbook) AddSheet(name string, headers []string, rows [][]interface{}) {
-	wb.Sheets = append(wb.Sheets, Sheet{Name: sanitizeSheetName(name), Headers: headers, Rows: rows})
+	base := sanitizeSheetName(name)
+	candidate := base
+	for n := 2; ; n++ {
+		duplicate := false
+		for _, s := range wb.Sheets {
+			if strings.EqualFold(s.Name, candidate) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			break
+		}
+		suffix := fmt.Sprintf(" (%d)", n)
+		r := []rune(base)
+		if len(r) > 31-len(suffix) {
+			r = r[:31-len(suffix)]
+		}
+		candidate = string(r) + suffix
+	}
+	wb.Sheets = append(wb.Sheets, Sheet{Name: candidate, Headers: headers, Rows: rows})
 }
 
 func sanitizeSheetName(name string) string {
 	replacer := strings.NewReplacer("/", "-", "\\", "-", "?", "", "*", "", "[", "(", "]", ")", ":", "-")
 	n := replacer.Replace(name)
-	if len(n) > 31 {
-		n = n[:31]
+	n = strings.Trim(n, " '")
+	if len([]rune(n)) > 31 {
+		n = string([]rune(n)[:31])
 	}
 	if n == "" {
 		n = "Sheet"
@@ -79,6 +100,10 @@ func (s Sheet) sheetXML() string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`)
 	b.WriteString(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
+	b.WriteString(`<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="22"/>`)
+	if len(s.Headers) > 0 {
+		fmt.Fprintf(&b, `<cols><col min="1" max="%d" width="28" customWidth="1"/></cols>`, len(s.Headers))
+	}
 	b.WriteString(`<sheetData>`)
 
 	writeRow := func(rowIdx int, values []interface{}) {
@@ -106,7 +131,11 @@ func (s Sheet) sheetXML() string {
 		writeRow(i+1, row)
 	}
 
-	b.WriteString(`</sheetData></worksheet>`)
+	b.WriteString(`</sheetData>`)
+	if len(s.Headers) > 0 {
+		fmt.Fprintf(&b, `<autoFilter ref="A1:%s%d"/>`, colLetter(len(s.Headers)-1), len(s.Rows)+1)
+	}
+	b.WriteString(`</worksheet>`)
 	return b.String()
 }
 

@@ -12,11 +12,25 @@ const state = {
   entries: [],
   dashboard: null,
   categoriesError: null,
+  partnerID: "",
+  partnerKind: "vuz",
+  mentors: [],
 };
 
 const CATEGORY_LABELS = {}; // заполняется из /api/categories
 const AUDIENCE_LABELS = { vuz: "Вуз", kolledj: "СПО", school: "Школьный трек" };
-const CHART_COLORS = ["#1a79ff", "#00a6a6", "#6757d9", "#f2a51a", "#e85c8b", "#36a269", "#489dff", "#805ad5", "#de6f3c"];
+const CHART_COLORS = [
+  "#1a79ff",
+  "#00a6a6",
+  "#6757d9",
+  "#f2a51a",
+  "#e85c8b",
+  "#36a269",
+  "#489dff",
+  "#805ad5",
+  "#de6f3c",
+];
+
 const VALUE_LABELS = {
   vuz: "Вуз",
   kolledj: "Колледж",
@@ -30,7 +44,7 @@ const VALUE_LABELS = {
   expertise: "Экспертиза",
   user: "Пользователь",
   admin: "Администратор",
-  organization: "ИТ-компания",
+  organization: "Киберпротект",
   edu_institution: "Образовательная организация",
   entry: "Запись",
   attachment: "Документ",
@@ -43,10 +57,17 @@ const VALUE_LABELS = {
   settings_change: "Изменение настроек",
 };
 
+function valueLabel(value) {
+  return VALUE_LABELS[value] || value;
+}
+
 async function api(path, opts = {}) {
   const res = await fetch("/api" + path, {
     credentials: "same-origin",
-    headers: opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
+    headers:
+      opts.body && !(opts.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : undefined,
     ...opts,
   });
   if (res.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
@@ -54,7 +75,9 @@ async function api(path, opts = {}) {
     render();
     throw new Error("требуется авторизация");
   }
-  const isJSON = (res.headers.get("content-type") || "").includes("application/json");
+  const isJSON = (res.headers.get("content-type") || "").includes(
+    "application/json",
+  );
   const data = isJSON ? await res.json().catch(() => null) : null;
   if (!res.ok) {
     throw new Error((data && data.error) || `Ошибка ${res.status}`);
@@ -71,11 +94,9 @@ function el(html) {
 }
 
 function fmtMoney(v) {
-  return Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽";
-}
-
-function valueLabel(value) {
-  return VALUE_LABELS[value] || value;
+  return (
+    Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽"
+  );
 }
 
 function escapeHTML(value) {
@@ -114,7 +135,9 @@ function initials(name) {
 }
 
 function showToast(message, kind = "error") {
-  const toast = el(`<div class="toast ${escapeHTML(kind)}" role="status"></div>`);
+  const toast = el(
+    `<div class="toast ${escapeHTML(kind)}" role="status"></div>`,
+  );
   toast.textContent = message;
   document.body.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("visible"));
@@ -156,8 +179,21 @@ function render() {
     app.appendChild(renderLogin());
     return;
   }
-  if (!state.me.entity_type) {
-    app.appendChild(renderChooseEntity());
+  if (
+    state.me.role !== "admin" &&
+    (!state.me.entity_type ||
+      (state.me.entity_type === "edu_institution" && !state.me.partner_id))
+  ) {
+    app.appendChild(
+      el(
+        `<div class="card"><h2>Профиль не назначен</h2><p>Попросите администратора назначить роль и учебное заведение. Самостоятельная смена прав недоступна.</p><button class="btn" onclick="location.reload()">Проверить назначение</button><button class="btn secondary" id="unassigned-logout">Выйти</button></div>`,
+      ),
+    );
+    app.querySelector("#unassigned-logout").onclick = async () => {
+      await api("/auth/logout", { method: "POST" });
+      state.me = null;
+      render();
+    };
     return;
   }
   app.appendChild(renderLayout());
@@ -198,7 +234,10 @@ function renderLogin() {
     submit.disabled = true;
     submit.textContent = "Входим…";
     try {
-      await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
       await boot();
     } catch (e) {
       errBox.textContent = e.message;
@@ -207,52 +246,6 @@ function renderLogin() {
       submit.disabled = false;
       submit.textContent = "Войти";
     }
-  };
-  return wrap;
-}
-
-function renderChooseEntity() {
-  const wrap = el(`<div class="auth-shell compact">
-    <aside class="auth-brand-panel">
-      ${brandMarkup(true)}
-      <div class="auth-message"><span class="eyebrow">Первый вход</span><h1>Настроим рабочее пространство</h1><p>Тип организации определяет доступные сценарии расчёта и отображение отчётов.</p></div>
-      <div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
-    </aside>
-    <main class="auth-form-panel"><div class="login-box entity-choice">
-      <span class="eyebrow">Профиль</span><h2>Кого вы представляете?</h2>
-      <p class="muted">Выберите подходящий вариант. При необходимости администратор сможет уточнить настройки.</p>
-      <button type="button" class="choice-card" id="pick-org"><b>Организация</b><span>ИТ-компания, ведущая план и факт затрат</span><i>→</i></button>
-      <div class="field entity-partner-field"><label for="entity-partner">Образовательная организация</label><select id="entity-partner"><option value="">Выберите организацию</option>${state.partners
-        .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
-        .join("")}</select></div>
-      <button type="button" class="choice-card" id="pick-edu"><b>Вуз, колледж или школа</b><span>Образовательная организация — партнёр</span><i>→</i></button>
-      <div class="error form-message" id="entity-error" style="display:none" role="alert"></div>
-    </div></main>
-  </div>`);
-  const pick = async (entity_type, partner_id = null) => {
-    const buttons = wrap.querySelectorAll(".choice-card");
-    const error = wrap.querySelector("#entity-error");
-    buttons.forEach((button) => (button.disabled = true));
-    error.style.display = "none";
-    try {
-      await api("/auth/entity-type", { method: "POST", body: JSON.stringify({ entity_type, partner_id }) });
-      await boot();
-    } catch (e) {
-      error.textContent = e.message;
-      error.style.display = "block";
-      buttons.forEach((button) => (button.disabled = false));
-    }
-  };
-  wrap.querySelector("#pick-org").onclick = () => pick("organization");
-  wrap.querySelector("#pick-edu").onclick = () => {
-    const partnerID = wrap.querySelector("#entity-partner").value;
-    if (!partnerID) {
-      const error = wrap.querySelector("#entity-error");
-      error.textContent = "Выберите свою образовательную организацию";
-      error.style.display = "block";
-      return;
-    }
-    pick("edu_institution", partnerID);
   };
   return wrap;
 }
@@ -267,11 +260,12 @@ function renderLayout() {
       <nav>
         <button data-view="dashboard">Дашборд</button>
         <button data-view="entries">План / Факт</button>
+        <button data-view="partners">Учебные заведения</button>
         ${isAdmin ? '<button data-view="admin">Админка</button>' : ""}
       </nav>
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
-        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${escapeHTML(valueLabel(state.me.entity_type))}${isAdmin ? " · Администратор" : ""}</small></span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${isStaffUser() ? "Киберпротект" : "Учебное заведение"}${isAdmin ? " · Администратор" : ""}</small></span>
         <button id="logout" title="Выйти из системы">Выйти</button>
       </div>
     </div>
@@ -296,6 +290,8 @@ function renderLayout() {
   const content = wrap.querySelector("#content");
   if (state.view === "dashboard") renderDashboard(content);
   else if (state.view === "entries") renderEntries(content);
+  else if (state.view === "partners")
+    renderPartnerDirectory(content).catch((e) => showToast(e.message));
   else if (state.view === "admin") renderAdmin(content);
   return wrap;
 }
@@ -306,7 +302,9 @@ async function renderDashboard(root) {
   root.appendChild(el(`<div class="muted">Загрузка дашборда…</div>`));
   let d;
   try {
-    d = await api(`/dashboard?report_year=${state.year}`);
+    d = await api(
+      `/dashboard?report_year=${state.year}&partner_id=${encodeURIComponent(state.partnerID)}`,
+    );
   } catch (e) {
     root.innerHTML = `<div class="error">${escapeHTML(e.message)}</div>`;
     return;
@@ -321,17 +319,34 @@ async function renderDashboard(root) {
         <div class="name">${escapeHTML(CATEGORY_LABELS[b.category_code] || b.category_code)}</div>
         <div class="bar-track"><div class="bar-fill" style="width:${clampPercent(b.share_percent)}%"></div></div>
         <div class="bar-value">${escapeHTML(fmtMoney(b.amount_rub))}</div>
-      </div>`
+      </div>`,
           )
           .join("")
       : `<div class="muted">Нет данных за ${state.year} год</div>`;
 
   const groupedChart = (plan, fact) => {
-    const planMap = new Map((plan || []).map((item) => [item.category_code, Number(item.amount_rub) || 0]));
-    const factMap = new Map((fact || []).map((item) => [item.category_code, Number(item.amount_rub) || 0]));
+    const planMap = new Map(
+      (plan || []).map((item) => [
+        item.category_code,
+        Number(item.amount_rub) || 0,
+      ]),
+    );
+    const factMap = new Map(
+      (fact || []).map((item) => [
+        item.category_code,
+        Number(item.amount_rub) || 0,
+      ]),
+    );
     const codes = [...new Set([...planMap.keys(), ...factMap.keys()])];
-    if (!codes.length) return `<div class="chart-empty">Добавьте записи плана или факта — здесь появится сравнение.</div>`;
-    const max = Math.max(1, ...codes.flatMap((code) => [planMap.get(code) || 0, factMap.get(code) || 0]));
+    if (!codes.length)
+      return `<div class="chart-empty">Добавьте записи плана или факта — здесь появится сравнение.</div>`;
+    const max = Math.max(
+      1,
+      ...codes.flatMap((code) => [
+        planMap.get(code) || 0,
+        factMap.get(code) || 0,
+      ]),
+    );
     return `<div class="compare-chart">
       <div class="chart-legend"><span><i class="legend-plan"></i>План</span><span><i class="legend-fact"></i>Факт</span></div>
       ${codes
@@ -366,20 +381,25 @@ async function renderDashboard(root) {
       </div>
       <div class="donut-legend">${items
         .map(
-          (item, index) => `<div><i style="background:${CHART_COLORS[index % CHART_COLORS.length]}"></i><span>${escapeHTML(
-            CATEGORY_LABELS[item.category_code] || item.category_code
-          )}</span><b>${Number(item.share_percent || 0).toLocaleString("ru-RU")}%</b></div>`
+          (item, index) =>
+            `<div><i style="background:${CHART_COLORS[index % CHART_COLORS.length]}"></i><span>${escapeHTML(
+              CATEGORY_LABELS[item.category_code] || item.category_code,
+            )}</span><b>${Number(item.share_percent || 0).toLocaleString("ru-RU")}%</b></div>`,
         )
         .join("")}</div>
     </div>`;
   };
 
   const planPct = clampPercent(d.plan_completion_pct);
-  const targetPct = d.target_amount_rub ? clampPercent((Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 100) : 0;
+  const targetPct = d.target_amount_rub
+    ? clampPercent(
+        (Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 100,
+      )
+    : 0;
 
   root.innerHTML = `
     <section class="page-heading">
-      <div><span class="eyebrow">Аналитика</span><h1>Дашборд</h1><p>Сводная картина исполнения обязательств за выбранный отчётный год.</p></div>
+      <div><span class="eyebrow">Аналитика</span><h1>Дашборд</h1><p>Суммы внесённых мероприятий за выбранный год. Проверка обязательных активностей — в плане/факте партнёра; суммы сами по себе не подтверждают соответствие приказу.</p></div>
       <span class="year-badge">${state.year}</span>
     </section>
     <div class="card">
@@ -388,6 +408,7 @@ async function renderDashboard(root) {
         <div class="flex">
           <label style="margin:0">Год</label>
           <input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}" style="width:90px">
+          <label for="dash-partner">Партнёр</label><select id="dash-partner"><option value="">Все доступные партнёры</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select>
           ${
             state.me.role === "admin"
               ? `<button class="btn secondary" id="set-target">Задать целевую сумму (3%)</button>`
@@ -396,8 +417,10 @@ async function renderDashboard(root) {
         </div>
       </div>
       <div class="grid cols-3" style="margin-top:14px">
-        <div class="stat"><div class="label">Целевая сумма (3% от льгот)</div><div class="value">${
-          d.target_amount_rub != null ? fmtMoney(d.target_amount_rub) : "не задана"
+        <div class="stat"><div class="label">Моя целевая сумма (3% от льгот)</div><div class="value">${
+          d.target_amount_rub != null
+            ? fmtMoney(d.target_amount_rub)
+            : "не задана"
         }</div></div>
         <div class="stat"><div class="label">План, руб.</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
         <div class="stat"><div class="label">Факт, руб.</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
@@ -407,9 +430,12 @@ async function renderDashboard(root) {
         <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
         ${
           d.target_amount_rub
-            ? `<div class="progress-header target"><span>Выполнение минимального объёма (3%)</span><strong>${Math.round(
-                (Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 10000
-              ) / 100}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>`
+            ? `<div class="progress-header target"><span>Выполнение минимального объёма (3%)</span><strong>${
+                Math.round(
+                  (Number(d.fact_total_rub) / Number(d.target_amount_rub)) *
+                    10000,
+                ) / 100
+              }%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>`
             : ""
         }
       </div>
@@ -433,10 +459,20 @@ async function renderDashboard(root) {
       e.target.reportValidity();
     }
   };
+  root.querySelector("#dash-partner").onchange = (e) => {
+    state.partnerID = e.target.value;
+    root.innerHTML = "";
+    renderDashboard(root);
+  };
   const targetBtn = root.querySelector("#set-target");
   if (targetBtn) {
     targetBtn.onclick = async () => {
-      const val = prompt("Целевая сумма затрат на " + state.year + " год, руб. (3% от сэкономленных льгот):", d.target_amount_rub || "");
+      const val = prompt(
+        "Целевая сумма затрат на " +
+          state.year +
+          " год, руб. (3% от сэкономленных льгот):",
+        d.target_amount_rub || "",
+      );
       if (val == null) return;
       const amount = Number(String(val).replace(",", "."));
       if (!Number.isFinite(amount) || amount <= 0) {
@@ -447,7 +483,10 @@ async function renderDashboard(root) {
       try {
         await api("/dashboard/target", {
           method: "POST",
-          body: JSON.stringify({ report_year: state.year, target_amount_rub: amount }),
+          body: JSON.stringify({
+            report_year: state.year,
+            target_amount_rub: amount,
+          }),
         });
         showToast("Целевая сумма сохранена", "success");
         render();
@@ -462,118 +501,11 @@ async function renderDashboard(root) {
 // --------------------------------------------------------------- ENTRIES --
 
 async function renderEntries(root) {
-  if (!state.categories.length) {
-    root.innerHTML = `<div class="card muted">Загрузка справочника категорий…</div>`;
-    try {
-      state.categories = (await api("/categories")) || [];
-      state.categories.forEach((c) => (CATEGORY_LABELS[c.code] = c.name));
-      state.categoriesError = null;
-    } catch (e) {
-      state.categoriesError = e.message;
-      root.innerHTML = `<div class="card"><div class="error">Не удалось загрузить категории: ${escapeHTML(
-        e.message
-      )}</div><button type="button" class="btn secondary" id="retry-categories">Повторить</button></div>`;
-      root.querySelector("#retry-categories").onclick = () => renderEntries(root);
-      return;
-    }
-  }
-  if (!state.categories.length) {
-    root.innerHTML = `<div class="card"><div class="error">Справочник категорий пуст. Добавление записи недоступно.</div></div>`;
-    return;
-  }
-  if (!state.categoryCode || !state.categories.some((category) => category.code === state.categoryCode)) {
-    state.categoryCode = state.categories[0].code;
-  }
-
-  root.innerHTML = `<section class="page-heading">
-    <div><span class="eyebrow">Отчётность</span><h1>План и факт</h1><p>Добавляйте мероприятия и отслеживайте подтверждённые затраты.</p></div>
-    <span class="year-badge">${state.year}</span>
-  </section>
-  <div class="card filter-card">
-    <div class="tabs">
-      <button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button>
-      <button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button>
-    </div>
-    <div class="grid cols-3">
-      <div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
-      <div class="field"><label>Категория активности</label>
-        <select id="category">${state.categories
-          .map((c) => `<option value="${escapeHTML(c.code)}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`)
-          .join("")}</select>
-      </div>
-      <div class="field right" style="align-self:end">
-        <button type="button" class="btn" id="add-entry">+ Добавить запись</button>
-        <a class="btn secondary" id="export-link" href="#" target="_blank" style="text-decoration:none;display:inline-block">Выгрузить категорию</a>
-        <a class="btn secondary" id="export-all-link" href="#" target="_blank" style="text-decoration:none;display:inline-block">Выгрузить весь год</a>
-      </div>
-    </div>
-  </div>
-  <div class="card"><h2>Записи</h2><div id="entries-table">Загрузка…</div></div>`;
-
-  root.querySelectorAll(".tabs button").forEach((b) => {
-    b.onclick = () => {
-      state.period = b.dataset.p;
-      renderEntries(root);
-    };
-  });
-  root.querySelector("#year").onchange = (e) => {
-    const year = Number(e.target.value);
-    if (validYear(year)) {
-      state.year = year;
-      renderEntries(root);
-    } else {
-      e.target.reportValidity();
-    }
-  };
-  root.querySelector("#category").onchange = (e) => {
-    state.categoryCode = e.target.value;
-    renderEntries(root);
-  };
-  root.querySelector("#export-link").href = `/api/reports/export?period_type=${state.period}&report_year=${state.year}&category_code=${state.categoryCode}`;
-  root.querySelector("#export-all-link").href = `/api/reports/export?period_type=${state.period}&report_year=${state.year}`;
-  root.querySelector("#add-entry").onclick = () => openEntryModal(null);
-
-  await loadEntriesTable(root);
-}
-
-async function loadEntriesTable(root) {
-  const box = root.querySelector("#entries-table");
   try {
-    const list = await api(
-      `/entries?category_code=${encodeURIComponent(state.categoryCode)}&period_type=${state.period}&report_year=${state.year}`
-    );
-    state.entries = list || [];
+    await renderPartnerEntries(root);
   } catch (e) {
-    box.innerHTML = `<div class="error">${escapeHTML(e.message)}</div>`;
-    return;
+    root.innerHTML = `<div class="card error">${escapeHTML(e.message)}</div>`;
   }
-  if (!state.entries.length) {
-    box.innerHTML = `<div class="muted">Записей пока нет</div>`;
-    return;
-  }
-  const total = state.entries.reduce((s, e) => s + Number(e.amount_rub), 0);
-  box.innerHTML = `<div class="table-wrap"><table>
-    <thead><tr><th>Партнёр</th><th>Аудитория</th><th>Сумма, руб.</th><th></th></tr></thead>
-    <tbody>
-      ${state.entries
-        .map(
-          (e) => `<tr data-id="${escapeHTML(e.id)}">
-        <td>${escapeHTML(partnerName(e.partner_id))}</td>
-        <td>${escapeHTML(valueLabel(e.audience))}</td>
-        <td>${escapeHTML(fmtMoney(e.amount_rub))}</td>
-        <td class="muted">ред.</td>
-      </tr>`
-        )
-        .join("")}
-    </tbody>
-    <tfoot><tr><td colspan="2"><b>Итого</b></td><td><b>${fmtMoney(total)}</b></td><td></td></tr></tfoot>
-  </table></div>`;
-  box.querySelectorAll("tbody tr").forEach((tr) => {
-    tr.onclick = () => {
-      const entry = state.entries.find((e) => e.id === tr.dataset.id);
-      openEntryModal(entry);
-    };
-  });
 }
 
 function partnerName(id) {
@@ -593,28 +525,47 @@ function fieldInput(f, value, audience) {
     const opts =
       f.key === "org_name"
         ? partners
-            .filter((p) => (!audience || p.partner_kind === audience) && (!state.me.partner_id || p.id === state.me.partner_id))
+            .filter((p) => !audience || p.partner_kind === audience)
             .map((p) => ({ v: p.id, l: p.name }))
-        : (f.options || []).map((o) => ({ v: o, l: valueLabel(o) }));
+        : f.key === "mentor_id"
+          ? state.mentors.map((m) => ({ v: m.id, l: m.full_name }))
+          : (f.options || []).map((o) => ({
+              v: o,
+              l:
+                {
+                  rpd: "РПД",
+                  oop: "ООП",
+                  vo: "Высшее образование",
+                  spo: "Среднее профессиональное",
+                  development: "Разработка",
+                  update: "Актуализация",
+                  expertise: "Экспертиза",
+                }[o] || o,
+            }));
     return `<select data-key="${escapeHTML(f.key)}" data-kind="select" ${f.required ? "required" : ""}>
       <option value="">—</option>
       ${opts
-        .map((o) => `<option value="${escapeHTML(o.v)}" ${o.v === val ? "selected" : ""}>${escapeHTML(o.l)}</option>`)
+        .map(
+          (o) =>
+            `<option value="${escapeHTML(o.v)}" ${o.v === val ? "selected" : ""}>${escapeHTML(o.l)}</option>`,
+        )
         .join("")}
     </select>`;
   }
   if (f.type === "number") {
     return `<input type="number" min="0" max="1000000000000" step="${f.integer ? "1" : "any"}" data-key="${escapeHTML(
-      f.key
+      f.key,
     )}" data-kind="number" value="${escapeHTML(val)}" ${f.required ? "required" : ""}>`;
   }
   return `<input type="text" maxlength="${f.max_length || 1000}" data-key="${escapeHTML(f.key)}" data-kind="text" value="${escapeHTML(
-    val
+    val,
   )}" ${f.required ? "required" : ""}>`;
 }
 
 function clearFieldErrors(container) {
-  container.querySelectorAll(".invalid").forEach((input) => input.classList.remove("invalid"));
+  container
+    .querySelectorAll(".invalid")
+    .forEach((input) => input.classList.remove("invalid"));
   container.querySelectorAll(".field-error").forEach((error) => {
     error.textContent = "";
     error.style.display = "none";
@@ -636,7 +587,9 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
   let firstInvalid = null;
 
   category.fields.forEach((field) => {
-    const input = fieldsBox.querySelector(`[data-key="${CSS.escape(field.key)}"]`);
+    const input = fieldsBox.querySelector(
+      `[data-key="${CSS.escape(field.key)}"]`,
+    );
     if (!input) return;
     const raw = input.value.trim();
     let message = "";
@@ -647,8 +600,10 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
         const number = Number(raw);
         if (!Number.isFinite(number)) message = "Введите корректное число";
         else if (number < 0) message = "Значение не может быть отрицательным";
-        else if (number > 1_000_000_000_000) message = "Значение слишком велико";
-        else if (field.integer && !Number.isInteger(number)) message = "Введите целое число";
+        else if (number > 1_000_000_000_000)
+          message = "Значение слишком велико";
+        else if (field.integer && !Number.isInteger(number))
+          message = "Введите целое число";
         else payload[field.key] = number;
       } else {
         const maxLength = field.max_length || 1000;
@@ -669,38 +624,86 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
       firstInvalid ||= input;
     }
   };
-  if (category.code === "teachers") requirePositive("academic_hours", "Количество часов должно быть больше нуля");
-  if (category.code === "internship" || category.code === "employment_practice") {
-    requirePositive("duration_months", "Продолжительность должна быть больше нуля");
-    if (!(Number(payload.student_load_hours_per_month) > 0 || Number(payload.mentor_load_hours_per_month) > 0)) {
-      const input = fieldsBox.querySelector('[data-key="student_load_hours_per_month"]');
+  if (category.code === "teachers")
+    requirePositive(
+      "academic_hours",
+      "Количество часов должно быть больше нуля",
+    );
+  if (
+    category.code === "internship" ||
+    category.code === "employment_practice"
+  ) {
+    requirePositive(
+      "duration_months",
+      "Продолжительность должна быть больше нуля",
+    );
+    if (
+      !(
+        Number(payload.student_load_hours_per_month) > 0 ||
+        Number(payload.mentor_load_hours_per_month) > 0
+      )
+    ) {
+      const input = fieldsBox.querySelector(
+        '[data-key="student_load_hours_per_month"]',
+      );
       if (input) {
-        setFieldError(input, "Укажите нагрузку студента или наставника больше нуля");
+        setFieldError(
+          input,
+          "Укажите нагрузку студента или наставника больше нуля",
+        );
         firstInvalid ||= input;
       }
     }
   }
-  if (category.code === "top_it") requirePositive("cofinancing_amount_rub", "Сумма должна быть больше нуля");
-  if (category.code === "minc_decision") requirePositive("amount_manual", "Сумма должна быть больше нуля");
-  if (category.code === "it_clubs" && !(Number(payload.academic_hours) > 0 || Number(payload.developed_programs_count) > 0)) {
+  if (category.code === "top_it")
+    requirePositive("cofinancing_amount_rub", "Сумма должна быть больше нуля");
+  if (category.code === "minc_decision")
+    requirePositive("amount_manual", "Сумма должна быть больше нуля");
+  if (
+    category.code === "it_clubs" &&
+    !(
+      Number(payload.academic_hours) > 0 ||
+      Number(payload.developed_programs_count) > 0
+    )
+  ) {
     const input = fieldsBox.querySelector('[data-key="academic_hours"]');
     if (input) {
-      setFieldError(input, "Укажите часы или количество разработанных программ");
+      setFieldError(
+        input,
+        "Укажите часы или количество разработанных программ",
+      );
       firstInvalid ||= input;
     }
   }
   if (
     category.code === "teacher_training" &&
-    !(Number(payload.developed_programs_count) > 0 || (Number(payload.academic_hours_per_teacher) > 0 && Number(payload.trained_teachers_count) > 0))
+    !(
+      Number(payload.developed_programs_count) > 0 ||
+      (Number(payload.academic_hours_per_teacher) > 0 &&
+        Number(payload.trained_teachers_count) > 0)
+    )
   ) {
-    const input = fieldsBox.querySelector('[data-key="developed_programs_count"]');
+    const input = fieldsBox.querySelector(
+      '[data-key="developed_programs_count"]',
+    );
     if (input) {
-      setFieldError(input, "Укажите разработанную программу либо часы и число обученных учителей");
+      setFieldError(
+        input,
+        "Укажите разработанную программу либо часы и число обученных учителей",
+      );
       firstInvalid ||= input;
     }
   }
-  if (category.code === "edu_content" && !(Number(payload.student_platform_months) > 0 || Number(payload.teacher_platform_months) > 0)) {
-    const input = fieldsBox.querySelector('[data-key="student_platform_months"]');
+  if (
+    category.code === "edu_content" &&
+    !(
+      Number(payload.student_platform_months) > 0 ||
+      Number(payload.teacher_platform_months) > 0
+    )
+  ) {
+    const input = fieldsBox.querySelector(
+      '[data-key="student_platform_months"]',
+    );
     if (input) {
       setFieldError(input, "Укажите доступ школьников или учителей");
       firstInvalid ||= input;
@@ -718,14 +721,37 @@ async function openEntryModal(entry) {
     return;
   }
   const isEdit = !!entry;
-  const payload = entry ? entry.payload || {} : {};
-  const audience = entry ? entry.audience : cat.audience_scope[0];
+  const partner = state.partners.find(
+    (p) => p.id === (entry?.partner_id || state.partnerID),
+  );
+  if (!partner) {
+    showToast("Сначала выберите учебное заведение");
+    return;
+  }
+  try {
+    state.mentors = await api(
+      `/mentors?partner_id=${encodeURIComponent(partner.id)}`,
+    );
+  } catch (e) {
+    showToast(e.message);
+    return;
+  }
+  const payload = entry
+    ? { ...entry.payload }
+    : {
+        org_name: partner.id,
+        level: partner.partner_kind === "kolledj" ? "spo" : "vo",
+      };
+  const audience = entry ? entry.audience : partner.partner_kind;
+  let savedID = null;
+  let busy = false;
 
-  const backdrop = el(`<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true">
+  const backdrop =
+    el(`<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true">
     <form id="m-form" novalidate>
     <h2 style="margin-top:0">${isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
     <div class="field"><label>Аудитория</label>
-      <select id="m-audience">${cat.audience_scope.map((a) => `<option value="${escapeHTML(a)}" ${a === audience ? "selected" : ""}>${escapeHTML(AUDIENCE_LABELS[a] || a)}</option>`).join("")}</select>
+      <select id="m-audience" disabled><option value="${escapeHTML(audience)}">${escapeHTML(AUDIENCE_LABELS[audience])}</option></select>
     </div>
     <div id="m-fields"></div>
     ${
@@ -733,7 +759,6 @@ async function openEntryModal(entry) {
         ? `<div class="field"><label>Комментарий к изменению (обязателен)</label><textarea id="m-comment" rows="2"></textarea></div>`
         : ""
     }
-    ${state.period === "fact" ? renderAttachSection(isEdit) : ""}
     <div class="error" id="m-error" style="display:none"></div>
     <div class="flex between" style="margin-top:14px">
       <div>${entry ? `<span class="muted">Текущая сумма: ${fmtMoney(entry.amount_rub)}</span>` : ""}</div>
@@ -742,23 +767,66 @@ async function openEntryModal(entry) {
         <button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>
       </div>
     </div>
+    ${renderAttachSection()}
     </form>
   </div></div>`);
 
   const fieldsBox = backdrop.querySelector("#m-fields");
   cat.fields.forEach((f) => {
-    const row = el(`<div class="field"><label>${escapeHTML(f.label)}${f.required ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`);
-    row.insertBefore(el(fieldInput(f, payload[f.key], audience)), row.querySelector(".field-error"));
+    const row = el(
+      `<div class="field"><label>${escapeHTML(f.label)}${f.required ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`,
+    );
+    row.insertBefore(
+      el(fieldInput(f, payload[f.key], audience)),
+      row.querySelector(".field-error"),
+    );
     if (f.key === "org_name") {
       const hasPartners =
         Array.isArray(state.partners) &&
-        state.partners.some((partner) => partner.partner_kind === audience && (!state.me.partner_id || partner.id === state.me.partner_id));
-      row.appendChild(el(`<div class="field-hint partner-hint"${hasPartners ? ' style="display:none"' : ""}>Для этой аудитории пока нет партнёров. Попросите администратора добавить организацию.</div>`));
+        state.partners.some((partner) => partner.partner_kind === audience);
+      row.appendChild(
+        el(
+          `<div class="field-hint partner-hint"${hasPartners ? ' style="display:none"' : ""}>Для этой аудитории пока нет партнёров. Попросите администратора добавить организацию.</div>`,
+        ),
+      );
     }
     fieldsBox.appendChild(row);
+    if (f.key === "org_name") row.querySelector("select").disabled = true;
+    if (f.key === "mentor_full_name") row.hidden = true;
+    if (f.key === "mentor_id") {
+      const select = row.querySelector("select");
+      select.onchange = () => {
+        fieldsBox.querySelector('[data-key="mentor_full_name"]').value =
+          state.mentors.find((m) => m.id === select.value)?.full_name || "";
+      };
+      const add = el(
+        '<button type="button" class="btn secondary">+ Наставник</button>',
+      );
+      add.onclick = async () => {
+        const name = prompt("Фамилия, имя, отчество наставника (при наличии)");
+        if (!name) return;
+        add.disabled = true;
+        try {
+          const mentor = await api("/mentors", {
+            method: "POST",
+            body: JSON.stringify({ partner_id: partner.id, full_name: name }),
+          });
+          state.mentors.push(mentor);
+          select.append(new Option(mentor.full_name, mentor.id));
+          select.value = mentor.id;
+          select.onchange();
+        } catch (e) {
+          showToast(e.message);
+        } finally {
+          add.disabled = false;
+        }
+      };
+      row.appendChild(add);
+    }
   });
 
   const closeModal = () => {
+    if (busy) return;
     document.removeEventListener("keydown", closeOnEscape);
     backdrop.remove();
   };
@@ -772,6 +840,7 @@ async function openEntryModal(entry) {
   document.addEventListener("keydown", closeOnEscape);
   backdrop.querySelector("#m-form").onsubmit = async (event) => {
     event.preventDefault();
+    if (busy) return;
     const validation = collectAndValidateEntryPayload(fieldsBox, cat);
     if (!validation.valid) return;
     const newPayload = validation.payload;
@@ -780,47 +849,59 @@ async function openEntryModal(entry) {
     const saveButton = backdrop.querySelector("#m-save");
     errBox.style.display = "none";
     saveButton.disabled = true;
+    busy = true;
     saveButton.textContent = isEdit ? "Сохраняем…" : "Создаём…";
     try {
-      const pendingFile = backdrop.querySelector("#attach-file")?.files[0];
-      if (isEdit) {
+      validateFileBatch(backdrop.querySelector("#attach-file").files);
+      if (!savedID && isEdit) {
         const comment = backdrop.querySelector("#m-comment").value.trim();
-        if (!comment) throw new Error("Комментарий обязателен при редактировании");
-        if (state.period === "fact" && pendingFile) {
-          await uploadAttachment(entry.id, pendingFile);
-        }
+        if (!comment)
+          throw new Error("Комментарий обязателен при редактировании");
         await api(`/entries/${entry.id}`, {
           method: "PUT",
           body: JSON.stringify({ payload: newPayload, audience: aud, comment }),
         });
-      } else {
+        savedID = entry.id;
+      } else if (!savedID) {
         const partnerId = newPayload.org_name || null;
-        const entryData = {
-          category_code: state.categoryCode,
-          partner_id: partnerId,
-          period_type: state.period,
-          report_year: state.year,
-          audience: aud,
-          payload: newPayload,
-        };
-        let body = JSON.stringify(entryData);
-        if (state.period === "fact") {
-          if (!pendingFile) throw new Error("Для фактической записи прикрепите подтверждающий документ");
-          body = new FormData();
-          body.append("entry", JSON.stringify(entryData));
-          body.append("file", pendingFile);
-        }
-        await api(`/entries`, { method: "POST", body });
+        const created = await api(`/entries`, {
+          method: "POST",
+          body: JSON.stringify({
+            category_code: state.categoryCode,
+            partner_id: partnerId,
+            period_type: state.period,
+            report_year: state.year,
+            audience: aud,
+            payload: newPayload,
+          }),
+        });
+        savedID = created.id;
       }
+      fieldsBox
+        .querySelectorAll("input,select,button")
+        .forEach((input) => (input.disabled = true));
+      await uploadFileBatch(
+        savedID,
+        backdrop.querySelector("#attach-file").files,
+      );
+      busy = false;
       closeModal();
       const root = document.getElementById("content");
-      if (root) await loadEntriesTable(root);
+      if (root) await renderEntries(root);
     } catch (e) {
-      errBox.textContent = e.message;
+      errBox.textContent =
+        (savedID
+          ? "Запись сохранена. Не удалось загрузить вложения; повторите загрузку кнопкой ниже. "
+          : "") + e.message;
       errBox.style.display = "block";
     } finally {
+      busy = false;
       saveButton.disabled = false;
-      saveButton.textContent = isEdit ? "Сохранить" : "Создать";
+      saveButton.textContent = savedID
+        ? "Повторить загрузку файлов"
+        : isEdit
+          ? "Сохранить"
+          : "Создать";
     }
   };
 
@@ -828,41 +909,45 @@ async function openEntryModal(entry) {
     const partnerSelect = fieldsBox.querySelector('[data-key="org_name"]');
     if (!partnerSelect) return;
     const selected = partnerSelect.value;
-    const options = (Array.isArray(state.partners) ? state.partners : []).filter(
-      (partner) => partner.partner_kind === event.target.value && (!state.me.partner_id || partner.id === state.me.partner_id)
-    );
+    const options = (
+      Array.isArray(state.partners) ? state.partners : []
+    ).filter((partner) => partner.partner_kind === event.target.value);
     partnerSelect.innerHTML = `<option value="">—</option>${options
-      .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
+      .map(
+        (partner) =>
+          `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`,
+      )
       .join("")}`;
-    const partnerHint = partnerSelect.closest(".field")?.querySelector(".partner-hint");
-    if (partnerHint) partnerHint.style.display = options.length ? "none" : "block";
-    if (options.some((partner) => partner.id === selected)) partnerSelect.value = selected;
+    const partnerHint = partnerSelect
+      .closest(".field")
+      ?.querySelector(".partner-hint");
+    if (partnerHint)
+      partnerHint.style.display = options.length ? "none" : "block";
+    if (options.some((partner) => partner.id === selected))
+      partnerSelect.value = selected;
     clearFieldErrors(fieldsBox);
   };
 
   document.body.appendChild(backdrop);
 
-  if (isEdit && entry.period_type === "fact") {
+  if (isEdit) {
     wireAttachSection(backdrop, entry.id);
+  } else {
+    backdrop.querySelector("#attach-list").textContent =
+      "Файлы необязательны. Выбранные файлы загрузятся после создания записи.";
+    backdrop.querySelector("#attach-upload").hidden = true;
   }
 }
 
-function renderAttachSection(isEdit) {
-  return `<div class="attachment-panel">
-    <h2>Подтверждающий документ${isEdit ? "" : " *"}</h2>
-    <p class="muted">Для фактической записи документ обязателен. Максимальный размер — 64 МБ.</p>
-    <div id="attach-list" class="attach-list muted">${isEdit ? "Загрузка…" : "Файл будет загружен вместе с записью"}</div>
-    <div class="file-row">
-      <input type="file" id="attach-file" ${isEdit ? "" : "required"}>
-      ${isEdit ? '<button type="button" class="btn secondary" id="attach-upload">Загрузить</button>' : ""}
+function renderAttachSection() {
+  return `<div class="card" style="margin-top:14px;background:transparent;padding:0;border:none">
+    <h2>Вложения — необязательно</h2><p class="muted">До 20 файлов за раз, суммарно до 64 МБ. Можно сохранить запись без файлов.</p>
+    <div id="attach-list" class="attach-list muted">Загрузка…</div>
+    <div class="field" style="margin-top:8px">
+      <input type="file" id="attach-file" multiple aria-label="Необязательные вложения">
+      <button type="button" class="btn secondary" id="attach-upload">Загрузить</button>
     </div>
   </div>`;
-}
-
-async function uploadAttachment(entryId, file) {
-  const form = new FormData();
-  form.append("file", file);
-  return api(`/entries/${encodeURIComponent(entryId)}/attachments`, { method: "POST", body: form });
 }
 
 async function wireAttachSection(root, entryId) {
@@ -875,8 +960,8 @@ async function wireAttachSection(root, entryId) {
             .map(
               (a) =>
                 `<div>📄 <a href="/api/attachments/${encodeURIComponent(a.id)}/download">${escapeHTML(a.file_name)}</a> <span class="muted">(до ${new Date(
-                  a.retention_expires_at
-                ).toLocaleDateString("ru-RU")})</span></div>`
+                  a.retention_expires_at,
+                ).toLocaleDateString("ru-RU")})</span></div>`,
             )
             .join("")
         : `<span class="muted">Файлов пока нет</span>`;
@@ -894,10 +979,10 @@ async function wireAttachSection(root, entryId) {
     uploadButton.disabled = true;
     uploadButton.textContent = "Загружаем…";
     try {
-      await uploadAttachment(entryId, fileInput.files[0]);
+      await uploadFileBatch(entryId, fileInput.files);
       fileInput.value = "";
       await refresh();
-      showToast("Документ загружен", "success");
+      showToast("Файлы загружены", "success");
     } catch (e) {
       showToast(e.message);
     } finally {
@@ -923,7 +1008,9 @@ async function renderAdmin(root) {
   const box = root.querySelector("#admin-content");
   root.querySelectorAll(".tabs button").forEach((b) => {
     b.onclick = () => {
-      root.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("active"));
+      root
+        .querySelectorAll(".tabs button")
+        .forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
       renderAdminTab(box, b.dataset.t);
     };
@@ -935,7 +1022,7 @@ async function renderAdminTab(box, tab) {
   box.innerHTML = `<div class="card loading-state"><span class="spinner"></span>Загрузка данных…</div>`;
   try {
     if (tab === "users") return await renderAdminUsers(box);
-    if (tab === "partners") return await renderAdminPartners(box);
+    if (tab === "partners") return await renderPartnerDirectory(box);
     if (tab === "settings") return await renderAdminSettings(box);
     if (tab === "logs") return await renderAdminLogs(box);
     throw new Error("Неизвестный раздел администрирования");
@@ -949,13 +1036,21 @@ async function renderAdminUsers(box) {
   box.innerHTML = `<div class="card"><h2>Новый пользователь (в т.ч. дополнительный админ)</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
-      <div class="field"><label>Электронная почта *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: заглавная и строчная буквы, цифра и специальный символ</div><div class="field-error" style="display:none"></div></div>
+      <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
+      <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
-      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="">Выберет при первом входе</option><option value="organization">ИТ-компания</option><option value="edu_institution">Образовательная организация</option></select></div>
-      <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(state.partners) ? state.partners : [])
-        .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
+      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">Сотрудник Киберпротекта</option><option value="edu_institution">Представитель учебного заведения</option></select></div>
+      <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(
+        state.partners,
+      )
+        ? state.partners
+        : []
+      )
+        .map(
+          (partner) =>
+            `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`,
+        )
         .join("")}</select></div>
     </div>
     <button type="submit" class="btn" id="u-create">Создать</button>
@@ -966,8 +1061,10 @@ async function renderAdminUsers(box) {
 
   const entitySelect = box.querySelector("#u-entity");
   entitySelect.onchange = () => {
-    box.querySelector("#u-partner-field").style.display = entitySelect.value === "edu_institution" ? "block" : "none";
-    if (entitySelect.value !== "edu_institution") box.querySelector("#u-partner").value = "";
+    box.querySelector("#u-partner-field").style.display =
+      entitySelect.value === "edu_institution" ? "block" : "none";
+    if (entitySelect.value !== "edu_institution")
+      box.querySelector("#u-partner").value = "";
   };
 
   box.querySelector("#u-form").onsubmit = async (event) => {
@@ -987,19 +1084,30 @@ async function renderAdminUsers(box) {
       setFieldError(input, message);
       firstInvalid ||= input;
     };
-    if (!email || !emailInput.validity.valid || email.length > 254) mark(emailInput, "Введите корректный email");
-    if (fullName.length < 2 || fullName.length > 200 || !/\p{L}/u.test(fullName)) mark(nameInput, "Введите ФИО от 2 до 200 символов");
-    if (password.length < 10 || password.length > 128) mark(passwordInput, "Пароль должен содержать от 10 до 128 символов");
-    else if (/\s/.test(password) || !/[a-zа-яё]/u.test(password) || !/[A-ZА-ЯЁ]/u.test(password) || !/\d/u.test(password) || !/[^\p{L}\p{N}\s]/u.test(password)) {
-      mark(passwordInput, "Добавьте строчную и заглавную буквы, цифру и специальный символ");
+    if (!email || !emailInput.validity.valid || email.length > 254)
+      mark(emailInput, "Введите корректный email");
+    if (
+      fullName.length < 2 ||
+      fullName.length > 200 ||
+      !/\p{L}/u.test(fullName)
+    )
+      mark(nameInput, "Введите ФИО от 2 до 200 символов");
+    if (password.length < 10 || password.length > 128)
+      mark(passwordInput, "Пароль должен содержать от 10 до 128 символов");
+    else if (
+      /\s/.test(password) ||
+      !/[a-zа-яё]/u.test(password) ||
+      !/[A-ZА-ЯЁ]/u.test(password) ||
+      !/\d/u.test(password) ||
+      !/[^\p{L}\p{N}\s]/u.test(password)
+    ) {
+      mark(
+        passwordInput,
+        "Добавьте строчную и заглавную буквы, цифру и специальный символ",
+      );
     }
     if (firstInvalid) {
       firstInvalid.focus();
-      return;
-    }
-    if (entitySelect.value === "edu_institution" && !box.querySelector("#u-partner").value) {
-      err.textContent = "Для образовательной организации выберите партнёра";
-      err.style.display = "block";
       return;
     }
 
@@ -1038,8 +1146,8 @@ async function renderAdminUsers(box) {
         (u) => `<tr>
       <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
       <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
-      <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button></td>
-    </tr>`
+      <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
+    </tr>`,
       )
       .join("")}</tbody></table></div>`;
   listBox.querySelectorAll("button[data-id]").forEach((b) => {
@@ -1058,56 +1166,14 @@ async function renderAdminUsers(box) {
       }
     };
   });
-}
-
-async function renderAdminPartners(box) {
-  box.innerHTML = `<div class="card"><h2>Новый партнёр</h2>
-    <form id="p-form" novalidate><div class="grid cols-3">
-      <div class="field"><label>Наименование *</label><input id="p-name" maxlength="300" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Вид ОО</label><select id="p-kind"><option value="vuz">Вуз</option><option value="kolledj">Колледж</option><option value="school">Школа</option></select></div>
-      <div class="field"><label>№ соглашения</label><input id="p-number" maxlength="100"></div>
-    </div>
-    <button type="submit" class="btn" id="p-create">Добавить</button><div class="error form-message" id="p-error" style="display:none" role="alert"></div></form>
-  </div>
-  <div class="card"><h2>Партнёры</h2><div id="p-list">Загрузка…</div></div>`;
-  box.querySelector("#p-form").onsubmit = async (event) => {
-    event.preventDefault();
-    const nameInput = box.querySelector("#p-name");
-    const error = box.querySelector("#p-error");
-    const button = box.querySelector("#p-create");
-    const name = nameInput.value.trim().replace(/\s+/g, " ");
-    clearFieldErrors(event.currentTarget);
-    error.style.display = "none";
-    if (!name) {
-      setFieldError(nameInput, "Укажите наименование партнёра");
-      nameInput.focus();
-      return;
-    }
-    button.disabled = true;
-    button.textContent = "Добавляем…";
-    try {
-      await api("/partners", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          partner_kind: box.querySelector("#p-kind").value,
-          agreement_number: box.querySelector("#p-number").value.trim(),
-        }),
-      });
-      state.partners = (await api("/partners")) || [];
-      showToast("Партнёр добавлен", "success");
-      await renderAdminTab(box, "partners");
-    } catch (e) {
-      error.textContent = e.message;
-      error.style.display = "block";
-      button.disabled = false;
-      button.textContent = "Добавить";
-    }
-  };
-  const partners = (await api("/partners")) || [];
-  state.partners = partners;
-  box.querySelector("#p-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Наименование</th><th>Вид</th><th>№ соглашения</th></tr></thead>
-    <tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(valueLabel(p.partner_kind))}</td><td>${escapeHTML(p.agreement_number || "—")}</td></tr>`).join("")}</tbody></table></div>`;
+  listBox.querySelectorAll("[data-profile]").forEach(
+    (b) =>
+      (b.onclick = () =>
+        openUserProfile(
+          users.find((u) => u.id === b.dataset.profile),
+          () => renderAdminUsers(box),
+        )),
+  );
 }
 
 async function renderAdminSettings(box) {
@@ -1126,15 +1192,31 @@ async function renderAdminSettings(box) {
     const button = box.querySelector("#s-save");
     const attachmentDays = Number(box.querySelector("#s-attach").value);
     const auditDays = Number(box.querySelector("#s-audit").value);
-    if (![attachmentDays, auditDays].every((value) => Number.isInteger(value) && value >= 1 && value <= 3650)) {
+    if (
+      ![attachmentDays, auditDays].every(
+        (value) => Number.isInteger(value) && value >= 1 && value <= 3650,
+      )
+    ) {
       showToast("Срок хранения должен быть целым числом от 1 до 3650 дней");
       return;
     }
     button.disabled = true;
     button.textContent = "Сохраняем…";
     try {
-      await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "attachment_retention_days", value: String(attachmentDays) }) });
-      await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "audit_log_retention_days", value: String(auditDays) }) });
+      await api("/admin/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          key: "attachment_retention_days",
+          value: String(attachmentDays),
+        }),
+      });
+      await api("/admin/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          key: "audit_log_retention_days",
+          value: String(auditDays),
+        }),
+      });
       showToast("Настройки сохранены", "success");
       await renderAdminTab(box, "settings");
     } catch (e) {
@@ -1148,7 +1230,8 @@ async function renderAdminSettings(box) {
 async function renderAdminLogs(box) {
   box.innerHTML = `<div class="card"><h2>Журнал изменений (хранится согласно настройке выше)</h2><div id="logs-list">Загрузка…</div></div>`;
   const logs = (await api("/admin/logs?limit=200")) || [];
-  box.querySelector("#logs-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Действие</th><th>Комментарий</th></tr></thead>
+  box.querySelector("#logs-list").innerHTML =
+    `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Действие</th><th>Комментарий</th></tr></thead>
     <tbody>${logs
       .map(
         (l) => `<tr>
@@ -1156,7 +1239,7 @@ async function renderAdminLogs(box) {
       <td>${escapeHTML(valueLabel(l.entity_type))}${l.entity_id ? " #" + escapeHTML(l.entity_id.slice(0, 8)) : ""}</td>
       <td>${escapeHTML(valueLabel(l.action))}</td>
       <td>${escapeHTML(l.comment_text || "")}</td>
-    </tr>`
+    </tr>`,
       )
       .join("")}</tbody></table></div>`;
 }

@@ -5,7 +5,6 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"cybercalc/internal/middleware"
@@ -36,50 +35,59 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 	if y := r.URL.Query().Get("report_year"); y != "" {
 		if parsed, err := strconv.Atoi(y); err == nil {
 			year = parsed
+		} else {
+			middleware.WriteError(w, 400, "некорректный год")
+			return
 		}
 	}
 
 	resp := dashboardResponse{ReportYear: year}
+	if year < 2000 || year > 2100 {
+		middleware.WriteError(w, 400, "некорректный год")
+		return
+	}
+	scope := partnerScope(u, r.URL.Query().Get("partner_id"))
 
 	var target sql.NullFloat64
-	h.DB.QueryRow(`SELECT target_amount_rub FROM budget_targets WHERE report_year = $1 AND owner_user_id = $2`, year, u.ID).Scan(&target)
-	if target.Valid {
+	if err := h.DB.QueryRow(`SELECT target_amount_rub FROM budget_targets WHERE report_year = $1 AND owner_user_id = $2`, year, u.ID).Scan(&target); err != nil && err != sql.ErrNoRows {
+		middleware.WriteError(w, 500, "ошибка чтения целевой суммы")
+		return
+	}
+	if target.Valid && isStaff(u) && scope == "" {
 		resp.TargetAmountRub = &target.Float64
 	}
 
-	resp.PlanTotalRub = h.total(year, "plan", u)
-	resp.FactTotalRub = h.total(year, "fact", u)
+	if err := h.DB.QueryRow(`SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2)`, year, scope).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {
+		middleware.WriteError(w, 500, "ошибка расчёта дашборда")
+		return
+	}
 
 	if resp.PlanTotalRub > 0 {
 		resp.PlanCompletionPct = round2(resp.FactTotalRub / resp.PlanTotalRub * 100)
 	}
 
-	resp.PlanByCategory = h.breakdown(year, "plan", u)
-	resp.FactByCategory = h.breakdown(year, "fact", u)
+	var err error
+	resp.PlanByCategory, err = h.breakdown(year, "plan", scope)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка аналитики плана")
+		return
+	}
+	resp.FactByCategory, err = h.breakdown(year, "fact", scope)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка аналитики факта")
+		return
+	}
 
 	middleware.WriteJSON(w, http.StatusOK, resp)
 }
 
-func dashboardConditions(year int, period string, u middleware.AuthUser) ([]string, []interface{}) {
-	conditions := []string{"period_type = $1", "report_year = $2"}
-	args := []interface{}{period, year}
-	return appendEntryScope(conditions, args, u, "")
-}
-
-func (h *DashboardHandlers) total(year int, period string, u middleware.AuthUser) float64 {
-	conditions, args := dashboardConditions(year, period, u)
-	var total float64
-	_ = h.DB.QueryRow(`SELECT COALESCE(SUM(amount_rub),0) FROM entries WHERE `+strings.Join(conditions, " AND "), args...).Scan(&total)
-	return total
-}
-
-func (h *DashboardHandlers) breakdown(year int, period string, u middleware.AuthUser) []categoryBreakdown {
-	conditions, args := dashboardConditions(year, period, u)
+func (h *DashboardHandlers) breakdown(year int, period, scope string) ([]categoryBreakdown, error) {
 	rows, err := h.DB.Query(
-		`SELECT category_code, COALESCE(SUM(amount_rub),0) FROM entries WHERE `+strings.Join(conditions, " AND ")+
-			` GROUP BY category_code ORDER BY category_code`, args...)
+		`SELECT category_code, COALESCE(SUM(amount_rub),0) FROM entries
+		 WHERE period_type = $1 AND report_year = $2 AND ($3='' OR partner_id::text=$3)
+		 GROUP BY category_code ORDER BY category_code`, period, year, scope)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -88,7 +96,7 @@ func (h *DashboardHandlers) breakdown(year int, period string, u middleware.Auth
 	for rows.Next() {
 		var b categoryBreakdown
 		if err := rows.Scan(&b.CategoryCode, &b.AmountRub); err != nil {
-			continue
+			return nil, err
 		}
 		total += b.AmountRub
 		raw = append(raw, b)
@@ -98,11 +106,11 @@ func (h *DashboardHandlers) breakdown(year int, period string, u middleware.Auth
 			raw[i].SharePercent = round2(raw[i].AmountRub / total * 100)
 		}
 	}
-	return raw
+	return raw, rows.Err()
 }
 
 func round2(v float64) float64 {
-	return float64(int64(v*100+0.5)) / 100
+	return math.Round(v*100) / 100
 }
 
 type setBudgetTargetRequest struct {
@@ -111,6 +119,10 @@ type setBudgetTargetRequest struct {
 }
 
 func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	if !isStaff(u) {
+		middleware.WriteError(w, 403, "целевую сумму задаёт сотрудник Киберпротекта")
+		return
+	}
 	var req setBudgetTargetRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")

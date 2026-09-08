@@ -39,6 +39,7 @@ func (internshipCalc) Calculate(_ models.Audience, payload map[string]interface{
 func (internshipCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование ОО", Type: "select", Required: true},
+		{Key: "mentor_id", Label: "Наставник из справочника", Type: "select", Required: true},
 		{Key: "mentor_full_name", Label: "ФИО наставника", Type: "text", Required: true},
 		{Key: "student_full_name", Label: "ФИО студента", Type: "text", Required: true},
 		{Key: "course", Label: "Курс", Type: "text"},

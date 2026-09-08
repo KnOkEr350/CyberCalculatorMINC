@@ -2,21 +2,17 @@ package handlers
 
 import (
 	"crypto/rand"
+	"cybercalc/internal/middleware"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
-
-	"cybercalc/internal/middleware"
 )
 
 type AttachmentHandlers struct {
@@ -25,204 +21,173 @@ type AttachmentHandlers struct {
 }
 
 const maxAttachmentSize int64 = 64 << 20
-
-var errAttachmentTooLarge = errors.New("размер файла превышает 64 МБ")
-
-type attachmentStore interface {
-	QueryRow(query string, args ...interface{}) *sql.Row
-}
-
-type storedAttachment struct {
-	ID        string
-	Path      string
-	ExpiresAt time.Time
-	FileName  string
-	Size      int64
-}
+const maxAttachmentCount = 20
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
 	return hex.EncodeToString(b)
 }
 
-// Upload — «сохранять файл с подтверждением (документ)» при занесении факта.
-// Срок хранения берётся из settings.attachment_retention_days (по умолчанию
-// 365 дней/год, администратор может изменить).
+// Optional attachments for plan and fact. One batch is all-or-nothing.
 func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
-	conditions, args := appendEntryScope([]string{"id = $1"}, []interface{}{entryID}, u, "")
-	var periodType string
-	err := h.DB.QueryRow(`SELECT period_type FROM entries WHERE `+strings.Join(conditions, " AND "), args...).Scan(&periodType)
-	if err == sql.ErrNoRows {
-		middleware.WriteError(w, http.StatusNotFound, "запись не найдена")
-		return
-	} else if err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
+	if !requireEntry(w, h.DB, u, entryID) {
 		return
 	}
-	if periodType != "fact" {
-		middleware.WriteError(w, http.StatusBadRequest, "подтверждающий документ прикладывается только к факту")
+	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(1<<20))
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		if r.MultipartForm != nil {
+			r.MultipartForm.RemoveAll()
+		}
+		middleware.WriteError(w, 400, "ожидаются файлы multipart/form-data, не более 64 МБ суммарно")
 		return
 	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(1<<20)) // запас для служебных данных multipart
-	if err := r.ParseMultipartForm(8 << 20); err != nil {              // до 8 МБ в памяти, остальное — во временных файлах
-		middleware.WriteError(w, http.StatusBadRequest, "не удалось разобрать форму (ожидается multipart/form-data, поле file)")
+	defer r.MultipartForm.RemoveAll()
+	headers := append(r.MultipartForm.File["files"], r.MultipartForm.File["file"]...)
+	if len(headers) == 0 || len(headers) > maxAttachmentCount {
+		middleware.WriteError(w, 400, "выберите от 1 до 20 файлов")
 		return
 	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		middleware.WriteError(w, http.StatusBadRequest, "поле file обязательно")
+	var total int64
+	for _, f := range headers {
+		total += f.Size
+		if f.Size <= 0 || len([]rune(f.Filename)) > 255 {
+			middleware.WriteError(w, 400, "пустой файл или слишком длинное имя")
+			return
+		}
+	}
+	if total > maxAttachmentSize {
+		middleware.WriteError(w, 413, "суммарный размер превышает 64 МБ")
 		return
 	}
-	defer file.Close()
-
+	days := 365
+	var raw string
+	if h.DB.QueryRow("SELECT value FROM settings WHERE key='attachment_retention_days'").Scan(&raw) == nil {
+		if v, e := strconv.Atoi(raw); e == nil && v > 0 && v <= 3650 {
+			days = v
+		}
+	}
+	expires := time.Now().AddDate(0, 0, days)
+	dir := filepath.Join(h.UploadDir, entryID)
+	if os.MkdirAll(dir, 0750) != nil {
+		middleware.WriteError(w, 500, "не удалось создать каталог")
+		return
+	}
 	tx, err := h.DB.Begin()
 	if err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка начала транзакции")
+		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
-
-	stored, err := storeAttachment(tx, h.UploadDir, entryID, u.ID, file, header)
-	if err != nil {
-		if errors.Is(err, errAttachmentTooLarge) {
-			middleware.WriteError(w, http.StatusRequestEntityTooLarge, err.Error())
-		} else {
-			middleware.WriteError(w, http.StatusInternalServerError, err.Error())
-		}
-		return
-	}
+	paths := []string{}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = os.Remove(stored.Path)
+			for _, p := range paths {
+				os.Remove(p)
+			}
 		}
 	}()
-
-	if err := logAudit(tx, "attachment", stored.ID, "upload", u.ID, fmt.Sprintf("файл %s (%d байт)", stored.FileName, stored.Size), nil,
-		map[string]interface{}{"entry_id": entryID, "file_name": stored.FileName}); err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
-		return
+	out := []map[string]interface{}{}
+	for _, header := range headers {
+		src, err := header.Open()
+		if err != nil {
+			middleware.WriteError(w, 400, "не удалось прочитать файл")
+			return
+		}
+		path := filepath.Join(dir, randomHex(16))
+		dst, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
+		if err != nil {
+			src.Close()
+			middleware.WriteError(w, 500, "не удалось сохранить файл")
+			return
+		}
+		paths = append(paths, path)
+		size, copyErr := io.Copy(dst, io.LimitReader(src, maxAttachmentSize+1))
+		closeErr := dst.Close()
+		src.Close()
+		if copyErr != nil || closeErr != nil || size != header.Size {
+			middleware.WriteError(w, 500, "ошибка записи файла")
+			return
+		}
+		var id string
+		err = tx.QueryRow("INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", entryID, header.Filename, path, "application/octet-stream", size, u.ID, expires).Scan(&id)
+		if err != nil {
+			middleware.WriteError(w, 500, "ошибка метаданных")
+			return
+		}
+		item := map[string]interface{}{"id": id, "file_name": header.Filename, "size_bytes": size, "retention_expires_at": expires}
+		if logAudit(tx, "attachment", id, "upload", u.ID, fmt.Sprintf("файл %s", header.Filename), nil, item) != nil {
+			middleware.WriteError(w, 500, "ошибка аудита")
+			return
+		}
+		out = append(out, item)
 	}
-	if err := tx.Commit(); err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка завершения транзакции")
+	if tx.Commit() != nil {
+		middleware.WriteError(w, 500, "ошибка сохранения пакета")
 		return
 	}
 	committed = true
-	middleware.WriteJSON(w, http.StatusCreated, map[string]interface{}{"id": stored.ID, "retention_expires_at": stored.ExpiresAt})
-}
-
-func storeAttachment(db attachmentStore, uploadDir, entryID, userID string, file multipart.File, header *multipart.FileHeader) (storedAttachment, error) {
-	var result storedAttachment
-	retentionDays := 365
-	var raw string
-	if err := db.QueryRow(`SELECT value FROM settings WHERE key = 'attachment_retention_days'`).Scan(&raw); err == nil {
-		if v, convErr := strconv.Atoi(raw); convErr == nil {
-			retentionDays = v
-		}
-	}
-
-	entryDir := filepath.Join(uploadDir, entryID)
-	if err := os.MkdirAll(entryDir, 0o750); err != nil {
-		return result, fmt.Errorf("не удалось создать каталог для файла")
-	}
-	storedName := randomHex(16) + filepath.Ext(header.Filename)
-	storagePath := filepath.Join(entryDir, storedName)
-
-	dst, err := os.OpenFile(storagePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
-	if err != nil {
-		return result, fmt.Errorf("не удалось сохранить файл")
-	}
-	size, err := io.Copy(dst, io.LimitReader(file, maxAttachmentSize+1))
-	closeErr := dst.Close()
-	if err != nil {
-		_ = os.Remove(storagePath)
-		return result, fmt.Errorf("ошибка записи файла")
-	}
-	if closeErr != nil {
-		_ = os.Remove(storagePath)
-		return result, fmt.Errorf("ошибка завершения записи файла")
-	}
-	if size > maxAttachmentSize {
-		_ = os.Remove(storagePath)
-		return result, errAttachmentTooLarge
-	}
-
-	fileName := filepath.Base(strings.TrimSpace(header.Filename))
-	if fileName == "" || fileName == "." {
-		_ = os.Remove(storagePath)
-		return result, fmt.Errorf("имя файла не задано")
-	}
-	contentType := header.Header.Get("Content-Type")
-	expiresAt := time.Now().AddDate(0, 0, retentionDays)
-
-	var id string
-	err = db.QueryRow(
-		`INSERT INTO attachments (entry_id, file_name, storage_path, content_type, size_bytes, uploaded_by, retention_expires_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-		entryID, fileName, storagePath, contentType, size, userID, expiresAt,
-	).Scan(&id)
-	if err != nil {
-		_ = os.Remove(storagePath)
-		return result, fmt.Errorf("ошибка сохранения метаданных файла")
-	}
-	return storedAttachment{ID: id, Path: storagePath, ExpiresAt: expiresAt, FileName: fileName, Size: size}, nil
+	middleware.WriteJSON(w, 201, map[string]interface{}{"files": out, "id": out[0]["id"], "retention_expires_at": expires})
 }
 
 func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
-	conditions, args := appendEntryScope([]string{"a.entry_id = $1"}, []interface{}{entryID}, u, "e")
-	rows, err := h.DB.Query(`SELECT a.id, a.entry_id, a.file_name, a.content_type, a.size_bytes, a.uploaded_by, a.uploaded_at, a.retention_expires_at
-		FROM attachments a JOIN entries e ON e.id = a.entry_id WHERE `+strings.Join(conditions, " AND ")+` ORDER BY a.uploaded_at DESC`, args...)
+	if !requireEntry(w, h.DB, u, entryID) {
+		return
+	}
+	rows, err := h.DB.Query("SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC", entryID)
 	if err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
+		middleware.WriteError(w, 500, "ошибка запроса")
 		return
 	}
 	defer rows.Close()
-	type out struct {
-		ID                 string    `json:"id"`
-		EntryID            string    `json:"entry_id"`
-		FileName           string    `json:"file_name"`
-		ContentType        string    `json:"content_type"`
-		SizeBytes          int64     `json:"size_bytes"`
-		UploadedBy         string    `json:"uploaded_by"`
-		UploadedAt         time.Time `json:"uploaded_at"`
-		RetentionExpiresAt time.Time `json:"retention_expires_at"`
-	}
-	list := make([]out, 0)
+	list := []map[string]interface{}{}
 	for rows.Next() {
-		var o out
-		if err := rows.Scan(&o.ID, &o.EntryID, &o.FileName, &o.ContentType, &o.SizeBytes, &o.UploadedBy, &o.UploadedAt, &o.RetentionExpiresAt); err != nil {
-			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
+		var id, name string
+		var size int64
+		var uploaded, expires time.Time
+		if rows.Scan(&id, &name, &size, &uploaded, &expires) != nil {
+			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
-		list = append(list, o)
+		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "file_name": name, "size_bytes": size, "uploaded_at": uploaded, "retention_expires_at": expires})
 	}
-	middleware.WriteJSON(w, http.StatusOK, list)
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения")
+		return
+	}
+	middleware.WriteJSON(w, 200, list)
 }
 
 func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {
-	conditions, args := appendEntryScope([]string{"a.id = $1"}, []interface{}{attachmentID}, u, "e")
-	var fileName, storagePath, contentType string
-	err := h.DB.QueryRow(`SELECT a.file_name, a.storage_path, a.content_type FROM attachments a JOIN entries e ON e.id = a.entry_id WHERE `+
-		strings.Join(conditions, " AND "), args...).
-		Scan(&fileName, &storagePath, &contentType)
+	var name, path, entry string
+	var expires time.Time
+	err := h.DB.QueryRow("SELECT file_name,storage_path,entry_id,retention_expires_at FROM attachments WHERE id::text=$1", attachmentID).Scan(&name, &path, &entry, &expires)
 	if err == sql.ErrNoRows {
-		middleware.WriteError(w, http.StatusNotFound, "файл не найден")
-		return
-	} else if err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
+		middleware.WriteError(w, 404, "файл не найден")
 		return
 	}
-	f, err := os.Open(storagePath)
 	if err != nil {
-		middleware.WriteError(w, http.StatusGone, "файл удалён по истечении срока хранения")
+		middleware.WriteError(w, 500, "ошибка запроса")
+		return
+	}
+	if !requireEntry(w, h.DB, u, entry) {
+		return
+	}
+	if !expires.After(time.Now()) {
+		middleware.WriteError(w, 410, "срок хранения файла истёк")
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		middleware.WriteError(w, 410, "файл недоступен")
 		return
 	}
 	defer f.Close()
-	if contentType != "" {
-		w.Header().Set("Content-Type", contentType)
-	}
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": fileName}))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
 	io.Copy(w, f)
 }

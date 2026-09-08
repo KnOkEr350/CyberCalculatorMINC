@@ -4,14 +4,13 @@ import (
 	"strconv"
 
 	"cybercalc/internal/middleware"
-	"cybercalc/internal/models"
 )
 
-// appendEntryScope restricts business data to the account that created it.
-// A partner account is additionally restricted to its assigned partner.
-// Administrators retain the cross-organization view required by the admin area.
+// appendEntryScope uses the partner-level access model, not record authorship.
+// Coworkers assigned to one educational partner share that partner's records.
 func appendEntryScope(conditions []string, args []interface{}, u middleware.AuthUser, alias string) ([]string, []interface{}) {
-	if u.Role == models.RoleAdmin {
+	scope := partnerScope(u, "")
+	if scope == "" {
 		return conditions, args
 	}
 	column := func(name string) string {
@@ -20,11 +19,7 @@ func appendEntryScope(conditions []string, args []interface{}, u middleware.Auth
 		}
 		return alias + "." + name
 	}
-	args = append(args, u.ID)
-	conditions = append(conditions, column("created_by")+" = $"+strconv.Itoa(len(args)))
-	if u.PartnerID != nil {
-		args = append(args, *u.PartnerID)
-		conditions = append(conditions, column("partner_id")+" = $"+strconv.Itoa(len(args)))
-	}
+	args = append(args, scope)
+	conditions = append(conditions, column("partner_id")+"::text = $"+strconv.Itoa(len(args)))
 	return conditions, args
 }
