@@ -33,8 +33,8 @@ func (topITCalc) Calculate(audience models.Audience, payload map[string]interfac
 func (topITCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование образовательной организации", Type: "select", Required: true},
-		{Key: "project_name", Label: "Наименование федерального проекта", Type: "text", Required: true},
-		{Key: "program_name", Label: "Наименование образовательной программы топ-уровня", Type: "text", Required: true},
+		{Key: "project_name", Label: "Наименование федерального проекта", Type: "text", Required: true, MaxLength: 300},
+		{Key: "program_name", Label: "Наименование образовательной программы топ-уровня", Type: "text", Required: true, MaxLength: 500},
 		{Key: "cofinancing_report_reference", Label: "Реквизиты отчёта о софинансировании", Type: "text", Required: true},
 		{Key: "cofinancing_amount_rub", Label: "Объём софинансирования по отчёту, руб.", Type: "number", Required: true},
 	}
@@ -69,8 +69,8 @@ func (schoolProgramsCalc) Fields() []FieldSpec {
 		{Key: "program_name", Label: "Наименование дополнительной общеобразовательной программы", Type: "text", Required: true},
 		{Key: "employee_full_name", Label: "ФИО привлечённого сотрудника", Type: "text"},
 		{Key: "academic_hours", Label: "Количество академических часов", Type: "number", Required: true},
-		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true},
-		{Key: "students_count", Label: "Численность учащихся 5–11 классов", Type: "number", Required: true},
+		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true, Integer: true},
+		{Key: "students_count", Label: "Численность учащихся 5–11 классов", Type: "number", Required: true, Integer: true},
 	}
 }
 
@@ -104,9 +104,9 @@ func (teacherTrainingCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование образовательной организации", Type: "select", Required: true},
 		{Key: "program_name", Label: "Наименование программы повышения квалификации", Type: "text", Required: true},
-		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true},
+		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true, Integer: true},
 		{Key: "academic_hours_per_teacher", Label: "Количество академических часов на одного учителя", Type: "number", Required: true},
-		{Key: "trained_teachers_count", Label: "Количество обученных учителей информатики", Type: "number", Required: true},
+		{Key: "trained_teachers_count", Label: "Количество обученных учителей информатики", Type: "number", Required: true, Integer: true},
 	}
 }
 
@@ -136,8 +136,8 @@ func (educationalContentCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование общеобразовательной организации", Type: "select", Required: true},
 		{Key: "platform_name", Label: "Наименование образовательной платформы", Type: "text", Required: true},
-		{Key: "student_platform_months", Label: "Суммарные месяцы доступа всех учащихся", Type: "number", Required: true},
-		{Key: "teacher_platform_months", Label: "Суммарные месяцы доступа всех учителей", Type: "number", Required: true},
+		{Key: "student_platform_months", Label: "Суммарные месяцы доступа всех учащихся", Type: "number", Required: true, Integer: true},
+		{Key: "teacher_platform_months", Label: "Суммарные месяцы доступа всех учителей", Type: "number", Required: true, Integer: true},
 		{Key: "digital_trace_reference", Label: "Описание/ссылка на подтверждение цифрового следа", Type: "text", Required: true},
 	}
 }

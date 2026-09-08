@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"cybercalc/internal/auth"
@@ -22,14 +22,14 @@ type loginRequest struct {
 
 func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
 
 	var id, passwordHash string
 	var isActive bool
-	err := h.DB.QueryRow(`SELECT id, password_hash, is_active FROM users WHERE email = $1`, req.Email).
+	err := h.DB.QueryRow(`SELECT id, password_hash, is_active FROM users WHERE email = $1`, strings.ToLower(strings.TrimSpace(req.Email))).
 		Scan(&id, &passwordHash, &isActive)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, http.StatusUnauthorized, "неверный email или пароль")
@@ -92,7 +92,7 @@ type setEntityTypeRequest struct {
 
 func (h *AuthHandlers) SetEntityType(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	var req setEntityTypeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}

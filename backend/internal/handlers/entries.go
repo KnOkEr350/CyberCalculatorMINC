@@ -63,7 +63,7 @@ type createEntryRequest struct {
 
 func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	var req createEntryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
@@ -100,6 +100,10 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	amount, err := calc.Calculate(models.Audience(req.Audience), req.Payload)
 	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
+		return
+	}
+	if err := calculators.ValidateAmount(amount); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
 	}
@@ -199,7 +203,7 @@ type updateEntryRequest struct {
 
 func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
 	var req updateEntryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
@@ -254,6 +258,10 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	newAmount, err := calc.Calculate(models.Audience(audience), req.Payload)
 	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
+		return
+	}
+	if err := calculators.ValidateAmount(newAmount); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
 	}

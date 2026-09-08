@@ -32,9 +32,20 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
-	if req.Role != string(models.RoleAdmin) && req.Role != string(models.RoleUser) {
-		middleware.WriteError(w, http.StatusBadRequest, "role должен быть admin или user")
+	if err := validateAndNormalizeNewUser(&req); err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if req.PartnerID != nil {
+		var exists bool
+		if err := h.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM partners WHERE id::text = $1)`, *req.PartnerID).Scan(&exists); err != nil {
+			middleware.WriteError(w, http.StatusInternalServerError, "не удалось проверить выбранного партнёра")
+			return
+		}
+		if !exists {
+			middleware.WriteError(w, http.StatusBadRequest, "выбранный партнёр не найден")
+			return
+		}
 	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -148,9 +159,13 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 		middleware.WriteError(w, http.StatusBadRequest, "key обязателен")
 		return
 	}
-	if req.Key == "audit_log_retention_days" {
-		if v, err := strconv.Atoi(req.Value); err != nil || v <= 0 {
-			middleware.WriteError(w, http.StatusBadRequest, "audit_log_retention_days должен быть положительным числом")
+	if req.Key != "audit_log_retention_days" && req.Key != "attachment_retention_days" {
+		middleware.WriteError(w, http.StatusBadRequest, "неизвестная настройка")
+		return
+	}
+	if req.Key == "audit_log_retention_days" || req.Key == "attachment_retention_days" {
+		if v, err := strconv.Atoi(req.Value); err != nil || v <= 0 || v > 3650 {
+			middleware.WriteError(w, http.StatusBadRequest, "срок хранения должен быть целым числом от 1 до 3650 дней")
 			return
 		}
 	}
