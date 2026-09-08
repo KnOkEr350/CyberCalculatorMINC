@@ -79,7 +79,7 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 		return
 	}
 	defer rows.Close()
-	var out []models.User
+	out := make([]models.User, 0)
 	for rows.Next() {
 		var u models.User
 		var entityType, partnerID sql.NullString
@@ -178,7 +178,9 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
 	}
-	logAudit(h.DB, "settings", req.Key, "settings_change", admin.ID, "", nil, req)
+	// audit_log.entity_id имеет тип UUID, а ключ настройки — строка; сам ключ
+	// сохраняется в new_value, поэтому UUID для этого типа события не задаём.
+	logAudit(h.DB, "settings", "", "settings_change", admin.ID, "", nil, req)
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -214,7 +216,7 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 	}
 	defer rows.Close()
 
-	var out []models.AuditLogItem
+	out := make([]models.AuditLogItem, 0)
 	for rows.Next() {
 		var item models.AuditLogItem
 		var entityID, userID, comment sql.NullString

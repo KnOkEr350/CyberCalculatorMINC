@@ -23,7 +23,7 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	defer rows.Close()
 
-	var partners []models.Partner
+	partners := make([]models.Partner, 0)
 	for rows.Next() {
 		var p models.Partner
 		var agreementNumber, otherAgreement sql.NullString

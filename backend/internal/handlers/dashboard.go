@@ -72,7 +72,7 @@ func (h *DashboardHandlers) breakdown(year int, period string) []categoryBreakdo
 	defer rows.Close()
 
 	var total float64
-	var raw []categoryBreakdown
+	raw := make([]categoryBreakdown, 0)
 	for rows.Next() {
 		var b categoryBreakdown
 		if err := rows.Scan(&b.CategoryCode, &b.AmountRub); err != nil {

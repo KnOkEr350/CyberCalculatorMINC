@@ -131,7 +131,7 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 		UploadedAt         time.Time `json:"uploaded_at"`
 		RetentionExpiresAt time.Time `json:"retention_expires_at"`
 	}
-	var list []out
+	list := make([]out, 0)
 	for rows.Next() {
 		var o out
 		if err := rows.Scan(&o.ID, &o.EntryID, &o.FileName, &o.ContentType, &o.SizeBytes, &o.UploadedBy, &o.UploadedAt, &o.RetentionExpiresAt); err != nil {

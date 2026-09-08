@@ -16,33 +16,7 @@ const state = {
 
 const CATEGORY_LABELS = {}; // заполняется из /api/categories
 const AUDIENCE_LABELS = { vuz: "Вуз", kolledj: "СПО", school: "Школьный трек" };
-const CHART_COLORS = ["#4f8cff", "#3ecf8e", "#e0a53e", "#b276ff", "#ef6f8e", "#35b8c8", "#f28e52", "#7d91a8", "#d8c650"];
-
-const VALUE_LABELS = {
-  vuz: "Вуз",
-  kolledj: "Колледж",
-  school: "Школа",
-  rpd: "РПД",
-  oop: "ООП",
-  vo: "Высшее образование (ВО)",
-  spo: "Среднее профессиональное образование (СПО)",
-  development: "Разработка",
-  update: "Актуализация",
-  expertise: "Экспертиза",
-  user: "Пользователь",
-  admin: "Администратор",
-  organization: "ИТ-компания",
-  edu_institution: "Образовательная организация",
-  entry: "Запись",
-  attachment: "Документ",
-  partner: "Партнёр",
-  settings: "Настройки",
-  create: "Создание",
-  upload: "Загрузка файла",
-  login: "Вход",
-  delete: "Удаление",
-  settings_change: "Изменение настроек",
-};
+const CHART_COLORS = ["#1a79ff", "#00a6a6", "#6757d9", "#f2a51a", "#e85c8b", "#36a269", "#489dff", "#805ad5", "#de6f3c"];
 
 async function api(path, opts = {}) {
   const res = await fetch("/api" + path, {
@@ -50,7 +24,7 @@ async function api(path, opts = {}) {
     headers: opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
     ...opts,
   });
-  if (res.status === 401) {
+  if (res.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
     state.me = null;
     render();
     throw new Error("требуется авторизация");
@@ -75,15 +49,6 @@ function fmtMoney(v) {
   return Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽";
 }
 
-<<<<<<< HEAD
-function valueLabel(value) {
-  return VALUE_LABELS[value] || value;
-}
-
-function brand() {
-  return `<span class="brand-mark" aria-hidden="true"><span></span></span>
-    <span class="brand-copy"><b>Кибер Калькулятор</b><small>Затраты по Приказу Минцифры</small></span>`;
-=======
 function escapeHTML(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -100,7 +65,34 @@ function clampPercent(value) {
 
 function validYear(value) {
   return Number.isInteger(value) && value >= 2000 && value <= 2100;
->>>>>>> refs/remotes/origin/main
+}
+
+function brandMarkup(inverse = false) {
+  return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
+    <span class="brand-emblem" aria-hidden="true"><i></i></span>
+    <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong><small>Калькулятор затрат</small></span>
+  </div>`;
+}
+
+function initials(name) {
+  return String(name || "П")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] || "")
+    .join("")
+    .toUpperCase();
+}
+
+function showToast(message, kind = "error") {
+  const toast = el(`<div class="toast ${escapeHTML(kind)}" role="status"></div>`);
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("visible"));
+  setTimeout(() => {
+    toast.classList.remove("visible");
+    setTimeout(() => toast.remove(), 200);
+  }, 3500);
 }
 
 // ---------------------------------------------------------------- ROUTER --
@@ -113,7 +105,7 @@ async function boot() {
   }
   if (state.me) {
     try {
-      state.categories = await api("/categories");
+      state.categories = (await api("/categories")) || [];
       state.categories.forEach((c) => (CATEGORY_LABELS[c.code] = c.name));
       state.categoriesError = null;
     } catch (e) {
@@ -121,7 +113,7 @@ async function boot() {
       state.categoriesError = e.message;
     }
     try {
-      state.partners = await api("/partners");
+      state.partners = (await api("/partners")) || [];
     } catch (e) {
       state.partners = [];
     }
@@ -145,61 +137,79 @@ function render() {
 // ----------------------------------------------------------------- LOGIN --
 
 function renderLogin() {
-  const wrap = el(`<div class="login-wrap">
-    <section class="login-hero">
-      <div class="brand brand-light">${brand()}</div>
-      <div class="login-hero-copy">
-        <span class="eyebrow">Планирование и контроль</span>
-        <h1>Расходы под контролем.<br>От плана до факта.</h1>
-        <p>Единое пространство для расчёта затрат, подтверждающих документов и отчётности.</p>
+  const wrap = el(`<div class="auth-shell">
+    <aside class="auth-brand-panel">
+      ${brandMarkup(true)}
+      <div class="auth-message">
+        <span class="eyebrow">Контроль исполнения</span>
+        <h1>Планируйте затраты.<br>Подтверждайте результат.</h1>
+        <p>Единое пространство для расчёта мероприятий по Приказу Минцифры, ведения плана и фиксации факта.</p>
       </div>
-      <div class="hero-art" aria-hidden="true"><span></span><span></span><span></span></div>
-    </section>
-    <section class="login-panel"><div class="login-box">
-      <span class="eyebrow accent">Личный кабинет</span>
-      <h2>Вход в систему</h2>
-      <p class="muted login-lead">Введите данные вашей учётной записи.</p>
-      <div class="field"><label>Электронная почта</label><input type="email" id="login-email" autocomplete="username" placeholder="name@company.ru"></div>
-      <div class="field"><label>Пароль</label><input type="password" id="login-password" autocomplete="current-password" placeholder="Введите пароль"></div>
-      <div class="error" id="login-error" style="display:none"></div>
-      <button class="btn btn-wide" id="login-submit">Войти</button>
-    </div></section>
+      <div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+    </aside>
+    <main class="auth-form-panel">
+      <form class="login-box" id="login-form">
+        <span class="eyebrow">Личный кабинет</span>
+        <h2>Вход в систему</h2>
+        <p class="muted">Используйте учётную запись, выданную администратором.</p>
+        <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
+        <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Введите пароль"></div>
+        <div class="error form-message" id="login-error" style="display:none" role="alert"></div>
+        <button type="submit" class="btn wide" id="login-submit">Войти</button>
+      </form>
+    </main>
   </div>`);
-  wrap.querySelector("#login-submit").onclick = async () => {
+  wrap.querySelector("#login-form").onsubmit = async (event) => {
+    event.preventDefault();
     const email = wrap.querySelector("#login-email").value.trim();
     const password = wrap.querySelector("#login-password").value;
     const errBox = wrap.querySelector("#login-error");
+    const submit = wrap.querySelector("#login-submit");
+    errBox.style.display = "none";
+    submit.disabled = true;
+    submit.textContent = "Входим…";
     try {
       await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
       await boot();
     } catch (e) {
       errBox.textContent = e.message;
       errBox.style.display = "block";
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Войти";
     }
-  };
-  wrap.querySelector("#login-password").onkeydown = (event) => {
-    if (event.key === "Enter") wrap.querySelector("#login-submit").click();
   };
   return wrap;
 }
 
 function renderChooseEntity() {
-  const wrap = el(`<div class="login-wrap">
-    <section class="login-hero">
-      <div class="brand brand-light">${brand()}</div>
-      <div class="login-hero-copy"><span class="eyebrow">Первый вход</span><h1>Настроим рабочее пространство</h1><p>Выберите тип участника, чтобы система показала подходящие формы и расчёты.</p></div>
-      <div class="hero-art" aria-hidden="true"><span></span><span></span><span></span></div>
-    </section>
-    <section class="login-panel"><div class="login-box entity-box">
-      <span class="eyebrow accent">Профиль</span><h2>Кого вы представляете?</h2>
-      <p class="muted login-lead">Выбор влияет на группировку отчётов и доступные категории.</p>
-      <button class="choice-card" id="pick-org"><b>ИТ-компания</b><span>Организация, обязанная соглашением</span></button>
-      <button class="choice-card" id="pick-edu"><b>Вуз или СПО</b><span>Образовательная организация-партнёр</span></button>
-    </div></section>
+  const wrap = el(`<div class="auth-shell compact">
+    <aside class="auth-brand-panel">
+      ${brandMarkup(true)}
+      <div class="auth-message"><span class="eyebrow">Первый вход</span><h1>Настроим рабочее пространство</h1><p>Тип организации определяет доступные сценарии расчёта и отображение отчётов.</p></div>
+      <div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+    </aside>
+    <main class="auth-form-panel"><div class="login-box entity-choice">
+      <span class="eyebrow">Профиль</span><h2>Кого вы представляете?</h2>
+      <p class="muted">Выберите подходящий вариант. При необходимости администратор сможет уточнить настройки.</p>
+      <button type="button" class="choice-card" id="pick-org"><b>Организация</b><span>ИТ-компания, ведущая план и факт затрат</span><i>→</i></button>
+      <button type="button" class="choice-card" id="pick-edu"><b>Вуз или СПО</b><span>Образовательная организация — партнёр</span><i>→</i></button>
+      <div class="error form-message" id="entity-error" style="display:none" role="alert"></div>
+    </div></main>
   </div>`);
   const pick = async (entity_type) => {
-    await api("/auth/entity-type", { method: "POST", body: JSON.stringify({ entity_type }) });
-    await boot();
+    const buttons = wrap.querySelectorAll(".choice-card");
+    const error = wrap.querySelector("#entity-error");
+    buttons.forEach((button) => (button.disabled = true));
+    error.style.display = "none";
+    try {
+      await api("/auth/entity-type", { method: "POST", body: JSON.stringify({ entity_type }) });
+      await boot();
+    } catch (e) {
+      error.textContent = e.message;
+      error.style.display = "block";
+      buttons.forEach((button) => (button.disabled = false));
+    }
   };
   wrap.querySelector("#pick-org").onclick = () => pick("organization");
   wrap.querySelector("#pick-edu").onclick = () => pick("edu_institution");
@@ -210,24 +220,21 @@ function renderChooseEntity() {
 
 function renderLayout() {
   const isAdmin = state.me.role === "admin";
-  const wrap = el(`<div class="app-shell">
+  const wrap = el(`<div>
     <div class="topbar">
-      <div class="brand brand-light">${brand()}</div>
+      ${brandMarkup()}
       <nav>
-        <button data-view="dashboard">Обзор</button>
+        <button data-view="dashboard">Дашборд</button>
         <button data-view="entries">План / Факт</button>
-        ${isAdmin ? '<button data-view="admin">Управление</button>' : ""}
+        ${isAdmin ? '<button data-view="admin">Админка</button>' : ""}
       </nav>
       <div class="who">
-<<<<<<< HEAD
-        <span><b>${state.me.full_name}</b><small>${valueLabel(state.me.entity_type)}${isAdmin ? " · Администратор" : ""}</small></span>
-=======
-        <span>${escapeHTML(state.me.full_name)} · ${state.me.entity_type === "organization" ? "Организация" : "Вуз/СПО"}${isAdmin ? " · admin" : ""}</span>
->>>>>>> refs/remotes/origin/main
-        <button id="logout">Выйти</button>
+        <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${state.me.entity_type === "organization" ? "Организация" : "Вуз / СПО"}${isAdmin ? " · Администратор" : ""}</small></span>
+        <button id="logout" title="Выйти из системы">Выйти</button>
       </div>
     </div>
-    <div class="container" id="content"></div>
+    <main class="container" id="content"></main>
   </div>`);
   wrap.querySelectorAll("nav button").forEach((b) => {
     if (b.dataset.view === state.view) b.classList.add("active");
@@ -237,9 +244,13 @@ function renderLayout() {
     };
   });
   wrap.querySelector("#logout").onclick = async () => {
-    await api("/auth/logout", { method: "POST" });
-    state.me = null;
-    render();
+    try {
+      await api("/auth/logout", { method: "POST" });
+      state.me = null;
+      render();
+    } catch (e) {
+      showToast(e.message);
+    }
   };
   const content = wrap.querySelector("#content");
   if (state.view === "dashboard") renderDashboard(content);
@@ -326,10 +337,13 @@ async function renderDashboard(root) {
   const targetPct = d.target_amount_rub ? clampPercent((Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 100) : 0;
 
   root.innerHTML = `
-    <div class="page-heading"><div><span class="eyebrow accent">Аналитика</span><h1>Пульс проекта</h1><p>Плановые и фактические затраты за выбранный период.</p></div></div>
-    <div class="card hero-card">
+    <section class="page-heading">
+      <div><span class="eyebrow">Аналитика</span><h1>Дашборд</h1><p>Сводная картина исполнения обязательств за выбранный отчётный год.</p></div>
+      <span class="year-badge">${state.year}</span>
+    </section>
+    <div class="card">
       <div class="flex between">
-        <h2 style="margin:0">Основные показатели</h2>
+        <h2 style="margin:0">Пульс проекта</h2>
         <div class="flex">
           <label style="margin:0">Год</label>
           <input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}" style="width:90px">
@@ -388,11 +402,18 @@ async function renderDashboard(root) {
         alert("Введите положительную целевую сумму.");
         return;
       }
-      await api("/dashboard/target", {
-        method: "POST",
-        body: JSON.stringify({ report_year: state.year, target_amount_rub: amount }),
-      });
-      render();
+      targetBtn.disabled = true;
+      try {
+        await api("/dashboard/target", {
+          method: "POST",
+          body: JSON.stringify({ report_year: state.year, target_amount_rub: amount }),
+        });
+        showToast("Целевая сумма сохранена", "success");
+        render();
+      } catch (e) {
+        showToast(e.message);
+        targetBtn.disabled = false;
+      }
     };
   }
 }
@@ -403,7 +424,7 @@ async function renderEntries(root) {
   if (!state.categories.length) {
     root.innerHTML = `<div class="card muted">Загрузка справочника категорий…</div>`;
     try {
-      state.categories = await api("/categories");
+      state.categories = (await api("/categories")) || [];
       state.categories.forEach((c) => (CATEGORY_LABELS[c.code] = c.name));
       state.categoriesError = null;
     } catch (e) {
@@ -423,8 +444,11 @@ async function renderEntries(root) {
     state.categoryCode = state.categories[0].code;
   }
 
-  root.innerHTML = `<div class="page-heading"><div><span class="eyebrow accent">Отчётность</span><h1>План и факт</h1><p>Добавляйте расчёты и подтверждающие документы по категориям.</p></div></div>
-  <div class="card filters-card">
+  root.innerHTML = `<section class="page-heading">
+    <div><span class="eyebrow">Отчётность</span><h1>План и факт</h1><p>Добавляйте мероприятия и отслеживайте подтверждённые затраты.</p></div>
+    <span class="year-badge">${state.year}</span>
+  </section>
+  <div class="card filter-card">
     <div class="tabs">
       <button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button>
       <button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button>
@@ -433,7 +457,7 @@ async function renderEntries(root) {
       <div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
       <div class="field"><label>Категория активности</label>
         <select id="category">${state.categories
-          .map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${c.name}</option>`)
+          .map((c) => `<option value="${escapeHTML(c.code)}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`)
           .join("")}</select>
       </div>
       <div class="field right" style="align-self:end">
@@ -487,29 +511,22 @@ async function loadEntriesTable(root) {
     return;
   }
   const total = state.entries.reduce((s, e) => s + Number(e.amount_rub), 0);
-  box.innerHTML = `<table>
+  box.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Партнёр</th><th>Аудитория</th><th>Сумма, руб.</th><th></th></tr></thead>
     <tbody>
       ${state.entries
         .map(
-<<<<<<< HEAD
-          (e) => `<tr data-id="${e.id}">
-        <td>${partnerName(e.partner_id)}</td>
-        <td>${valueLabel(e.audience)}</td>
-        <td>${fmtMoney(e.amount_rub)}</td>
-=======
           (e) => `<tr data-id="${escapeHTML(e.id)}">
         <td>${escapeHTML(partnerName(e.partner_id))}</td>
         <td>${escapeHTML(e.audience)}</td>
         <td>${escapeHTML(fmtMoney(e.amount_rub))}</td>
->>>>>>> refs/remotes/origin/main
         <td class="muted">ред.</td>
       </tr>`
         )
         .join("")}
     </tbody>
     <tfoot><tr><td colspan="2"><b>Итого</b></td><td><b>${fmtMoney(total)}</b></td><td></td></tr></tfoot>
-  </table>`;
+  </table></div>`;
   box.querySelectorAll("tbody tr").forEach((tr) => {
     tr.onclick = () => {
       const entry = state.entries.find((e) => e.id === tr.dataset.id);
@@ -530,17 +547,13 @@ function currentCategory() {
 
 function fieldInput(f, value, audience) {
   const val = value === undefined || value === null ? "" : value;
+  const partners = Array.isArray(state.partners) ? state.partners : [];
   if (f.type === "select") {
-<<<<<<< HEAD
-    const opts = f.key === "org_name" ? state.partners.map((p) => ({ v: p.id, l: p.name })) : (f.options || []).map((o) => ({ v: o, l: valueLabel(o) }));
-    return `<select data-key="${f.key}" data-kind="select">
-=======
     const opts =
       f.key === "org_name"
-        ? state.partners.filter((p) => !audience || p.partner_kind === audience).map((p) => ({ v: p.id, l: p.name }))
+        ? partners.filter((p) => !audience || p.partner_kind === audience).map((p) => ({ v: p.id, l: p.name }))
         : (f.options || []).map((o) => ({ v: o, l: o }));
     return `<select data-key="${escapeHTML(f.key)}" data-kind="select" ${f.required ? "required" : ""}>
->>>>>>> refs/remotes/origin/main
       <option value="">—</option>
       ${opts
         .map((o) => `<option value="${escapeHTML(o.v)}" ${o.v === val ? "selected" : ""}>${escapeHTML(o.l)}</option>`)
@@ -665,17 +678,11 @@ async function openEntryModal(entry) {
   const payload = entry ? entry.payload || {} : {};
   const audience = entry ? entry.audience : cat.audience_scope[0];
 
-<<<<<<< HEAD
-  let persistedEntryId = entry ? entry.id : null;
-  const backdrop = el(`<div class="modal-backdrop"><div class="modal">
-    <div class="modal-heading"><span class="eyebrow accent">${isEdit ? "Редактирование" : "Новый расчёт"}</span><h2>${cat.name}</h2></div>
-=======
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true">
     <form id="m-form" novalidate>
     <h2 style="margin-top:0">${isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
->>>>>>> refs/remotes/origin/main
     <div class="field"><label>Аудитория</label>
-      <select id="m-audience">${cat.audience_scope.map((a) => `<option value="${a}" ${a === audience ? "selected" : ""}>${valueLabel(a)}</option>`).join("")}</select>
+      <select id="m-audience">${cat.audience_scope.map((a) => `<option value="${escapeHTML(a)}" ${a === audience ? "selected" : ""}>${escapeHTML(AUDIENCE_LABELS[a] || a)}</option>`).join("")}</select>
     </div>
     <div id="m-fields"></div>
     ${
@@ -683,7 +690,6 @@ async function openEntryModal(entry) {
         ? `<div class="field"><label>Комментарий к изменению (обязателен)</label><textarea id="m-comment" rows="2"></textarea></div>`
         : ""
     }
-    ${state.period === "fact" ? renderAttachSection(isEdit) : ""}
     <div class="error" id="m-error" style="display:none"></div>
     <div class="flex between" style="margin-top:14px">
       <div>${entry ? `<span class="muted">Текущая сумма: ${fmtMoney(entry.amount_rub)}</span>` : ""}</div>
@@ -692,21 +698,33 @@ async function openEntryModal(entry) {
         <button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>
       </div>
     </div>
-<<<<<<< HEAD
-=======
     ${isEdit && entry.period_type === "fact" ? renderAttachSection() : ""}
     </form>
->>>>>>> refs/remotes/origin/main
   </div></div>`);
 
   const fieldsBox = backdrop.querySelector("#m-fields");
   cat.fields.forEach((f) => {
     const row = el(`<div class="field"><label>${escapeHTML(f.label)}${f.required ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`);
     row.insertBefore(el(fieldInput(f, payload[f.key], audience)), row.querySelector(".field-error"));
+    if (f.key === "org_name") {
+      const hasPartners = Array.isArray(state.partners) && state.partners.some((partner) => partner.partner_kind === audience);
+      row.appendChild(el(`<div class="field-hint partner-hint"${hasPartners ? ' style="display:none"' : ""}>Для этой аудитории пока нет партнёров. Попросите администратора добавить организацию.</div>`));
+    }
     fieldsBox.appendChild(row);
   });
 
-  backdrop.querySelector("#m-cancel").onclick = () => backdrop.remove();
+  const closeModal = () => {
+    document.removeEventListener("keydown", closeOnEscape);
+    backdrop.remove();
+  };
+  const closeOnEscape = (event) => {
+    if (event.key === "Escape") closeModal();
+  };
+  backdrop.querySelector("#m-cancel").onclick = closeModal;
+  backdrop.onclick = (event) => {
+    if (event.target === backdrop) closeModal();
+  };
+  document.addEventListener("keydown", closeOnEscape);
   backdrop.querySelector("#m-form").onsubmit = async (event) => {
     event.preventDefault();
     const validation = collectAndValidateEntryPayload(fieldsBox, cat);
@@ -715,15 +733,10 @@ async function openEntryModal(entry) {
     const aud = backdrop.querySelector("#m-audience").value;
     const errBox = backdrop.querySelector("#m-error");
     const saveButton = backdrop.querySelector("#m-save");
-<<<<<<< HEAD
-=======
     errBox.style.display = "none";
     saveButton.disabled = true;
     saveButton.textContent = isEdit ? "Сохраняем…" : "Создаём…";
->>>>>>> refs/remotes/origin/main
     try {
-      saveButton.disabled = true;
-      saveButton.textContent = "Сохраняем…";
       if (isEdit) {
         const comment = backdrop.querySelector("#m-comment").value.trim();
         if (!comment) throw new Error("Комментарий обязателен при редактировании");
@@ -733,39 +746,27 @@ async function openEntryModal(entry) {
         });
       } else {
         const partnerId = newPayload.org_name || null;
-        if (!persistedEntryId) {
-          const created = await api(`/entries`, {
-            method: "POST",
-            body: JSON.stringify({
-              category_code: state.categoryCode,
-              partner_id: partnerId,
-              period_type: state.period,
-              report_year: state.year,
-              audience: aud,
-              payload: newPayload,
-            }),
-          });
-          persistedEntryId = created.id;
-        }
+        await api(`/entries`, {
+          method: "POST",
+          body: JSON.stringify({
+            category_code: state.categoryCode,
+            partner_id: partnerId,
+            period_type: state.period,
+            report_year: state.year,
+            audience: aud,
+            payload: newPayload,
+          }),
+        });
       }
-      const pendingFile = backdrop.querySelector("#attach-file")?.files[0];
-      if (pendingFile) {
-        await uploadAttachment(persistedEntryId, pendingFile);
-      }
-      backdrop.remove();
+      closeModal();
       const root = document.getElementById("content");
-      await loadEntriesTable(root);
+      if (root) await loadEntriesTable(root);
     } catch (e) {
-      errBox.textContent = persistedEntryId && !isEdit ? `Запись создана, но файл не загружен: ${e.message}. Нажмите «Повторить загрузку».` : e.message;
+      errBox.textContent = e.message;
       errBox.style.display = "block";
-<<<<<<< HEAD
-      saveButton.disabled = false;
-      saveButton.textContent = persistedEntryId && !isEdit ? "Повторить загрузку" : isEdit ? "Сохранить" : "Создать";
-=======
     } finally {
       saveButton.disabled = false;
       saveButton.textContent = isEdit ? "Сохранить" : "Создать";
->>>>>>> refs/remotes/origin/main
     }
   };
 
@@ -773,38 +774,23 @@ async function openEntryModal(entry) {
     const partnerSelect = fieldsBox.querySelector('[data-key="org_name"]');
     if (!partnerSelect) return;
     const selected = partnerSelect.value;
-    const options = state.partners.filter((partner) => partner.partner_kind === event.target.value);
+    const options = (Array.isArray(state.partners) ? state.partners : []).filter((partner) => partner.partner_kind === event.target.value);
     partnerSelect.innerHTML = `<option value="">—</option>${options
       .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
       .join("")}`;
+    const partnerHint = partnerSelect.closest(".field")?.querySelector(".partner-hint");
+    if (partnerHint) partnerHint.style.display = options.length ? "none" : "block";
     if (options.some((partner) => partner.id === selected)) partnerSelect.value = selected;
     clearFieldErrors(fieldsBox);
   };
 
   document.body.appendChild(backdrop);
 
-  const pendingFileInput = backdrop.querySelector("#attach-file");
-  if (pendingFileInput) {
-    pendingFileInput.onchange = () => {
-      backdrop.querySelector("#attach-file-name").textContent = pendingFileInput.files[0]?.name || "Файл не выбран";
-    };
-  }
-
   if (isEdit && entry.period_type === "fact") {
     wireAttachSection(backdrop, entry.id);
   }
 }
 
-<<<<<<< HEAD
-function renderAttachSection(isEdit) {
-  return `<div class="attachment-panel">
-    <h3>Подтверждающие документы</h3>
-    <p class="muted">Файл до 64 МБ. При создании он загрузится сразу после сохранения записи.</p>
-    <div id="attach-list" class="attach-list muted">${isEdit ? "Загрузка…" : "Файлов пока нет"}</div>
-    <div class="file-row">
-      <label class="file-picker"><input type="file" id="attach-file"><span>Выбрать файл</span><small id="attach-file-name">Файл не выбран</small></label>
-      ${isEdit ? '<button class="btn secondary" id="attach-upload" type="button">Загрузить файл</button>' : ""}
-=======
 function renderAttachSection() {
   return `<div class="card" style="margin-top:14px;background:transparent;padding:0;border:none">
     <h2>Подтверждающий документ</h2>
@@ -812,31 +798,15 @@ function renderAttachSection() {
     <div class="field" style="margin-top:8px">
       <input type="file" id="attach-file">
       <button type="button" class="btn secondary" id="attach-upload">Загрузить</button>
->>>>>>> refs/remotes/origin/main
     </div>
-    <div class="error" id="attach-error" style="display:none"></div>
   </div>`;
-}
-
-async function uploadAttachment(entryId, file) {
-  const fd = new FormData();
-  fd.append("file", file);
-  return api(`/entries/${entryId}/attachments`, { method: "POST", body: fd });
 }
 
 async function wireAttachSection(root, entryId) {
   const list = root.querySelector("#attach-list");
-  const fileInput = root.querySelector("#attach-file");
-  const fileName = root.querySelector("#attach-file-name");
-  const uploadButton = root.querySelector("#attach-upload");
-  const errorBox = root.querySelector("#attach-error");
-  fileInput.onchange = () => {
-    fileName.textContent = fileInput.files[0]?.name || "Файл не выбран";
-    errorBox.style.display = "none";
-  };
   const refresh = async () => {
     try {
-      const items = await api(`/entries/${entryId}/attachments`);
+      const items = (await api(`/entries/${entryId}/attachments`)) || [];
       list.innerHTML = items.length
         ? items
             .map(
@@ -851,26 +821,30 @@ async function wireAttachSection(root, entryId) {
       list.innerHTML = `<span class="error">${escapeHTML(e.message)}</span>`;
     }
   };
-  uploadButton.onclick = async () => {
+  root.querySelector("#attach-upload").onclick = async () => {
+    const fileInput = root.querySelector("#attach-file");
+    const uploadButton = root.querySelector("#attach-upload");
     if (!fileInput.files.length) {
-      errorBox.textContent = "Сначала выберите файл";
-      errorBox.style.display = "block";
+      showToast("Сначала выберите файл");
       return;
     }
+    const fd = new FormData();
+    fd.append("file", fileInput.files[0]);
+    uploadButton.disabled = true;
+    uploadButton.textContent = "Загружаем…";
     try {
-      uploadButton.disabled = true;
-      uploadButton.textContent = "Загружаем…";
-      await uploadAttachment(entryId, fileInput.files[0]);
+      const response = await fetch(`/api/entries/${encodeURIComponent(entryId)}/attachments`, { method: "POST", body: fd, credentials: "same-origin" });
+      const isJSON = (response.headers.get("content-type") || "").includes("application/json");
+      const data = isJSON ? await response.json().catch(() => null) : null;
+      if (!response.ok) throw new Error((data && data.error) || `Ошибка ${response.status}`);
       fileInput.value = "";
-      fileName.textContent = "Файл не выбран";
-      errorBox.style.display = "none";
       await refresh();
+      showToast("Документ загружен", "success");
     } catch (e) {
-      errorBox.textContent = e.message;
-      errorBox.style.display = "block";
+      showToast(e.message);
     } finally {
       uploadButton.disabled = false;
-      uploadButton.textContent = "Загрузить файл";
+      uploadButton.textContent = "Загрузить";
     }
   };
   refresh();
@@ -879,8 +853,10 @@ async function wireAttachSection(root, entryId) {
 // ----------------------------------------------------------------- ADMIN --
 
 async function renderAdmin(root) {
-  root.innerHTML = `<div class="page-heading"><div><span class="eyebrow accent">Администрирование</span><h1>Управление</h1><p>Пользователи, партнёры, сроки хранения и журнал изменений.</p></div></div>
-  <div class="tabs">
+  root.innerHTML = `<section class="page-heading">
+    <div><span class="eyebrow">Управление</span><h1>Администрирование</h1><p>Пользователи, партнёры, сроки хранения и журнал действий.</p></div>
+  </section>
+  <div class="tabs admin-tabs">
     <button data-t="users" class="active">Пользователи</button>
     <button data-t="partners">Партнёры</button>
     <button data-t="settings">Настройки</button>
@@ -898,31 +874,31 @@ async function renderAdmin(root) {
 }
 
 async function renderAdminTab(box, tab) {
-  if (tab === "users") return renderAdminUsers(box);
-  if (tab === "partners") return renderAdminPartners(box);
-  if (tab === "settings") return renderAdminSettings(box);
-  if (tab === "logs") return renderAdminLogs(box);
+  box.innerHTML = `<div class="card loading-state"><span class="spinner"></span>Загрузка данных…</div>`;
+  try {
+    if (tab === "users") return await renderAdminUsers(box);
+    if (tab === "partners") return await renderAdminPartners(box);
+    if (tab === "settings") return await renderAdminSettings(box);
+    if (tab === "logs") return await renderAdminLogs(box);
+    throw new Error("Неизвестный раздел администрирования");
+  } catch (e) {
+    box.innerHTML = `<div class="card error-state"><b>Не удалось загрузить раздел</b><span>${escapeHTML(e.message)}</span><button type="button" class="btn secondary" id="admin-retry">Повторить</button></div>`;
+    box.querySelector("#admin-retry").onclick = () => renderAdminTab(box, tab);
+  }
 }
 
 async function renderAdminUsers(box) {
   box.innerHTML = `<div class="card"><h2>Новый пользователь (в т.ч. дополнительный админ)</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
-<<<<<<< HEAD
-      <div class="field"><label>Электронная почта</label><input id="u-email"></div>
-      <div class="field"><label>Пароль</label><input id="u-password" type="password"></div>
-      <div class="field"><label>ФИО</label><input id="u-name"></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
-=======
       <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Роль</label><select id="u-role"><option value="user">user</option><option value="admin">admin</option></select></div>
       <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="">Выберет при первом входе</option><option value="organization">Организация</option><option value="edu_institution">Вуз / СПО</option></select></div>
-      <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${state.partners
+      <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(state.partners) ? state.partners : [])
         .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
         .join("")}</select></div>
->>>>>>> refs/remotes/origin/main
     </div>
     <button type="submit" class="btn" id="u-create">Создать</button>
     <div class="error" id="u-error" style="display:none"></div>
@@ -980,7 +956,8 @@ async function renderAdminUsers(box) {
           partner_id: partnerValue || null,
         }),
       });
-      renderAdminUsers(box);
+      showToast("Пользователь создан", "success");
+      await renderAdminTab(box, "users");
     } catch (e) {
       err.textContent = e.message;
       err.style.display = "block";
@@ -990,63 +967,84 @@ async function renderAdminUsers(box) {
     }
   };
 
-  const users = await api("/admin/users");
+  const users = (await api("/admin/users")) || [];
   const listBox = box.querySelector("#u-list");
-  listBox.innerHTML = `<table><thead><tr><th>Эл. почта</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+  listBox.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
     <tbody>${users
       .map(
         (u) => `<tr>
-<<<<<<< HEAD
-      <td>${u.email}</td><td>${u.full_name}</td><td>${valueLabel(u.role)}</td>
-=======
-      <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.role)}</td>
->>>>>>> refs/remotes/origin/main
-      <td>${u.is_active ? "активен" : "отключён"}</td>
+      <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(u.role)}</span></td>
+      <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
       <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button></td>
     </tr>`
       )
-      .join("")}</tbody></table>`;
+      .join("")}</tbody></table></div>`;
   listBox.querySelectorAll("button[data-id]").forEach((b) => {
     b.onclick = async () => {
-      await api(`/admin/users/${b.dataset.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ is_active: b.dataset.active !== "true" }),
-      });
-      renderAdminUsers(box);
+      b.disabled = true;
+      try {
+        await api(`/admin/users/${b.dataset.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ is_active: b.dataset.active !== "true" }),
+        });
+        showToast("Статус пользователя обновлён", "success");
+        await renderAdminTab(box, "users");
+      } catch (e) {
+        showToast(e.message);
+        b.disabled = false;
+      }
     };
   });
 }
 
 async function renderAdminPartners(box) {
   box.innerHTML = `<div class="card"><h2>Новый партнёр</h2>
-    <div class="grid cols-3">
-      <div class="field"><label>Наименование</label><input id="p-name"></div>
+    <form id="p-form" novalidate><div class="grid cols-3">
+      <div class="field"><label>Наименование *</label><input id="p-name" maxlength="300" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Вид ОО</label><select id="p-kind"><option value="vuz">Вуз</option><option value="kolledj">Колледж</option><option value="school">Школа</option></select></div>
-      <div class="field"><label>№ соглашения</label><input id="p-number"></div>
+      <div class="field"><label>№ соглашения</label><input id="p-number" maxlength="100"></div>
     </div>
-    <button class="btn" id="p-create">Добавить</button>
+    <button type="submit" class="btn" id="p-create">Добавить</button><div class="error form-message" id="p-error" style="display:none" role="alert"></div></form>
   </div>
   <div class="card"><h2>Партнёры</h2><div id="p-list">Загрузка…</div></div>`;
-  box.querySelector("#p-create").onclick = async () => {
-    await api("/partners", {
-      method: "POST",
-      body: JSON.stringify({
-        name: box.querySelector("#p-name").value.trim(),
-        partner_kind: box.querySelector("#p-kind").value,
-        agreement_number: box.querySelector("#p-number").value.trim(),
-      }),
-    });
-    state.partners = await api("/partners");
-    renderAdminPartners(box);
+  box.querySelector("#p-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const nameInput = box.querySelector("#p-name");
+    const error = box.querySelector("#p-error");
+    const button = box.querySelector("#p-create");
+    const name = nameInput.value.trim().replace(/\s+/g, " ");
+    clearFieldErrors(event.currentTarget);
+    error.style.display = "none";
+    if (!name) {
+      setFieldError(nameInput, "Укажите наименование партнёра");
+      nameInput.focus();
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Добавляем…";
+    try {
+      await api("/partners", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          partner_kind: box.querySelector("#p-kind").value,
+          agreement_number: box.querySelector("#p-number").value.trim(),
+        }),
+      });
+      state.partners = (await api("/partners")) || [];
+      showToast("Партнёр добавлен", "success");
+      await renderAdminTab(box, "partners");
+    } catch (e) {
+      error.textContent = e.message;
+      error.style.display = "block";
+      button.disabled = false;
+      button.textContent = "Добавить";
+    }
   };
-  const partners = await api("/partners");
+  const partners = (await api("/partners")) || [];
   state.partners = partners;
-  box.querySelector("#p-list").innerHTML = `<table><thead><tr><th>Наименование</th><th>Вид</th><th>№ соглашения</th></tr></thead>
-<<<<<<< HEAD
-    <tbody>${partners.map((p) => `<tr><td>${p.name}</td><td>${valueLabel(p.partner_kind)}</td><td>${p.agreement_number || "—"}</td></tr>`).join("")}</tbody></table>`;
-=======
-    <tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(p.partner_kind)}</td><td>${escapeHTML(p.agreement_number || "—")}</td></tr>`).join("")}</tbody></table>`;
->>>>>>> refs/remotes/origin/main
+  box.querySelector("#p-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Наименование</th><th>Вид</th><th>№ соглашения</th></tr></thead>
+    <tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(AUDIENCE_LABELS[p.partner_kind] || p.partner_kind)}</td><td>${escapeHTML(p.agreement_number || "—")}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 async function renderAdminSettings(box) {
@@ -1054,40 +1052,50 @@ async function renderAdminSettings(box) {
   box.innerHTML = `<div class="card"><h2>Настройки хранения</h2>
     <div class="grid cols-2">
       <div class="field"><label>Хранение подтверждающих документов, дней</label>
-        <input id="s-attach" type="number" value="${settings.attachment_retention_days || 365}"></div>
+        <input id="s-attach" type="number" min="1" max="3650" step="1" value="${settings.attachment_retention_days || 365}"></div>
       <div class="field"><label>Хранение журнала изменений, дней</label>
-        <input id="s-audit" type="number" value="${settings.audit_log_retention_days || 60}"></div>
+        <input id="s-audit" type="number" min="1" max="3650" step="1" value="${settings.audit_log_retention_days || 60}"></div>
     </div>
     <button class="btn" id="s-save">Сохранить</button>
     <p class="muted">По ТЗ подтверждающие документы хранятся год, но администратор может изменить срок; журнал изменений — 2 месяца.</p>
   </div>`;
   box.querySelector("#s-save").onclick = async () => {
-    await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "attachment_retention_days", value: box.querySelector("#s-attach").value }) });
-    await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "audit_log_retention_days", value: box.querySelector("#s-audit").value }) });
-    renderAdminSettings(box);
+    const button = box.querySelector("#s-save");
+    const attachmentDays = Number(box.querySelector("#s-attach").value);
+    const auditDays = Number(box.querySelector("#s-audit").value);
+    if (![attachmentDays, auditDays].every((value) => Number.isInteger(value) && value >= 1 && value <= 3650)) {
+      showToast("Срок хранения должен быть целым числом от 1 до 3650 дней");
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Сохраняем…";
+    try {
+      await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "attachment_retention_days", value: String(attachmentDays) }) });
+      await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "audit_log_retention_days", value: String(auditDays) }) });
+      showToast("Настройки сохранены", "success");
+      await renderAdminTab(box, "settings");
+    } catch (e) {
+      showToast(e.message);
+      button.disabled = false;
+      button.textContent = "Сохранить";
+    }
   };
 }
 
 async function renderAdminLogs(box) {
   box.innerHTML = `<div class="card"><h2>Журнал изменений (хранится согласно настройке выше)</h2><div id="logs-list">Загрузка…</div></div>`;
-  const logs = await api("/admin/logs?limit=200");
-  box.querySelector("#logs-list").innerHTML = `<table><thead><tr><th>Дата</th><th>Объект</th><th>Действие</th><th>Комментарий</th></tr></thead>
+  const logs = (await api("/admin/logs?limit=200")) || [];
+  box.querySelector("#logs-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Действие</th><th>Комментарий</th></tr></thead>
     <tbody>${logs
       .map(
         (l) => `<tr>
       <td>${new Date(l.created_at).toLocaleString("ru-RU")}</td>
-<<<<<<< HEAD
-      <td>${valueLabel(l.entity_type)}${l.entity_id ? " #" + l.entity_id.slice(0, 8) : ""}</td>
-      <td>${valueLabel(l.action)}</td>
-      <td>${l.comment_text || ""}</td>
-=======
       <td>${escapeHTML(l.entity_type)}${l.entity_id ? " #" + escapeHTML(l.entity_id.slice(0, 8)) : ""}</td>
       <td>${escapeHTML(l.action)}</td>
       <td>${escapeHTML(l.comment_text || "")}</td>
->>>>>>> refs/remotes/origin/main
     </tr>`
       )
-      .join("")}</tbody></table>`;
+      .join("")}</tbody></table></div>`;
 }
 
 boot();

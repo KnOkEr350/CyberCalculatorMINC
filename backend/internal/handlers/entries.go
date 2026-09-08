@@ -33,7 +33,7 @@ func (h *EntryHandlers) Categories(w http.ResponseWriter, r *http.Request, u mid
 		models.ActivityCategory
 		Fields []calculators.FieldSpec `json:"fields"`
 	}
-	var out []categoryOut
+	out := make([]categoryOut, 0)
 	for rows.Next() {
 		var c models.ActivityCategory
 		var scope pq.StringArray
@@ -171,7 +171,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	}
 	defer rows.Close()
 
-	var out []models.Entry
+	out := make([]models.Entry, 0)
 	for rows.Next() {
 		var e models.Entry
 		var partnerID, updatedBy sql.NullString
@@ -315,7 +315,7 @@ func (h *EntryHandlers) Comments(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	defer rows.Close()
-	var out []models.EntryComment
+	out := make([]models.EntryComment, 0)
 	for rows.Next() {
 		var c models.EntryComment
 		if err := rows.Scan(&c.ID, &c.EntryID, &c.UserID, &c.CommentText, &c.CreatedAt); err != nil {
