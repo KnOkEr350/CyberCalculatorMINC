@@ -1,10 +1,3 @@
-# syntax=docker/dockerfile:1
-#
-# Собирается с контекстом = корень репозитория (см. docker-compose.yml:
-# build.context: . , build.dockerfile: backend/Dockerfile), чтобы в финальный
-# образ можно было положить и код, и миграции, и статику одним Dockerfile.
-
-# ---- Stage 1: сборка ---------------------------------------------------
 FROM golang:1.22-bookworm AS builder
 WORKDIR /src
 
