@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Calculator interface {
@@ -18,12 +20,20 @@ type Calculator interface {
 }
 
 type FieldSpec struct {
-	Key      string   `json:"key"`
-	Label    string   `json:"label"`
-	Type     string   `json:"type"` // number|text|select
-	Required bool     `json:"required"`
-	Options  []string `json:"options,omitempty"`
+	Key       string   `json:"key"`
+	Label     string   `json:"label"`
+	Type      string   `json:"type"` // number|text|select
+	Required  bool     `json:"required"`
+	Options   []string `json:"options,omitempty"`
+	Integer   bool     `json:"integer,omitempty"`
+	MaxLength int      `json:"max_length,omitempty"`
 }
+
+const (
+	defaultTextMaxLength = 1000
+	maxPayloadNumber     = 1_000_000_000_000.0
+	maxCalculatedAmount  = 99_999_999_999_999.99 // NUMERIC(16,2)
+)
 
 var registry = map[string]Calculator{
 	"teachers":            teachersCalc{},
@@ -105,7 +115,17 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 	if payload == nil {
 		return fmt.Errorf("payload обязателен")
 	}
-	for _, field := range c.Fields() {
+	fields := c.Fields()
+	allowed := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		allowed[field.Key] = struct{}{}
+	}
+	for key := range payload {
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("неизвестное поле %q", key)
+		}
+	}
+	for _, field := range fields {
 		value, exists := payload[field.Key]
 		if !exists || value == nil {
 			if field.Required {
@@ -116,18 +136,39 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 
 		switch field.Type {
 		case "number":
-			if _, err := nonNegativeNum(payload, field.Key); err != nil {
+			number, err := nonNegativeNum(payload, field.Key)
+			if err != nil {
 				return err
+			}
+			if number > maxPayloadNumber {
+				return fmt.Errorf("поле %q превышает допустимое значение", field.Label)
+			}
+			if field.Integer && math.Trunc(number) != number {
+				return fmt.Errorf("поле %q должно быть целым числом", field.Label)
 			}
 		case "text", "select":
 			s, ok := value.(string)
 			if !ok {
 				return fmt.Errorf("поле %q должно быть строкой", field.Key)
 			}
-			if field.Required && strings.TrimSpace(s) == "" {
+			s = strings.TrimSpace(s)
+			if field.Required && s == "" {
 				return fmt.Errorf("поле %q не должно быть пустым", field.Key)
 			}
-			if field.Type == "select" && len(field.Options) > 0 && strings.TrimSpace(s) != "" {
+			maxLength := field.MaxLength
+			if maxLength == 0 {
+				maxLength = defaultTextMaxLength
+			}
+			if utf8.RuneCountInString(s) > maxLength {
+				return fmt.Errorf("поле %q не должно превышать %d символов", field.Label, maxLength)
+			}
+			for _, r := range s {
+				if unicode.IsControl(r) {
+					return fmt.Errorf("поле %q содержит недопустимые управляющие символы", field.Label)
+				}
+			}
+			payload[field.Key] = s
+			if field.Type == "select" && len(field.Options) > 0 && s != "" {
 				valid := false
 				for _, option := range field.Options {
 					if s == option {
@@ -142,6 +183,18 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 		default:
 			return fmt.Errorf("поле %q имеет неизвестный тип %q", field.Key, field.Type)
 		}
+	}
+	return nil
+}
+
+// ValidateAmount гарантирует, что результат формулы можно безопасно сохранить
+// в колонку NUMERIC(16,2), даже если API вызывается без интерфейса.
+func ValidateAmount(amount float64) error {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount < 0 {
+		return fmt.Errorf("рассчитанная сумма должна быть неотрицательным конечным числом")
+	}
+	if amount > maxCalculatedAmount {
+		return fmt.Errorf("рассчитанная сумма превышает допустимый предел")
 	}
 	return nil
 }

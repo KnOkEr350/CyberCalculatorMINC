@@ -22,9 +22,9 @@ func (manualCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование ОО", Type: "select", Required: true},
 		{Key: "decision_reference", Label: "Реквизиты Решения Минцифры", Type: "text", Required: true},
-		{Key: "activity_description", Label: "Описание мероприятия", Type: "text", Required: true},
-		{Key: "metric_description", Label: "Метрика и объёмный показатель по Решению", Type: "text", Required: true},
-		{Key: "calculation_basis", Label: "Основание и методика расчёта", Type: "text", Required: true},
+		{Key: "activity_description", Label: "Описание мероприятия", Type: "text", Required: true, MaxLength: 2000},
+		{Key: "metric_description", Label: "Метрика и объёмный показатель по Решению", Type: "text", Required: true, MaxLength: 2000},
+		{Key: "calculation_basis", Label: "Основание и методика расчёта", Type: "text", Required: true, MaxLength: 2000},
 		{Key: "amount_manual", Label: "Сумма затрат, руб.", Type: "number", Required: true},
 	}
 }

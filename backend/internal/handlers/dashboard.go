@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -101,6 +102,14 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 	var req setBudgetTargetRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
+		return
+	}
+	if req.ReportYear < 2000 || req.ReportYear > 2100 {
+		middleware.WriteError(w, http.StatusBadRequest, "report_year должен быть в диапазоне 2000–2100")
+		return
+	}
+	if math.IsNaN(req.TargetAmountRub) || math.IsInf(req.TargetAmountRub, 0) || req.TargetAmountRub <= 0 || req.TargetAmountRub > 99_999_999_999_999.99 {
+		middleware.WriteError(w, http.StatusBadRequest, "целевая сумма должна быть положительным числом в допустимом диапазоне")
 		return
 	}
 	_, err := h.DB.Exec(

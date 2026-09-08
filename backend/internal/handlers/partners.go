@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
+	"strings"
+	"time"
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
@@ -47,13 +48,26 @@ type createPartnerRequest struct {
 
 func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	var req createPartnerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
-	if req.Name == "" || (req.PartnerKind != "vuz" && req.PartnerKind != "kolledj" && req.PartnerKind != "school") {
+	req.Name = strings.TrimSpace(req.Name)
+	req.AgreementNumber = strings.TrimSpace(req.AgreementNumber)
+	req.OtherAgreement = strings.TrimSpace(req.OtherAgreement)
+	if req.Name == "" || len([]rune(req.Name)) > 300 || (req.PartnerKind != "vuz" && req.PartnerKind != "kolledj" && req.PartnerKind != "school") {
 		middleware.WriteError(w, http.StatusBadRequest, "укажите name и partner_kind (vuz|kolledj|school)")
 		return
+	}
+	if len([]rune(req.AgreementNumber)) > 100 || len([]rune(req.OtherAgreement)) > 1000 {
+		middleware.WriteError(w, http.StatusBadRequest, "реквизиты соглашения слишком длинные")
+		return
+	}
+	if req.AgreementDate != "" {
+		if _, err := time.Parse("2006-01-02", req.AgreementDate); err != nil {
+			middleware.WriteError(w, http.StatusBadRequest, "дата соглашения должна быть в формате ГГГГ-ММ-ДД")
+			return
+		}
 	}
 
 	var id string

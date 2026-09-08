@@ -39,7 +39,7 @@ func (teachersCalc) Fields() []FieldSpec {
 		{Key: "teaching_area", Label: "Направление преподавания", Type: "text"},
 		{Key: "teacher_full_name", Label: "ФИО преподавателя", Type: "text", Required: true},
 		{Key: "employment_form", Label: "Как оформлен", Type: "select", Required: true, Options: []string{"ТД по совместительству", "ГПХ"}},
-		{Key: "students_reach", Label: "Охват студентов", Type: "number"},
+		{Key: "students_reach", Label: "Охват студентов", Type: "number", Integer: true},
 		{Key: "academic_hours", Label: "Количество ак.ч.", Type: "number", Required: true},
 	}
 }

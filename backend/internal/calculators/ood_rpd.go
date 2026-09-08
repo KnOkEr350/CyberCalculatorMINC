@@ -65,6 +65,6 @@ func (oodRpdCalc) Fields() []FieldSpec {
 		{Key: "activity_type", Label: "Вид активности", Type: "select", Required: true, Options: []string{"development", "update", "expertise"}},
 		{Key: "program_name", Label: "Наименование РПД/ООП", Type: "text", Required: true},
 		{Key: "expert_full_name", Label: "ФИО эксперта", Type: "text"},
-		{Key: "students_reach", Label: "Охват студентов", Type: "number"},
+		{Key: "students_reach", Label: "Охват студентов", Type: "number", Integer: true},
 	}
 }
