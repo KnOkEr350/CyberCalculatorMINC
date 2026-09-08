@@ -7,9 +7,12 @@ request и вручную. Он состоит из трёх jobs:
    Найденные проблемы видны в GitHub Actions, но не блокируют остальные jobs.
 2. `verify` на GitHub-hosted Ubuntu runner выполняет Go-тесты, собирает и
    запускает весь Docker Compose, проверяет frontend, nginx, PostgreSQL,
-   миграции, вход и авторизованный API-запрос. Ошибка этого job блокирует CD.
+   миграции, вход, создание и редактирование факта, загрузку и скачивание
+   вложений. Ошибка этого job блокирует CD.
 3. `deploy` запускается только для `main`, только после успешного `verify` и
-   выполняет `docker compose up` на Debian VM через self-hosted runner.
+   выполняет `docker compose up` на Debian VM через self-hosted runner. После
+   пересоздания сервисов он перезапускает nginx, затем сверяет версию, которую
+   отдаёт frontend, с SHA проверенного коммита.
 
 ## Подготовка Debian VM
 
@@ -98,6 +101,12 @@ production `.env` в репозитории. Убедитесь, что `PROD_HT
 push → quality (не блокирует) + verify → deploy на Debian VM
 ```
 
+`actions/checkout` обновляет служебную копию в рабочем каталоге runner, обычно
+`~/actions-runner/_work/CyberCalculatorMINC/CyberCalculatorMINC`. Отдельный
+клон `~/CyberCalculatorMINC` не участвует в автоматическом деплое и поэтому не
+обязан обновляться после workflow. Запущенные контейнеры собираются из
+служебной копии runner.
+
 Проверить службу runner на VM можно командой:
 
 ```bash
@@ -109,4 +118,7 @@ sudo journalctl -u 'actions.runner.*' --follow
 ```bash
 docker compose -p cybercalculatorminc ps
 curl -I http://127.0.0.1:8080
+curl http://127.0.0.1:8080/version.txt
 ```
+
+Последняя команда должна вернуть полный SHA коммита из успешного deploy-job.

@@ -20,6 +20,8 @@ type AttachmentHandlers struct {
 	UploadDir string
 }
 
+const maxAttachmentSize int64 = 64 << 20
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
@@ -44,7 +46,8 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil { // до 32 МБ в памяти, остальное — во временных файлах
+	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(1<<20)) // запас для служебных данных multipart
+	if err := r.ParseMultipartForm(8 << 20); err != nil {              // до 8 МБ в памяти, остальное — во временных файлах
 		middleware.WriteError(w, http.StatusBadRequest, "не удалось разобрать форму (ожидается multipart/form-data, поле file)")
 		return
 	}
@@ -77,9 +80,15 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 		return
 	}
 	defer dst.Close()
-	size, err := io.Copy(dst, file)
+	size, err := io.Copy(dst, io.LimitReader(file, maxAttachmentSize+1))
 	if err != nil {
+		os.Remove(storagePath)
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи файла")
+		return
+	}
+	if size > maxAttachmentSize {
+		os.Remove(storagePath)
+		middleware.WriteError(w, http.StatusRequestEntityTooLarge, "размер файла превышает 64 МБ")
 		return
 	}
 

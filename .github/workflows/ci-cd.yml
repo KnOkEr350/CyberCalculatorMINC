@@ -76,6 +76,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: cybercalc-ci-${{ github.run_id }}-${{ github.run_attempt }}
       CI_HTTP_PORT: "18080"
+      APP_VERSION: ${{ github.sha }}
 
     steps:
       - name: Check out repository
@@ -92,6 +93,9 @@ jobs:
       - name: Run required Go tests
         working-directory: backend
         run: go test ./...
+
+      - name: Check frontend JavaScript syntax
+        run: node --check frontend/app.js
 
       - name: Create isolated CI configuration
         shell: bash
@@ -132,6 +136,11 @@ jobs:
 
           curl --fail --silent --show-error "${base_url}/app.js" > /dev/null
           curl --fail --silent --show-error "${base_url}/style.css" > /dev/null
+          served_version="$(curl --fail --silent --show-error "${base_url}/version.txt" | tr -d '\r\n')"
+          [[ "$served_version" == "$APP_VERSION" ]] || {
+            echo "Expected frontend $APP_VERSION, got $served_version"
+            exit 1
+          }
 
           logged_in=false
           for attempt in {1..30}; do
@@ -155,6 +164,87 @@ jobs:
             "${base_url}/api/auth/me" \
             | grep -q '"email":"ci-admin@example.invalid"'
 
+      - name: Verify creating, editing and attaching files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
+          cookie_file="/tmp/cybercalc-ci-cookies"
+
+          curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            --header "Content-Type: application/json" \
+            --data '{"entity_type":"organization"}' \
+            "${base_url}/api/auth/entity-type" > /dev/null
+
+          partner_response="$(curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            --header "Content-Type: application/json" \
+            --data '{"name":"CI test university","partner_kind":"vuz","agreement_number":"CI-1"}' \
+            "${base_url}/api/partners")"
+          partner_id="$(jq --exit-status --raw-output '.id' <<< "$partner_response")"
+
+          entry_payload="$(jq --compact-output --null-input --arg partner "$partner_id" '{
+            category_code: "teachers",
+            partner_id: $partner,
+            period_type: "fact",
+            report_year: 2026,
+            audience: "vuz",
+            payload: {
+              org_name: $partner,
+              course_name: "CI course",
+              teacher_full_name: "CI teacher",
+              employment_form: "ГПХ",
+              academic_hours: 2
+            }
+          }')"
+          entry_response="$(curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            --header "Content-Type: application/json" \
+            --data "$entry_payload" \
+            "${base_url}/api/entries")"
+          entry_id="$(jq --exit-status --raw-output '.id' <<< "$entry_response")"
+
+          printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
+          curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            --form 'file=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
+            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
+
+          update_payload="$(jq --compact-output --null-input --arg partner "$partner_id" '{
+            audience: "vuz",
+            comment: "CI attachment edit check",
+            payload: {
+              org_name: $partner,
+              course_name: "Updated CI course",
+              teacher_full_name: "CI teacher",
+              employment_form: "ГПХ",
+              academic_hours: 3
+            }
+          }')"
+          curl --fail --silent --show-error --request PUT \
+            --cookie "$cookie_file" \
+            --header "Content-Type: application/json" \
+            --data "$update_payload" \
+            "${base_url}/api/entries/${entry_id}" > /dev/null
+
+          printf 'attached after edit\n' > /tmp/cybercalc-second-attachment.txt
+          curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            --form 'file=@/tmp/cybercalc-second-attachment.txt;filename=second.txt' \
+            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
+
+          attachments="$(curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            "${base_url}/api/entries/${entry_id}/attachments")"
+          [[ "$(jq 'length' <<< "$attachments")" == "2" ]]
+          first_attachment_id="$(jq --exit-status --raw-output '.[] | select(.file_name == "first.txt") | .id' <<< "$attachments")"
+          curl --fail --silent --show-error \
+            --cookie "$cookie_file" \
+            "${base_url}/api/attachments/${first_attachment_id}/download" \
+            --output /tmp/cybercalc-downloaded-attachment.txt
+          cmp /tmp/cybercalc-first-attachment.txt /tmp/cybercalc-downloaded-attachment.txt
+
       - name: Print Compose diagnostics on failure
         if: failure()
         run: |
@@ -177,6 +267,7 @@ jobs:
       cancel-in-progress: false
     env:
       COMPOSE_PROJECT_NAME: cybercalculatorminc
+      APP_VERSION: ${{ github.sha }}
       DB_USER: ${{ secrets.PROD_DB_USER }}
       DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
       DB_NAME: ${{ secrets.PROD_DB_NAME }}
@@ -205,8 +296,16 @@ jobs:
           [[ "$missing" == "0" ]]
           docker compose config --quiet
 
-      - name: Build and deploy with Docker Compose
-        run: docker compose up --detach --build --remove-orphans --wait --wait-timeout 180
+      - name: Build and deploy verified revision with Docker Compose
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "Deploying $APP_VERSION from $GITHUB_WORKSPACE"
+          docker compose build --pull
+          docker compose up --detach --remove-orphans --wait --wait-timeout 180
+          # Upstreams are resolved when nginx starts. Restart it after service
+          # recreation so it cannot retain an old container IP.
+          docker compose restart nginx
 
       - name: Verify deployed application
         shell: bash
@@ -217,13 +316,15 @@ jobs:
           for attempt in {1..30}; do
             frontend_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/" || true)"
             api_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/api/auth/me" || true)"
-            if [[ "$frontend_status" == "200" && "$api_status" == "401" ]]; then
+            served_version="$(curl --silent --fail "${base_url}/version.txt" 2>/dev/null | tr -d '\r\n' || true)"
+            if [[ "$frontend_status" == "200" && "$api_status" == "401" && "$served_version" == "$APP_VERSION" ]]; then
+              echo "Revision $APP_VERSION is live"
               exit 0
             fi
             sleep 2
           done
 
-          echo "Deployment health check failed"
+          echo "Deployment health check failed: expected revision $APP_VERSION, got ${served_version:-nothing}"
           exit 1
 
       - name: Print deployment diagnostics on failure

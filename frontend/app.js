@@ -15,6 +15,32 @@ const state = {
 
 const CATEGORY_LABELS = {}; // заполняется из /api/categories
 
+const VALUE_LABELS = {
+  vuz: "Вуз",
+  kolledj: "Колледж",
+  school: "Школа",
+  rpd: "РПД",
+  oop: "ООП",
+  vo: "Высшее образование (ВО)",
+  spo: "Среднее профессиональное образование (СПО)",
+  development: "Разработка",
+  update: "Актуализация",
+  expertise: "Экспертиза",
+  user: "Пользователь",
+  admin: "Администратор",
+  organization: "ИТ-компания",
+  edu_institution: "Образовательная организация",
+  entry: "Запись",
+  attachment: "Документ",
+  partner: "Партнёр",
+  settings: "Настройки",
+  create: "Создание",
+  upload: "Загрузка файла",
+  login: "Вход",
+  delete: "Удаление",
+  settings_change: "Изменение настроек",
+};
+
 async function api(path, opts = {}) {
   const res = await fetch("/api" + path, {
     credentials: "same-origin",
@@ -44,6 +70,15 @@ function el(html) {
 
 function fmtMoney(v) {
   return Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽";
+}
+
+function valueLabel(value) {
+  return VALUE_LABELS[value] || value;
+}
+
+function brand() {
+  return `<span class="brand-mark" aria-hidden="true"><span></span></span>
+    <span class="brand-copy"><b>Кибер Калькулятор</b><small>Затраты по Приказу Минцифры</small></span>`;
 }
 
 // ---------------------------------------------------------------- ROUTER --
@@ -80,13 +115,26 @@ function render() {
 // ----------------------------------------------------------------- LOGIN --
 
 function renderLogin() {
-  const wrap = el(`<div class="login-wrap"><div class="login-box card">
-    <h1>Калькулятор затрат по Приказу Минцифры</h1>
-    <div class="field"><label>Email</label><input type="email" id="login-email" style="width:100%"></div>
-    <div class="field"><label>Пароль</label><input type="password" id="login-password" style="width:100%"></div>
-    <div class="error" id="login-error" style="display:none"></div>
-    <button class="btn" id="login-submit" style="width:100%">Войти</button>
-  </div></div>`);
+  const wrap = el(`<div class="login-wrap">
+    <section class="login-hero">
+      <div class="brand brand-light">${brand()}</div>
+      <div class="login-hero-copy">
+        <span class="eyebrow">Планирование и контроль</span>
+        <h1>Расходы под контролем.<br>От плана до факта.</h1>
+        <p>Единое пространство для расчёта затрат, подтверждающих документов и отчётности.</p>
+      </div>
+      <div class="hero-art" aria-hidden="true"><span></span><span></span><span></span></div>
+    </section>
+    <section class="login-panel"><div class="login-box">
+      <span class="eyebrow accent">Личный кабинет</span>
+      <h2>Вход в систему</h2>
+      <p class="muted login-lead">Введите данные вашей учётной записи.</p>
+      <div class="field"><label>Электронная почта</label><input type="email" id="login-email" autocomplete="username" placeholder="name@company.ru"></div>
+      <div class="field"><label>Пароль</label><input type="password" id="login-password" autocomplete="current-password" placeholder="Введите пароль"></div>
+      <div class="error" id="login-error" style="display:none"></div>
+      <button class="btn btn-wide" id="login-submit">Войти</button>
+    </div></section>
+  </div>`);
   wrap.querySelector("#login-submit").onclick = async () => {
     const email = wrap.querySelector("#login-email").value.trim();
     const password = wrap.querySelector("#login-password").value;
@@ -99,18 +147,26 @@ function renderLogin() {
       errBox.style.display = "block";
     }
   };
+  wrap.querySelector("#login-password").onkeydown = (event) => {
+    if (event.key === "Enter") wrap.querySelector("#login-submit").click();
+  };
   return wrap;
 }
 
 function renderChooseEntity() {
-  const wrap = el(`<div class="login-wrap"><div class="login-box card">
-    <h1>Кто вы?</h1>
-    <p class="muted">Выберите роль — от этого зависит, как калькулятор считает и группирует ваши отчёты.</p>
-    <div class="field">
-      <button class="btn" id="pick-org" style="width:100%;margin-bottom:8px">Организация (ИТ-компания)</button>
-      <button class="btn secondary" id="pick-edu" style="width:100%">Вуз / СПО (партнёр)</button>
-    </div>
-  </div></div>`);
+  const wrap = el(`<div class="login-wrap">
+    <section class="login-hero">
+      <div class="brand brand-light">${brand()}</div>
+      <div class="login-hero-copy"><span class="eyebrow">Первый вход</span><h1>Настроим рабочее пространство</h1><p>Выберите тип участника, чтобы система показала подходящие формы и расчёты.</p></div>
+      <div class="hero-art" aria-hidden="true"><span></span><span></span><span></span></div>
+    </section>
+    <section class="login-panel"><div class="login-box entity-box">
+      <span class="eyebrow accent">Профиль</span><h2>Кого вы представляете?</h2>
+      <p class="muted login-lead">Выбор влияет на группировку отчётов и доступные категории.</p>
+      <button class="choice-card" id="pick-org"><b>ИТ-компания</b><span>Организация, обязанная соглашением</span></button>
+      <button class="choice-card" id="pick-edu"><b>Вуз или СПО</b><span>Образовательная организация-партнёр</span></button>
+    </div></section>
+  </div>`);
   const pick = async (entity_type) => {
     await api("/auth/entity-type", { method: "POST", body: JSON.stringify({ entity_type }) });
     await boot();
@@ -124,16 +180,16 @@ function renderChooseEntity() {
 
 function renderLayout() {
   const isAdmin = state.me.role === "admin";
-  const wrap = el(`<div>
+  const wrap = el(`<div class="app-shell">
     <div class="topbar">
-      <h1>Калькулятор затрат — Приказ Минцифры</h1>
+      <div class="brand brand-light">${brand()}</div>
       <nav>
-        <button data-view="dashboard">Дашборд</button>
+        <button data-view="dashboard">Обзор</button>
         <button data-view="entries">План / Факт</button>
-        ${isAdmin ? '<button data-view="admin">Админка</button>' : ""}
+        ${isAdmin ? '<button data-view="admin">Управление</button>' : ""}
       </nav>
       <div class="who">
-        <span>${state.me.full_name} · ${state.me.entity_type === "organization" ? "Организация" : "Вуз/СПО"}${isAdmin ? " · admin" : ""}</span>
+        <span><b>${state.me.full_name}</b><small>${valueLabel(state.me.entity_type)}${isAdmin ? " · Администратор" : ""}</small></span>
         <button id="logout">Выйти</button>
       </div>
     </div>
@@ -185,9 +241,10 @@ async function renderDashboard(root) {
       : `<div class="muted">Нет данных за ${state.year} год</div>`;
 
   root.innerHTML = `
-    <div class="card">
+    <div class="page-heading"><div><span class="eyebrow accent">Аналитика</span><h1>Пульс проекта</h1><p>Плановые и фактические затраты за выбранный период.</p></div></div>
+    <div class="card hero-card">
       <div class="flex between">
-        <h2 style="margin:0">Пульс проекта</h2>
+        <h2 style="margin:0">Основные показатели</h2>
         <div class="flex">
           <label style="margin:0">Год</label>
           <input type="number" id="dash-year" value="${state.year}" style="width:90px">
@@ -237,7 +294,8 @@ async function renderDashboard(root) {
 async function renderEntries(root) {
   if (!state.categoryCode && state.categories.length) state.categoryCode = state.categories[0].code;
 
-  root.innerHTML = `<div class="card">
+  root.innerHTML = `<div class="page-heading"><div><span class="eyebrow accent">Отчётность</span><h1>План и факт</h1><p>Добавляйте расчёты и подтверждающие документы по категориям.</p></div></div>
+  <div class="card filters-card">
     <div class="tabs">
       <button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button>
       <button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button>
@@ -302,7 +360,7 @@ async function loadEntriesTable(root) {
         .map(
           (e) => `<tr data-id="${e.id}">
         <td>${partnerName(e.partner_id)}</td>
-        <td>${e.audience}</td>
+        <td>${valueLabel(e.audience)}</td>
         <td>${fmtMoney(e.amount_rub)}</td>
         <td class="muted">ред.</td>
       </tr>`
@@ -332,7 +390,7 @@ function currentCategory() {
 function fieldInput(f, value) {
   const val = value === undefined || value === null ? "" : value;
   if (f.type === "select") {
-    const opts = f.key === "org_name" ? state.partners.map((p) => ({ v: p.id, l: p.name })) : (f.options || []).map((o) => ({ v: o, l: o }));
+    const opts = f.key === "org_name" ? state.partners.map((p) => ({ v: p.id, l: p.name })) : (f.options || []).map((o) => ({ v: o, l: valueLabel(o) }));
     return `<select data-key="${f.key}" data-kind="select">
       <option value="">—</option>
       ${opts.map((o) => `<option value="${o.v}" ${o.v === val ? "selected" : ""}>${o.l}</option>`).join("")}
@@ -351,10 +409,11 @@ async function openEntryModal(entry) {
   const payload = entry ? entry.payload || {} : {};
   const audience = entry ? entry.audience : cat.audience_scope[0];
 
+  let persistedEntryId = entry ? entry.id : null;
   const backdrop = el(`<div class="modal-backdrop"><div class="modal">
-    <h2 style="margin-top:0">${isEdit ? "Редактировать запись" : "Новая запись"} — ${cat.name}</h2>
+    <div class="modal-heading"><span class="eyebrow accent">${isEdit ? "Редактирование" : "Новый расчёт"}</span><h2>${cat.name}</h2></div>
     <div class="field"><label>Аудитория</label>
-      <select id="m-audience">${cat.audience_scope.map((a) => `<option value="${a}" ${a === audience ? "selected" : ""}>${a}</option>`).join("")}</select>
+      <select id="m-audience">${cat.audience_scope.map((a) => `<option value="${a}" ${a === audience ? "selected" : ""}>${valueLabel(a)}</option>`).join("")}</select>
     </div>
     <div id="m-fields"></div>
     ${
@@ -362,6 +421,7 @@ async function openEntryModal(entry) {
         ? `<div class="field"><label>Комментарий к изменению (обязателен)</label><textarea id="m-comment" rows="2"></textarea></div>`
         : ""
     }
+    ${state.period === "fact" ? renderAttachSection(isEdit) : ""}
     <div class="error" id="m-error" style="display:none"></div>
     <div class="flex between" style="margin-top:14px">
       <div>${entry ? `<span class="muted">Текущая сумма: ${fmtMoney(entry.amount_rub)}</span>` : ""}</div>
@@ -370,7 +430,6 @@ async function openEntryModal(entry) {
         <button class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>
       </div>
     </div>
-    ${isEdit && entry.period_type === "fact" ? renderAttachSection() : ""}
   </div></div>`);
 
   const fieldsBox = backdrop.querySelector("#m-fields");
@@ -390,7 +449,10 @@ async function openEntryModal(entry) {
     });
     const aud = backdrop.querySelector("#m-audience").value;
     const errBox = backdrop.querySelector("#m-error");
+    const saveButton = backdrop.querySelector("#m-save");
     try {
+      saveButton.disabled = true;
+      saveButton.textContent = "Сохраняем…";
       if (isEdit) {
         const comment = backdrop.querySelector("#m-comment").value.trim();
         if (!comment) throw new Error("Комментарий обязателен при редактировании");
@@ -400,47 +462,79 @@ async function openEntryModal(entry) {
         });
       } else {
         const partnerId = newPayload.org_name || null;
-        await api(`/entries`, {
-          method: "POST",
-          body: JSON.stringify({
-            category_code: state.categoryCode,
-            partner_id: partnerId,
-            period_type: state.period,
-            report_year: state.year,
-            audience: aud,
-            payload: newPayload,
-          }),
-        });
+        if (!persistedEntryId) {
+          const created = await api(`/entries`, {
+            method: "POST",
+            body: JSON.stringify({
+              category_code: state.categoryCode,
+              partner_id: partnerId,
+              period_type: state.period,
+              report_year: state.year,
+              audience: aud,
+              payload: newPayload,
+            }),
+          });
+          persistedEntryId = created.id;
+        }
+      }
+      const pendingFile = backdrop.querySelector("#attach-file")?.files[0];
+      if (pendingFile) {
+        await uploadAttachment(persistedEntryId, pendingFile);
       }
       backdrop.remove();
       const root = document.getElementById("content");
       await loadEntriesTable(root);
     } catch (e) {
-      errBox.textContent = e.message;
+      errBox.textContent = persistedEntryId && !isEdit ? `Запись создана, но файл не загружен: ${e.message}. Нажмите «Повторить загрузку».` : e.message;
       errBox.style.display = "block";
+      saveButton.disabled = false;
+      saveButton.textContent = persistedEntryId && !isEdit ? "Повторить загрузку" : isEdit ? "Сохранить" : "Создать";
     }
   };
 
   document.body.appendChild(backdrop);
+
+  const pendingFileInput = backdrop.querySelector("#attach-file");
+  if (pendingFileInput) {
+    pendingFileInput.onchange = () => {
+      backdrop.querySelector("#attach-file-name").textContent = pendingFileInput.files[0]?.name || "Файл не выбран";
+    };
+  }
 
   if (isEdit && entry.period_type === "fact") {
     wireAttachSection(backdrop, entry.id);
   }
 }
 
-function renderAttachSection() {
-  return `<div class="card" style="margin-top:14px;background:transparent;padding:0;border:none">
-    <h2>Подтверждающий документ</h2>
-    <div id="attach-list" class="attach-list muted">Загрузка…</div>
-    <div class="field" style="margin-top:8px">
-      <input type="file" id="attach-file">
-      <button class="btn secondary" id="attach-upload">Загрузить</button>
+function renderAttachSection(isEdit) {
+  return `<div class="attachment-panel">
+    <h3>Подтверждающие документы</h3>
+    <p class="muted">Файл до 64 МБ. При создании он загрузится сразу после сохранения записи.</p>
+    <div id="attach-list" class="attach-list muted">${isEdit ? "Загрузка…" : "Файлов пока нет"}</div>
+    <div class="file-row">
+      <label class="file-picker"><input type="file" id="attach-file"><span>Выбрать файл</span><small id="attach-file-name">Файл не выбран</small></label>
+      ${isEdit ? '<button class="btn secondary" id="attach-upload" type="button">Загрузить файл</button>' : ""}
     </div>
+    <div class="error" id="attach-error" style="display:none"></div>
   </div>`;
+}
+
+async function uploadAttachment(entryId, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api(`/entries/${entryId}/attachments`, { method: "POST", body: fd });
 }
 
 async function wireAttachSection(root, entryId) {
   const list = root.querySelector("#attach-list");
+  const fileInput = root.querySelector("#attach-file");
+  const fileName = root.querySelector("#attach-file-name");
+  const uploadButton = root.querySelector("#attach-upload");
+  const errorBox = root.querySelector("#attach-error");
+  fileInput.onchange = () => {
+    fileName.textContent = fileInput.files[0]?.name || "Файл не выбран";
+    errorBox.style.display = "none";
+  };
   const refresh = async () => {
     try {
       const items = await api(`/entries/${entryId}/attachments`);
@@ -458,14 +552,27 @@ async function wireAttachSection(root, entryId) {
       list.innerHTML = `<span class="error">${e.message}</span>`;
     }
   };
-  root.querySelector("#attach-upload").onclick = async () => {
-    const fileInput = root.querySelector("#attach-file");
-    if (!fileInput.files.length) return;
-    const fd = new FormData();
-    fd.append("file", fileInput.files[0]);
-    await fetch(`/api/entries/${entryId}/attachments`, { method: "POST", body: fd, credentials: "same-origin" });
-    fileInput.value = "";
-    refresh();
+  uploadButton.onclick = async () => {
+    if (!fileInput.files.length) {
+      errorBox.textContent = "Сначала выберите файл";
+      errorBox.style.display = "block";
+      return;
+    }
+    try {
+      uploadButton.disabled = true;
+      uploadButton.textContent = "Загружаем…";
+      await uploadAttachment(entryId, fileInput.files[0]);
+      fileInput.value = "";
+      fileName.textContent = "Файл не выбран";
+      errorBox.style.display = "none";
+      await refresh();
+    } catch (e) {
+      errorBox.textContent = e.message;
+      errorBox.style.display = "block";
+    } finally {
+      uploadButton.disabled = false;
+      uploadButton.textContent = "Загрузить файл";
+    }
   };
   refresh();
 }
@@ -473,7 +580,8 @@ async function wireAttachSection(root, entryId) {
 // ----------------------------------------------------------------- ADMIN --
 
 async function renderAdmin(root) {
-  root.innerHTML = `<div class="tabs">
+  root.innerHTML = `<div class="page-heading"><div><span class="eyebrow accent">Администрирование</span><h1>Управление</h1><p>Пользователи, партнёры, сроки хранения и журнал изменений.</p></div></div>
+  <div class="tabs">
     <button data-t="users" class="active">Пользователи</button>
     <button data-t="partners">Партнёры</button>
     <button data-t="settings">Настройки</button>
@@ -500,10 +608,10 @@ async function renderAdminTab(box, tab) {
 async function renderAdminUsers(box) {
   box.innerHTML = `<div class="card"><h2>Новый пользователь (в т.ч. дополнительный админ)</h2>
     <div class="grid cols-3">
-      <div class="field"><label>Email</label><input id="u-email"></div>
+      <div class="field"><label>Электронная почта</label><input id="u-email"></div>
       <div class="field"><label>Пароль</label><input id="u-password" type="password"></div>
       <div class="field"><label>ФИО</label><input id="u-name"></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="user">user</option><option value="admin">admin</option></select></div>
+      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
     </div>
     <button class="btn" id="u-create">Создать</button>
     <div class="error" id="u-error" style="display:none"></div>
@@ -531,11 +639,11 @@ async function renderAdminUsers(box) {
 
   const users = await api("/admin/users");
   const listBox = box.querySelector("#u-list");
-  listBox.innerHTML = `<table><thead><tr><th>Email</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+  listBox.innerHTML = `<table><thead><tr><th>Эл. почта</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
     <tbody>${users
       .map(
         (u) => `<tr>
-      <td>${u.email}</td><td>${u.full_name}</td><td>${u.role}</td>
+      <td>${u.email}</td><td>${u.full_name}</td><td>${valueLabel(u.role)}</td>
       <td>${u.is_active ? "активен" : "отключён"}</td>
       <td><button class="btn secondary" data-id="${u.id}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button></td>
     </tr>`
@@ -577,7 +685,7 @@ async function renderAdminPartners(box) {
   const partners = await api("/partners");
   state.partners = partners;
   box.querySelector("#p-list").innerHTML = `<table><thead><tr><th>Наименование</th><th>Вид</th><th>№ соглашения</th></tr></thead>
-    <tbody>${partners.map((p) => `<tr><td>${p.name}</td><td>${p.partner_kind}</td><td>${p.agreement_number || "—"}</td></tr>`).join("")}</tbody></table>`;
+    <tbody>${partners.map((p) => `<tr><td>${p.name}</td><td>${valueLabel(p.partner_kind)}</td><td>${p.agreement_number || "—"}</td></tr>`).join("")}</tbody></table>`;
 }
 
 async function renderAdminSettings(box) {
@@ -607,8 +715,8 @@ async function renderAdminLogs(box) {
       .map(
         (l) => `<tr>
       <td>${new Date(l.created_at).toLocaleString("ru-RU")}</td>
-      <td>${l.entity_type}${l.entity_id ? " #" + l.entity_id.slice(0, 8) : ""}</td>
-      <td>${l.action}</td>
+      <td>${valueLabel(l.entity_type)}${l.entity_id ? " #" + l.entity_id.slice(0, 8) : ""}</td>
+      <td>${valueLabel(l.action)}</td>
       <td>${l.comment_text || ""}</td>
     </tr>`
       )
