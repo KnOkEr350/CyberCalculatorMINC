@@ -198,18 +198,13 @@ jobs:
               academic_hours: 2
             }
           }')"
+          printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
           entry_response="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
-            --header "Content-Type: application/json" \
-            --data "$entry_payload" \
+            --form-string "entry=$entry_payload" \
+            --form 'file=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
             "${base_url}/api/entries")"
           entry_id="$(jq --exit-status --raw-output '.id' <<< "$entry_response")"
-
-          printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --form 'file=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
-            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
 
           update_payload="$(jq --compact-output --null-input --arg partner "$partner_id" '{
             audience: "vuz",

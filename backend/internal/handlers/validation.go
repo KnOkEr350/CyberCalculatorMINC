@@ -78,5 +78,8 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 			}
 		}
 	}
+	if req.EntityType == string(models.EntityEduInst) && req.PartnerID == nil {
+		return fmt.Errorf("для образовательной организации необходимо выбрать партнёра")
+	}
 	return nil
 }

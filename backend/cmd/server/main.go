@@ -81,7 +81,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
 
 	authH := &handlers.AuthHandlers{DB: db}
 	partnerH := &handlers.PartnerHandlers{DB: db}
-	entryH := &handlers.EntryHandlers{DB: db}
+	entryH := &handlers.EntryHandlers{DB: db, UploadDir: cfg.UploadDir}
 	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir}
 	dashH := &handlers.DashboardHandlers{DB: db}
 	adminH := &handlers.AdminHandlers{DB: db}

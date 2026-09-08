@@ -17,6 +17,31 @@ const state = {
 const CATEGORY_LABELS = {}; // заполняется из /api/categories
 const AUDIENCE_LABELS = { vuz: "Вуз", kolledj: "СПО", school: "Школьный трек" };
 const CHART_COLORS = ["#1a79ff", "#00a6a6", "#6757d9", "#f2a51a", "#e85c8b", "#36a269", "#489dff", "#805ad5", "#de6f3c"];
+const VALUE_LABELS = {
+  vuz: "Вуз",
+  kolledj: "Колледж",
+  school: "Школа",
+  rpd: "РПД",
+  oop: "ООП",
+  vo: "Высшее образование (ВО)",
+  spo: "Среднее профессиональное образование (СПО)",
+  development: "Разработка",
+  update: "Актуализация",
+  expertise: "Экспертиза",
+  user: "Пользователь",
+  admin: "Администратор",
+  organization: "ИТ-компания",
+  edu_institution: "Образовательная организация",
+  entry: "Запись",
+  attachment: "Документ",
+  partner: "Партнёр",
+  settings: "Настройки",
+  create: "Создание",
+  upload: "Загрузка файла",
+  login: "Вход",
+  delete: "Удаление",
+  settings_change: "Изменение настроек",
+};
 
 async function api(path, opts = {}) {
   const res = await fetch("/api" + path, {
@@ -49,6 +74,10 @@ function fmtMoney(v) {
   return Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽";
 }
 
+function valueLabel(value) {
+  return VALUE_LABELS[value] || value;
+}
+
 function escapeHTML(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -69,7 +98,7 @@ function validYear(value) {
 
 function brandMarkup(inverse = false) {
   return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
-    <span class="brand-emblem" aria-hidden="true"><i></i></span>
+    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 36 40" focusable="false"><rect class="calculator-body" x="3" y="1" width="30" height="38" rx="6"/><rect class="calculator-screen" x="8" y="6" width="20" height="8" rx="2"/><circle cx="10" cy="21" r="2"/><circle cx="18" cy="21" r="2"/><circle cx="26" cy="21" r="2"/><circle cx="10" cy="30" r="2"/><circle cx="18" cy="30" r="2"/><rect x="24" y="28" width="4" height="4" rx="1.2"/></svg></span>
     <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong><small>Калькулятор затрат</small></span>
   </div>`;
 }
@@ -193,17 +222,20 @@ function renderChooseEntity() {
       <span class="eyebrow">Профиль</span><h2>Кого вы представляете?</h2>
       <p class="muted">Выберите подходящий вариант. При необходимости администратор сможет уточнить настройки.</p>
       <button type="button" class="choice-card" id="pick-org"><b>Организация</b><span>ИТ-компания, ведущая план и факт затрат</span><i>→</i></button>
-      <button type="button" class="choice-card" id="pick-edu"><b>Вуз или СПО</b><span>Образовательная организация — партнёр</span><i>→</i></button>
+      <div class="field entity-partner-field"><label for="entity-partner">Образовательная организация</label><select id="entity-partner"><option value="">Выберите организацию</option>${state.partners
+        .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
+        .join("")}</select></div>
+      <button type="button" class="choice-card" id="pick-edu"><b>Вуз, колледж или школа</b><span>Образовательная организация — партнёр</span><i>→</i></button>
       <div class="error form-message" id="entity-error" style="display:none" role="alert"></div>
     </div></main>
   </div>`);
-  const pick = async (entity_type) => {
+  const pick = async (entity_type, partner_id = null) => {
     const buttons = wrap.querySelectorAll(".choice-card");
     const error = wrap.querySelector("#entity-error");
     buttons.forEach((button) => (button.disabled = true));
     error.style.display = "none";
     try {
-      await api("/auth/entity-type", { method: "POST", body: JSON.stringify({ entity_type }) });
+      await api("/auth/entity-type", { method: "POST", body: JSON.stringify({ entity_type, partner_id }) });
       await boot();
     } catch (e) {
       error.textContent = e.message;
@@ -212,7 +244,16 @@ function renderChooseEntity() {
     }
   };
   wrap.querySelector("#pick-org").onclick = () => pick("organization");
-  wrap.querySelector("#pick-edu").onclick = () => pick("edu_institution");
+  wrap.querySelector("#pick-edu").onclick = () => {
+    const partnerID = wrap.querySelector("#entity-partner").value;
+    if (!partnerID) {
+      const error = wrap.querySelector("#entity-error");
+      error.textContent = "Выберите свою образовательную организацию";
+      error.style.display = "block";
+      return;
+    }
+    pick("edu_institution", partnerID);
+  };
   return wrap;
 }
 
@@ -230,7 +271,7 @@ function renderLayout() {
       </nav>
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
-        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${state.me.entity_type === "organization" ? "Организация" : "Вуз / СПО"}${isAdmin ? " · Администратор" : ""}</small></span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${escapeHTML(valueLabel(state.me.entity_type))}${isAdmin ? " · Администратор" : ""}</small></span>
         <button id="logout" title="Выйти из системы">Выйти</button>
       </div>
     </div>
@@ -518,7 +559,7 @@ async function loadEntriesTable(root) {
         .map(
           (e) => `<tr data-id="${escapeHTML(e.id)}">
         <td>${escapeHTML(partnerName(e.partner_id))}</td>
-        <td>${escapeHTML(e.audience)}</td>
+        <td>${escapeHTML(valueLabel(e.audience))}</td>
         <td>${escapeHTML(fmtMoney(e.amount_rub))}</td>
         <td class="muted">ред.</td>
       </tr>`
@@ -551,8 +592,10 @@ function fieldInput(f, value, audience) {
   if (f.type === "select") {
     const opts =
       f.key === "org_name"
-        ? partners.filter((p) => !audience || p.partner_kind === audience).map((p) => ({ v: p.id, l: p.name }))
-        : (f.options || []).map((o) => ({ v: o, l: o }));
+        ? partners
+            .filter((p) => (!audience || p.partner_kind === audience) && (!state.me.partner_id || p.id === state.me.partner_id))
+            .map((p) => ({ v: p.id, l: p.name }))
+        : (f.options || []).map((o) => ({ v: o, l: valueLabel(o) }));
     return `<select data-key="${escapeHTML(f.key)}" data-kind="select" ${f.required ? "required" : ""}>
       <option value="">—</option>
       ${opts
@@ -690,6 +733,7 @@ async function openEntryModal(entry) {
         ? `<div class="field"><label>Комментарий к изменению (обязателен)</label><textarea id="m-comment" rows="2"></textarea></div>`
         : ""
     }
+    ${state.period === "fact" ? renderAttachSection(isEdit) : ""}
     <div class="error" id="m-error" style="display:none"></div>
     <div class="flex between" style="margin-top:14px">
       <div>${entry ? `<span class="muted">Текущая сумма: ${fmtMoney(entry.amount_rub)}</span>` : ""}</div>
@@ -698,7 +742,6 @@ async function openEntryModal(entry) {
         <button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>
       </div>
     </div>
-    ${isEdit && entry.period_type === "fact" ? renderAttachSection() : ""}
     </form>
   </div></div>`);
 
@@ -707,7 +750,9 @@ async function openEntryModal(entry) {
     const row = el(`<div class="field"><label>${escapeHTML(f.label)}${f.required ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`);
     row.insertBefore(el(fieldInput(f, payload[f.key], audience)), row.querySelector(".field-error"));
     if (f.key === "org_name") {
-      const hasPartners = Array.isArray(state.partners) && state.partners.some((partner) => partner.partner_kind === audience);
+      const hasPartners =
+        Array.isArray(state.partners) &&
+        state.partners.some((partner) => partner.partner_kind === audience && (!state.me.partner_id || partner.id === state.me.partner_id));
       row.appendChild(el(`<div class="field-hint partner-hint"${hasPartners ? ' style="display:none"' : ""}>Для этой аудитории пока нет партнёров. Попросите администратора добавить организацию.</div>`));
     }
     fieldsBox.appendChild(row);
@@ -737,26 +782,35 @@ async function openEntryModal(entry) {
     saveButton.disabled = true;
     saveButton.textContent = isEdit ? "Сохраняем…" : "Создаём…";
     try {
+      const pendingFile = backdrop.querySelector("#attach-file")?.files[0];
       if (isEdit) {
         const comment = backdrop.querySelector("#m-comment").value.trim();
         if (!comment) throw new Error("Комментарий обязателен при редактировании");
+        if (state.period === "fact" && pendingFile) {
+          await uploadAttachment(entry.id, pendingFile);
+        }
         await api(`/entries/${entry.id}`, {
           method: "PUT",
           body: JSON.stringify({ payload: newPayload, audience: aud, comment }),
         });
       } else {
         const partnerId = newPayload.org_name || null;
-        await api(`/entries`, {
-          method: "POST",
-          body: JSON.stringify({
-            category_code: state.categoryCode,
-            partner_id: partnerId,
-            period_type: state.period,
-            report_year: state.year,
-            audience: aud,
-            payload: newPayload,
-          }),
-        });
+        const entryData = {
+          category_code: state.categoryCode,
+          partner_id: partnerId,
+          period_type: state.period,
+          report_year: state.year,
+          audience: aud,
+          payload: newPayload,
+        };
+        let body = JSON.stringify(entryData);
+        if (state.period === "fact") {
+          if (!pendingFile) throw new Error("Для фактической записи прикрепите подтверждающий документ");
+          body = new FormData();
+          body.append("entry", JSON.stringify(entryData));
+          body.append("file", pendingFile);
+        }
+        await api(`/entries`, { method: "POST", body });
       }
       closeModal();
       const root = document.getElementById("content");
@@ -774,7 +828,9 @@ async function openEntryModal(entry) {
     const partnerSelect = fieldsBox.querySelector('[data-key="org_name"]');
     if (!partnerSelect) return;
     const selected = partnerSelect.value;
-    const options = (Array.isArray(state.partners) ? state.partners : []).filter((partner) => partner.partner_kind === event.target.value);
+    const options = (Array.isArray(state.partners) ? state.partners : []).filter(
+      (partner) => partner.partner_kind === event.target.value && (!state.me.partner_id || partner.id === state.me.partner_id)
+    );
     partnerSelect.innerHTML = `<option value="">—</option>${options
       .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
       .join("")}`;
@@ -791,15 +847,22 @@ async function openEntryModal(entry) {
   }
 }
 
-function renderAttachSection() {
-  return `<div class="card" style="margin-top:14px;background:transparent;padding:0;border:none">
-    <h2>Подтверждающий документ</h2>
-    <div id="attach-list" class="attach-list muted">Загрузка…</div>
-    <div class="field" style="margin-top:8px">
-      <input type="file" id="attach-file">
-      <button type="button" class="btn secondary" id="attach-upload">Загрузить</button>
+function renderAttachSection(isEdit) {
+  return `<div class="attachment-panel">
+    <h2>Подтверждающий документ${isEdit ? "" : " *"}</h2>
+    <p class="muted">Для фактической записи документ обязателен. Максимальный размер — 64 МБ.</p>
+    <div id="attach-list" class="attach-list muted">${isEdit ? "Загрузка…" : "Файл будет загружен вместе с записью"}</div>
+    <div class="file-row">
+      <input type="file" id="attach-file" ${isEdit ? "" : "required"}>
+      ${isEdit ? '<button type="button" class="btn secondary" id="attach-upload">Загрузить</button>' : ""}
     </div>
   </div>`;
+}
+
+async function uploadAttachment(entryId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  return api(`/entries/${encodeURIComponent(entryId)}/attachments`, { method: "POST", body: form });
 }
 
 async function wireAttachSection(root, entryId) {
@@ -828,15 +891,10 @@ async function wireAttachSection(root, entryId) {
       showToast("Сначала выберите файл");
       return;
     }
-    const fd = new FormData();
-    fd.append("file", fileInput.files[0]);
     uploadButton.disabled = true;
     uploadButton.textContent = "Загружаем…";
     try {
-      const response = await fetch(`/api/entries/${encodeURIComponent(entryId)}/attachments`, { method: "POST", body: fd, credentials: "same-origin" });
-      const isJSON = (response.headers.get("content-type") || "").includes("application/json");
-      const data = isJSON ? await response.json().catch(() => null) : null;
-      if (!response.ok) throw new Error((data && data.error) || `Ошибка ${response.status}`);
+      await uploadAttachment(entryId, fileInput.files[0]);
       fileInput.value = "";
       await refresh();
       showToast("Документ загружен", "success");
@@ -891,11 +949,11 @@ async function renderAdminUsers(box) {
   box.innerHTML = `<div class="card"><h2>Новый пользователь (в т.ч. дополнительный админ)</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
-      <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
+      <div class="field"><label>Электронная почта *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
+      <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: заглавная и строчная буквы, цифра и специальный символ</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="user">user</option><option value="admin">admin</option></select></div>
-      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="">Выберет при первом входе</option><option value="organization">Организация</option><option value="edu_institution">Вуз / СПО</option></select></div>
+      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
+      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="">Выберет при первом входе</option><option value="organization">ИТ-компания</option><option value="edu_institution">Образовательная организация</option></select></div>
       <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(state.partners) ? state.partners : [])
         .map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`)
         .join("")}</select></div>
@@ -939,6 +997,11 @@ async function renderAdminUsers(box) {
       firstInvalid.focus();
       return;
     }
+    if (entitySelect.value === "edu_institution" && !box.querySelector("#u-partner").value) {
+      err.textContent = "Для образовательной организации выберите партнёра";
+      err.style.display = "block";
+      return;
+    }
 
     const createButton = box.querySelector("#u-create");
     createButton.disabled = true;
@@ -973,7 +1036,7 @@ async function renderAdminUsers(box) {
     <tbody>${users
       .map(
         (u) => `<tr>
-      <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(u.role)}</span></td>
+      <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
       <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
       <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button></td>
     </tr>`
@@ -1044,7 +1107,7 @@ async function renderAdminPartners(box) {
   const partners = (await api("/partners")) || [];
   state.partners = partners;
   box.querySelector("#p-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Наименование</th><th>Вид</th><th>№ соглашения</th></tr></thead>
-    <tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(AUDIENCE_LABELS[p.partner_kind] || p.partner_kind)}</td><td>${escapeHTML(p.agreement_number || "—")}</td></tr>`).join("")}</tbody></table></div>`;
+    <tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(valueLabel(p.partner_kind))}</td><td>${escapeHTML(p.agreement_number || "—")}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 async function renderAdminSettings(box) {
@@ -1090,8 +1153,8 @@ async function renderAdminLogs(box) {
       .map(
         (l) => `<tr>
       <td>${new Date(l.created_at).toLocaleString("ru-RU")}</td>
-      <td>${escapeHTML(l.entity_type)}${l.entity_id ? " #" + escapeHTML(l.entity_id.slice(0, 8)) : ""}</td>
-      <td>${escapeHTML(l.action)}</td>
+      <td>${escapeHTML(valueLabel(l.entity_type))}${l.entity_id ? " #" + escapeHTML(l.entity_id.slice(0, 8)) : ""}</td>
+      <td>${escapeHTML(valueLabel(l.action))}</td>
       <td>${escapeHTML(l.comment_text || "")}</td>
     </tr>`
       )

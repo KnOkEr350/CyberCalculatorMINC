@@ -3,8 +3,11 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -16,7 +19,8 @@ import (
 )
 
 type EntryHandlers struct {
-	DB *sql.DB
+	DB        *sql.DB
+	UploadDir string
 }
 
 // Categories возвращает справочник категорий вместе с полями формы и
@@ -63,7 +67,28 @@ type createEntryRequest struct {
 
 func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	var req createEntryRequest
-	if err := decodeJSON(r, &req); err != nil {
+	var document multipart.File
+	var documentHeader *multipart.FileHeader
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(2<<20))
+		if err := r.ParseMultipartForm(8 << 20); err != nil {
+			middleware.WriteError(w, http.StatusBadRequest, "не удалось разобрать запись и подтверждающий документ")
+			return
+		}
+		if err := json.Unmarshal([]byte(r.FormValue("entry")), &req); err != nil {
+			middleware.WriteError(w, http.StatusBadRequest, "поле entry должно содержать корректную запись в формате JSON")
+			return
+		}
+		var err error
+		document, documentHeader, err = r.FormFile("file")
+		if err != nil && !errors.Is(err, http.ErrMissingFile) {
+			middleware.WriteError(w, http.StatusBadRequest, "не удалось прочитать подтверждающий документ")
+			return
+		}
+		if document != nil {
+			defer document.Close()
+		}
+	} else if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
@@ -73,6 +98,10 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	if req.ReportYear < 2000 || req.ReportYear > 2100 {
 		middleware.WriteError(w, http.StatusBadRequest, "report_year должен быть в диапазоне 2000–2100")
+		return
+	}
+	if req.PeriodType == string(models.PeriodFact) && (document == nil || documentHeader == nil) {
+		middleware.WriteError(w, http.StatusBadRequest, "для фактической записи обязателен подтверждающий документ")
 		return
 	}
 
@@ -92,6 +121,10 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	if req.PartnerID != nil && strings.TrimSpace(*req.PartnerID) != partnerID {
 		middleware.WriteError(w, http.StatusBadRequest, "partner_id не совпадает с выбранной образовательной организацией")
+		return
+	}
+	if u.Role != models.RoleAdmin && u.PartnerID != nil && partnerID != *u.PartnerID {
+		middleware.WriteError(w, http.StatusForbidden, "можно добавлять данные только для назначенного партнёра")
 		return
 	}
 	if err := h.validateEntryContext(req.CategoryCode, req.Audience, partnerID); err != nil {
@@ -115,6 +148,13 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		return
 	}
 	defer tx.Rollback()
+	var storedDocument storedAttachment
+	committed := false
+	defer func() {
+		if !committed && storedDocument.Path != "" {
+			_ = os.Remove(storedDocument.Path)
+		}
+	}()
 
 	var id string
 	err = tx.QueryRow(
@@ -126,6 +166,23 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения: "+err.Error())
 		return
 	}
+	if req.PeriodType == string(models.PeriodFact) {
+		storedDocument, err = storeAttachment(tx, h.UploadDir, id, u.ID, document, documentHeader)
+		if err != nil {
+			if errors.Is(err, errAttachmentTooLarge) {
+				middleware.WriteError(w, http.StatusRequestEntityTooLarge, err.Error())
+			} else {
+				middleware.WriteError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+		if err := logAudit(tx, "attachment", storedDocument.ID, "upload", u.ID,
+			fmt.Sprintf("файл %s (%d байт)", storedDocument.FileName, storedDocument.Size), nil,
+			map[string]interface{}{"entry_id": id, "file_name": storedDocument.FileName}); err != nil {
+			middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
+			return
+		}
+	}
 
 	if err := logAudit(tx, "entry", id, "create", u.ID, "", nil, req); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
@@ -135,7 +192,12 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка завершения транзакции")
 		return
 	}
-	middleware.WriteJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "amount_rub": amount})
+	committed = true
+	response := map[string]interface{}{"id": id, "amount_rub": amount}
+	if storedDocument.ID != "" {
+		response["attachment_id"] = storedDocument.ID
+	}
+	middleware.WriteJSON(w, http.StatusCreated, response)
 }
 
 func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -161,6 +223,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	if v := q.Get("audience"); v != "" {
 		conds = append(conds, "audience = "+arg(v))
 	}
+	conds, args = appendEntryScope(conds, args, u, "")
 
 	query := `SELECT id, category_code, partner_id, period_type, report_year, audience, payload, amount_rub,
 		created_by, updated_by, created_at, updated_at FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC`
@@ -220,12 +283,14 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	defer tx.Rollback()
 
-	var categoryCode, audience string
+	conditions, scopeArgs := appendEntryScope([]string{"id = $1"}, []interface{}{entryID}, u, "")
+	var categoryCode, audience, periodType string
 	var oldPartnerID sql.NullString
 	var oldPayloadRaw []byte
 	var oldAmount float64
-	err = tx.QueryRow(`SELECT category_code, partner_id, audience, payload, amount_rub FROM entries WHERE id = $1 FOR UPDATE`, entryID).
-		Scan(&categoryCode, &oldPartnerID, &audience, &oldPayloadRaw, &oldAmount)
+	err = tx.QueryRow(`SELECT category_code, partner_id, audience, period_type, payload, amount_rub FROM entries WHERE `+
+		strings.Join(conditions, " AND ")+` FOR UPDATE`, scopeArgs...).
+		Scan(&categoryCode, &oldPartnerID, &audience, &periodType, &oldPayloadRaw, &oldAmount)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, http.StatusNotFound, "запись не найдена")
 		return
@@ -255,6 +320,21 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	if err := h.validateEntryContext(categoryCode, audience, partnerID); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if u.Role != models.RoleAdmin && u.PartnerID != nil && partnerID != *u.PartnerID {
+		middleware.WriteError(w, http.StatusForbidden, "можно изменять данные только назначенного партнёра")
+		return
+	}
+	if periodType == string(models.PeriodFact) {
+		var documents int
+		if err := tx.QueryRow(`SELECT count(*) FROM attachments WHERE entry_id = $1`, entryID).Scan(&documents); err != nil {
+			middleware.WriteError(w, http.StatusInternalServerError, "ошибка проверки подтверждающего документа")
+			return
+		}
+		if documents == 0 {
+			middleware.WriteError(w, http.StatusBadRequest, "для фактической записи обязателен подтверждающий документ")
+			return
+		}
 	}
 	newAmount, err := calc.Calculate(models.Audience(audience), req.Payload)
 	if err != nil {
@@ -308,8 +388,9 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 }
 
 func (h *EntryHandlers) Comments(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
-	rows, err := h.DB.Query(`SELECT id, entry_id, user_id, comment_text, created_at
-		FROM entry_comments WHERE entry_id = $1 ORDER BY created_at DESC`, entryID)
+	conditions, args := appendEntryScope([]string{"c.entry_id = $1"}, []interface{}{entryID}, u, "e")
+	rows, err := h.DB.Query(`SELECT c.id, c.entry_id, c.user_id, c.comment_text, c.created_at
+		FROM entry_comments c JOIN entries e ON e.id = c.entry_id WHERE `+strings.Join(conditions, " AND ")+` ORDER BY c.created_at DESC`, args...)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return

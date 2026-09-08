@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cybercalc/internal/middleware"
@@ -41,31 +42,42 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 	resp := dashboardResponse{ReportYear: year}
 
 	var target sql.NullFloat64
-	h.DB.QueryRow(`SELECT target_amount_rub FROM budget_targets WHERE report_year = $1`, year).Scan(&target)
+	h.DB.QueryRow(`SELECT target_amount_rub FROM budget_targets WHERE report_year = $1 AND owner_user_id = $2`, year, u.ID).Scan(&target)
 	if target.Valid {
 		resp.TargetAmountRub = &target.Float64
 	}
 
-	h.DB.QueryRow(`SELECT COALESCE(SUM(amount_rub),0) FROM entries WHERE period_type='plan' AND report_year=$1`, year).
-		Scan(&resp.PlanTotalRub)
-	h.DB.QueryRow(`SELECT COALESCE(SUM(amount_rub),0) FROM entries WHERE period_type='fact' AND report_year=$1`, year).
-		Scan(&resp.FactTotalRub)
+	resp.PlanTotalRub = h.total(year, "plan", u)
+	resp.FactTotalRub = h.total(year, "fact", u)
 
 	if resp.PlanTotalRub > 0 {
 		resp.PlanCompletionPct = round2(resp.FactTotalRub / resp.PlanTotalRub * 100)
 	}
 
-	resp.PlanByCategory = h.breakdown(year, "plan")
-	resp.FactByCategory = h.breakdown(year, "fact")
+	resp.PlanByCategory = h.breakdown(year, "plan", u)
+	resp.FactByCategory = h.breakdown(year, "fact", u)
 
 	middleware.WriteJSON(w, http.StatusOK, resp)
 }
 
-func (h *DashboardHandlers) breakdown(year int, period string) []categoryBreakdown {
+func dashboardConditions(year int, period string, u middleware.AuthUser) ([]string, []interface{}) {
+	conditions := []string{"period_type = $1", "report_year = $2"}
+	args := []interface{}{period, year}
+	return appendEntryScope(conditions, args, u, "")
+}
+
+func (h *DashboardHandlers) total(year int, period string, u middleware.AuthUser) float64 {
+	conditions, args := dashboardConditions(year, period, u)
+	var total float64
+	_ = h.DB.QueryRow(`SELECT COALESCE(SUM(amount_rub),0) FROM entries WHERE `+strings.Join(conditions, " AND "), args...).Scan(&total)
+	return total
+}
+
+func (h *DashboardHandlers) breakdown(year int, period string, u middleware.AuthUser) []categoryBreakdown {
+	conditions, args := dashboardConditions(year, period, u)
 	rows, err := h.DB.Query(
-		`SELECT category_code, COALESCE(SUM(amount_rub),0) FROM entries
-		 WHERE period_type = $1 AND report_year = $2
-		 GROUP BY category_code ORDER BY category_code`, period, year)
+		`SELECT category_code, COALESCE(SUM(amount_rub),0) FROM entries WHERE `+strings.Join(conditions, " AND ")+
+			` GROUP BY category_code ORDER BY category_code`, args...)
 	if err != nil {
 		return nil
 	}
@@ -113,9 +125,9 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	_, err := h.DB.Exec(
-		`INSERT INTO budget_targets (report_year, target_amount_rub, updated_by)
-		 VALUES ($1,$2,$3)
-		 ON CONFLICT (report_year) DO UPDATE SET target_amount_rub = $2, updated_by = $3, updated_at = now()`,
+		`INSERT INTO budget_targets (report_year, owner_user_id, target_amount_rub, updated_by)
+		 VALUES ($1,$3,$2,$3)
+		 ON CONFLICT (report_year, owner_user_id) DO UPDATE SET target_amount_rub = $2, updated_by = $3, updated_at = now()`,
 		req.ReportYear, req.TargetAmountRub, u.ID,
 	)
 	if err != nil {

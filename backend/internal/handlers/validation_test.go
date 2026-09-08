@@ -29,6 +29,7 @@ func TestValidateAndNormalizeNewUserRejectsInvalidData(t *testing.T) {
 		{"weak password", createUserRequest{Email: "user@example.com", Password: "password", FullName: "Иван", Role: "user"}},
 		{"blank name", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: " ", Role: "user"}},
 		{"bad role", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "owner"}},
+		{"education user without partner", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "user", EntityType: "edu_institution"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

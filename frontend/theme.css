@@ -37,21 +37,21 @@ button { touch-action: manipulation; }
 ::selection { color: white; background: var(--accent); }
 #app > div:not(.auth-shell) { min-height: 100vh; }
 
-/* Фирменный знак построен CSS-дугами, без внешних зависимостей. */
+/* Компактный знак калькулятора построен встроенным SVG без внешних зависимостей. */
 .brand-lockup { display: inline-flex; align-items: center; gap: 11px; color: var(--navy); flex: 0 0 auto; }
-.brand-emblem { position: relative; display: block; width: 42px; height: 38px; color: var(--accent-2); }
-.brand-emblem::before, .brand-emblem::after, .brand-emblem i {
-  content: ""; position: absolute; top: 50%; left: 50%; border-style: solid;
-  border-color: currentColor transparent currentColor currentColor; border-radius: 50%;
-  transform: translate(-50%, -50%) rotate(-18deg);
-}
-.brand-emblem::before { width: 32px; height: 32px; border-width: 4px; opacity: .96; }
-.brand-emblem::after { width: 21px; height: 21px; border-width: 4px; opacity: .76; }
-.brand-emblem i { width: 9px; height: 9px; border-width: 4px; opacity: .55; }
+.brand-emblem { display: grid; place-items: center; width: 42px; height: 40px; color: var(--accent-2); }
+.brand-emblem::before, .brand-emblem::after { content: none; }
+.brand-emblem svg { width: 36px; height: 40px; filter: drop-shadow(0 5px 9px rgba(0, 85, 204, .18)); }
+.brand-emblem .calculator-body { fill: currentColor; }
+.brand-emblem .calculator-screen { fill: #bcd9ff; }
+.brand-emblem svg circle, .brand-emblem svg rect:not(.calculator-body):not(.calculator-screen) { fill: white; }
 .brand-copy { display: flex; flex-direction: column; min-width: 0; line-height: 1; }
 .brand-copy strong { color: inherit; font-size: 18px; line-height: 1.05; letter-spacing: .035em; font-weight: 800; }
 .brand-copy small { margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1; letter-spacing: .13em; text-transform: uppercase; }
 .brand-lockup.inverse, .brand-lockup.inverse .brand-emblem { color: white; }
+.brand-lockup.inverse .brand-emblem .calculator-screen { fill: #bcd9ff; }
+.brand-lockup.inverse .brand-emblem svg circle,
+.brand-lockup.inverse .brand-emblem svg rect:not(.calculator-body):not(.calculator-screen) { fill: var(--accent-2); }
 .brand-lockup.inverse .brand-copy small { color: rgba(255, 255, 255, .64); }
 
 .topbar {
@@ -210,6 +210,7 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
   margin: 11px 0; padding: 17px 50px 17px 17px; border: 1px solid var(--border-strong);
   border-radius: 8px; background: white; color: var(--text); text-align: left; cursor: pointer;
 }
+.entity-partner-field { margin: 19px 0 10px; }
 .choice-card b { color: var(--navy); font-size: 15px; }
 .choice-card span { grid-column: 1; margin-top: 3px; color: var(--muted); font-size: 12px; }
 .choice-card i { position: absolute; top: 50%; right: 18px; color: var(--accent); font-size: 22px; font-style: normal; transform: translateY(-50%); }
@@ -220,6 +221,11 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
 .modal h2 { color: var(--navy); font-size: 20px; }
 .attach-list { display: grid; gap: 7px; }
 .attach-list a { color: var(--accent-2); font-weight: 600; }
+.attachment-panel { margin-top: 18px; padding: 17px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
+.attachment-panel h2 { margin-bottom: 4px; }
+.attachment-panel > p { margin: 0 0 12px; font-size: 12px; }
+.file-row { display: flex; align-items: center; gap: 9px; }
+.file-row input { min-width: 0; flex: 1; }
 .toast { position: fixed; z-index: 100; right: 22px; bottom: 22px; max-width: min(400px, calc(100vw - 44px)); padding: 13px 16px; border: 1px solid #efb9c0; border-radius: 8px; background: white; color: var(--bad); box-shadow: var(--shadow); opacity: 0; transform: translateY(12px); transition: opacity .2s ease, transform .2s ease; }
 .toast.success { border-color: #a9dfca; color: var(--good); }
 .toast.visible { opacity: 1; transform: translateY(0); }
@@ -273,6 +279,7 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
   .bar-row .name { width: 100%; }
   .bar-row .bar-value { width: auto; }
   .modal { padding: 20px 16px; }
+  .file-row { align-items: stretch; flex-direction: column; }
 }
 @media (max-width: 420px) {
   .auth-brand-panel { min-height: 205px; }

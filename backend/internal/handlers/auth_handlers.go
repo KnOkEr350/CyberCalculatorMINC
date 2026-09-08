@@ -100,6 +100,19 @@ func (h *AuthHandlers) SetEntityType(w http.ResponseWriter, r *http.Request, u m
 		middleware.WriteError(w, http.StatusBadRequest, "entity_type должен быть organization или edu_institution")
 		return
 	}
+	if req.EntityType == string(models.EntityOrganization) {
+		req.PartnerID = nil
+	} else {
+		if req.PartnerID == nil || strings.TrimSpace(*req.PartnerID) == "" {
+			middleware.WriteError(w, http.StatusBadRequest, "для образовательной организации необходимо выбрать партнёра")
+			return
+		}
+		var exists bool
+		if err := h.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM partners WHERE id::text = $1)`, strings.TrimSpace(*req.PartnerID)).Scan(&exists); err != nil || !exists {
+			middleware.WriteError(w, http.StatusBadRequest, "выбранный партнёр не найден")
+			return
+		}
+	}
 	_, err := h.DB.Exec(`UPDATE users SET entity_type = $1, partner_id = $2, updated_at = now() WHERE id = $3`,
 		req.EntityType, req.PartnerID, u.ID)
 	if err != nil {

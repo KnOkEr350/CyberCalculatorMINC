@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/xlsx"
@@ -42,14 +43,16 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
-	query := `SELECT p.name, e.category_code, e.audience, e.amount_rub, e.payload
-		FROM entries e LEFT JOIN partners p ON p.id = e.partner_id
-		WHERE e.period_type = $1 AND e.report_year = $2`
+	conditions := []string{"e.period_type = $1", "e.report_year = $2"}
 	args := []interface{}{periodType, year}
 	if categoryFilter != "" {
-		query += ` AND e.category_code = $3`
 		args = append(args, categoryFilter)
+		conditions = append(conditions, "e.category_code = $"+strconv.Itoa(len(args)))
 	}
+	conditions, args = appendEntryScope(conditions, args, u, "e")
+	query := `SELECT p.name, e.category_code, e.audience, e.amount_rub, e.payload
+		FROM entries e LEFT JOIN partners p ON p.id = e.partner_id
+		WHERE ` + strings.Join(conditions, " AND ")
 	query += ` ORDER BY p.name NULLS LAST, e.category_code`
 
 	rows, err := h.DB.Query(query, args...)
