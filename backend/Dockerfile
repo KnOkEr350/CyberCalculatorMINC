@@ -13,7 +13,6 @@ WORKDIR /app
 
 COPY --from=builder /out/server /app/server
 COPY migrations /app/migrations
-COPY backend/web /app/web
 
 USER nonroot:nonroot
 EXPOSE 8080

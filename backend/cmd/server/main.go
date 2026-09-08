@@ -61,14 +61,19 @@ func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
-		`INSERT INTO users (email, password_hash, full_name, role) VALUES ($1,$2,$3,'admin')`,
+	result, err := db.Exec(
+		`INSERT INTO users (email, password_hash, full_name, role)
+		 VALUES ($1,$2,$3,'admin')
+		 ON CONFLICT (email) DO NOTHING`,
 		cfg.AdminBootEmail, hash, "Администратор",
 	)
-	if err == nil {
+	if err != nil {
+		return err
+	}
+	if created, rowsErr := result.RowsAffected(); rowsErr == nil && created == 1 {
 		log.Printf("создан администратор по умолчанию: %s (смените пароль после первого входа!)", cfg.AdminBootEmail)
 	}
-	return err
+	return nil
 }
 
 func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
@@ -132,10 +137,6 @@ func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
 	mux.HandleFunc("GET /api/admin/settings", middleware.RequireAdmin(db, adminH.GetSettings))
 	mux.HandleFunc("POST /api/admin/settings", middleware.RequireAdmin(db, adminH.UpdateSetting))
 	mux.HandleFunc("GET /api/admin/logs", middleware.RequireAdmin(db, adminH.AuditLog))
-
-	// --- Статический фронтенд (простая админ-панель / калькулятор) ---
-	fs := http.FileServer(http.Dir("/app/web/static"))
-	mux.Handle("/", fs)
 
 	return mux
 }

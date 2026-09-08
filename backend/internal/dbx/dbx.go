@@ -5,6 +5,7 @@
 package dbx
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -39,7 +40,22 @@ func Connect(dsn string) (*sql.DB, error) {
 // уже применённые в таблице schema_migrations. Простая замена внешним
 // инструментам вроде golang-migrate, чтобы не тянуть зависимость.
 func RunMigrations(db *sql.DB, dir string) error {
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// Несколько реплик backend могут запуститься одновременно. Advisory lock
+	// гарантирует, что миграции в каждый момент применяет только одна из них.
+	const migrationsLockID int64 = 1129989443
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrationsLockID); err != nil {
+		return err
+	}
+	defer conn.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, migrationsLockID)
+
+	if _, err := conn.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		filename TEXT PRIMARY KEY,
 		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`); err != nil {
@@ -60,7 +76,7 @@ func RunMigrations(db *sql.DB, dir string) error {
 
 	for _, f := range files {
 		var already int
-		db.QueryRow(`SELECT count(*) FROM schema_migrations WHERE filename = $1`, f).Scan(&already)
+		conn.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE filename = $1`, f).Scan(&already)
 		if already > 0 {
 			continue
 		}
@@ -69,7 +85,7 @@ func RunMigrations(db *sql.DB, dir string) error {
 			return err
 		}
 		log.Printf("применяю миграцию %s", f)
-		tx, err := db.Begin()
+		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}

@@ -39,8 +39,25 @@ services:
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-ChangeMe123!}
     volumes:
       - uploads_data:/data/uploads
+    deploy:
+      replicas: ${BACKEND_REPLICAS:-2}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "${HTTP_PORT:-8080}:8080"
+      - "${HTTP_PORT:-8080}:80"
 
 volumes:
   db_data:
