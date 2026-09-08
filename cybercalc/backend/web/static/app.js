@@ -339,7 +339,7 @@ function fieldInput(f, value) {
     </select>`;
   }
   if (f.type === "number") {
-    return `<input type="number" step="any" data-key="${f.key}" data-kind="number" value="${val}">`;
+    return `<input type="number" min="0" step="any" data-key="${f.key}" data-kind="number" value="${val}">`;
   }
   return `<input type="text" data-key="${f.key}" data-kind="text" value="${val}">`;
 }

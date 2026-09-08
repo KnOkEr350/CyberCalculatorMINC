@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 )
 
-// logAudit пишет запись в audit_log. Хранится 2 месяца — см. internal/retention.
-func logAudit(db *sql.DB, entityType, entityID, action, userID, comment string, oldVal, newVal interface{}) {
+type auditExecer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+// logAudit пишет запись в audit_log. Возвращаемая ошибка позволяет включать
+// запись журнала в ту же транзакцию, что и изменение предметных данных.
+func logAudit(db auditExecer, entityType, entityID, action, userID, comment string, oldVal, newVal interface{}) error {
 	var oldJSON, newJSON []byte
 	if oldVal != nil {
 		oldJSON, _ = json.Marshal(oldVal)
@@ -26,12 +31,13 @@ func logAudit(db *sql.DB, entityType, entityID, action, userID, comment string, 
 	if userID != "" {
 		userIDArg = userID
 	}
-	_, _ = db.Exec(
+	_, err := db.Exec(
 		`INSERT INTO audit_log (entity_type, entity_id, action, user_id, comment_text, old_value, new_value)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		entityType, entityIDArg, action, userIDArg, commentArg,
 		nullableJSON(oldJSON), nullableJSON(newJSON),
 	)
+	return err
 }
 
 func nullableJSON(b []byte) interface{} {

@@ -3,8 +3,10 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/lib/pq"
 
@@ -69,9 +71,30 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, "period_type должен быть plan или fact")
 		return
 	}
+	if req.ReportYear < 2000 || req.ReportYear > 2100 {
+		middleware.WriteError(w, http.StatusBadRequest, "report_year должен быть в диапазоне 2000–2100")
+		return
+	}
 
 	calc, err := calculators.Get(req.CategoryCode)
 	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := calculators.ValidatePayload(calc, req.Payload); err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, "ошибка валидации: "+err.Error())
+		return
+	}
+	partnerID, err := partnerIDFromPayload(req.Payload)
+	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.PartnerID != nil && strings.TrimSpace(*req.PartnerID) != partnerID {
+		middleware.WriteError(w, http.StatusBadRequest, "partner_id не совпадает с выбранной образовательной организацией")
+		return
+	}
+	if err := h.validateEntryContext(req.CategoryCode, req.Audience, partnerID); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -82,18 +105,32 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	}
 
 	payloadJSON, _ := json.Marshal(req.Payload)
+	tx, err := h.DB.Begin()
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка начала транзакции")
+		return
+	}
+	defer tx.Rollback()
+
 	var id string
-	err = h.DB.QueryRow(
+	err = tx.QueryRow(
 		`INSERT INTO entries (category_code, partner_id, period_type, report_year, audience, payload, amount_rub, created_by)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		req.CategoryCode, req.PartnerID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, u.ID,
+		req.CategoryCode, partnerID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, u.ID,
 	).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения: "+err.Error())
 		return
 	}
 
-	logAudit(h.DB, "entry", id, "create", u.ID, "", nil, req)
+	if err := logAudit(tx, "entry", id, "create", u.ID, "", nil, req); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка завершения транзакции")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "amount_rub": amount})
 }
 
@@ -166,16 +203,25 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
+	req.Comment = strings.TrimSpace(req.Comment)
 	if req.Comment == "" {
 		middleware.WriteError(w, http.StatusBadRequest, "комментарий обязателен при редактировании отчёта")
 		return
 	}
 
+	tx, err := h.DB.Begin()
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка начала транзакции")
+		return
+	}
+	defer tx.Rollback()
+
 	var categoryCode, audience string
+	var oldPartnerID sql.NullString
 	var oldPayloadRaw []byte
 	var oldAmount float64
-	err := h.DB.QueryRow(`SELECT category_code, audience, payload, amount_rub FROM entries WHERE id = $1`, entryID).
-		Scan(&categoryCode, &audience, &oldPayloadRaw, &oldAmount)
+	err = tx.QueryRow(`SELECT category_code, partner_id, audience, payload, amount_rub FROM entries WHERE id = $1 FOR UPDATE`, entryID).
+		Scan(&categoryCode, &oldPartnerID, &audience, &oldPayloadRaw, &oldAmount)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, http.StatusNotFound, "запись не найдена")
 		return
@@ -183,6 +229,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
 	}
+	oldAudience := audience
 	if req.Audience != "" {
 		audience = req.Audience
 	}
@@ -192,6 +239,19 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if err := calculators.ValidatePayload(calc, req.Payload); err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, "ошибка валидации: "+err.Error())
+		return
+	}
+	partnerID, err := partnerIDFromPayload(req.Payload)
+	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.validateEntryContext(categoryCode, audience, partnerID); err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	newAmount, err := calc.Calculate(models.Audience(audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
@@ -199,17 +259,17 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
-	_, err = h.DB.Exec(
-		`UPDATE entries SET payload = $1, audience = $2, amount_rub = $3, updated_by = $4, updated_at = now()
-		 WHERE id = $5`,
-		newPayloadJSON, audience, newAmount, u.ID, entryID,
+	_, err = tx.Exec(
+		`UPDATE entries SET payload = $1, audience = $2, partner_id = $3, amount_rub = $4, updated_by = $5, updated_at = now()
+		 WHERE id = $6`,
+		newPayloadJSON, audience, partnerID, newAmount, u.ID, entryID,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
 	}
 
-	_, err = h.DB.Exec(
+	_, err = tx.Exec(
 		`INSERT INTO entry_comments (entry_id, user_id, comment_text) VALUES ($1, $2, $3)`,
 		entryID, u.ID, req.Comment,
 	)
@@ -220,10 +280,21 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 
 	var oldPayload map[string]interface{}
 	json.Unmarshal(oldPayloadRaw, &oldPayload)
-	logAudit(h.DB, "entry", entryID, "update", u.ID, req.Comment,
-		map[string]interface{}{"payload": oldPayload, "amount_rub": oldAmount},
-		map[string]interface{}{"payload": req.Payload, "amount_rub": newAmount},
-	)
+	oldPartner := ""
+	if oldPartnerID.Valid {
+		oldPartner = oldPartnerID.String
+	}
+	if err := logAudit(tx, "entry", entryID, "update", u.ID, req.Comment,
+		map[string]interface{}{"partner_id": oldPartner, "audience": oldAudience, "payload": oldPayload, "amount_rub": oldAmount},
+		map[string]interface{}{"partner_id": partnerID, "audience": audience, "payload": req.Payload, "amount_rub": newAmount},
+	); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка завершения транзакции")
+		return
+	}
 
 	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"amount_rub": newAmount})
 }
@@ -254,4 +325,46 @@ func joinAnd(conds []string) string {
 		out += " AND " + c
 	}
 	return out
+}
+
+func partnerIDFromPayload(payload map[string]interface{}) (string, error) {
+	v, ok := payload["org_name"]
+	if !ok {
+		return "", fmt.Errorf("поле %q обязательно", "org_name")
+	}
+	id, ok := v.(string)
+	if !ok || strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("поле %q должно содержать выбранную организацию", "org_name")
+	}
+	return strings.TrimSpace(id), nil
+}
+
+func (h *EntryHandlers) validateEntryContext(categoryCode, audience, partnerID string) error {
+	var audienceAllowed bool
+	err := h.DB.QueryRow(
+		`SELECT $2::text = ANY(audience_scope) FROM activity_categories WHERE code = $1`,
+		categoryCode, audience,
+	).Scan(&audienceAllowed)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("неизвестная категория активности: %s", categoryCode)
+	}
+	if err != nil {
+		return fmt.Errorf("не удалось проверить категорию")
+	}
+	if !audienceAllowed {
+		return fmt.Errorf("аудитория %q недопустима для выбранной категории", audience)
+	}
+
+	var partnerKind string
+	err = h.DB.QueryRow(`SELECT partner_kind FROM partners WHERE id::text = $1`, partnerID).Scan(&partnerKind)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("выбранная образовательная организация не найдена")
+	}
+	if err != nil {
+		return fmt.Errorf("не удалось проверить образовательную организацию")
+	}
+	if partnerKind != audience {
+		return fmt.Errorf("вид выбранной организации %q не соответствует аудитории %q", partnerKind, audience)
+	}
+	return nil
 }

@@ -1,6 +1,10 @@
 package calculators
 
-import "cybercalc/internal/models"
+import (
+	"fmt"
+
+	"cybercalc/internal/models"
+)
 
 // internshipCalc — раздел «Стажировки» / «Практика с трудоустройством» / «ТОП ИТ».
 // Формула из ТЗ: (Нагрузка студента, ч/мес х 800 руб. + Нагрузка наставника,
@@ -13,17 +17,20 @@ const (
 )
 
 func (internshipCalc) Calculate(_ models.Audience, payload map[string]interface{}) (float64, error) {
-	studentLoad, err := num(payload, "student_load_hours_per_month")
+	studentLoad, err := nonNegativeNum(payload, "student_load_hours_per_month")
 	if err != nil {
 		return 0, err
 	}
-	mentorLoad, err := num(payload, "mentor_load_hours_per_month")
+	mentorLoad, err := nonNegativeNum(payload, "mentor_load_hours_per_month")
 	if err != nil {
 		return 0, err
 	}
-	duration, err := num(payload, "duration_months")
+	duration, err := positiveNum(payload, "duration_months")
 	if err != nil {
 		return 0, err
+	}
+	if studentLoad == 0 && mentorLoad == 0 {
+		return 0, fmt.Errorf("должна быть указана нагрузка студента или наставника")
 	}
 	amount := (studentLoad*studentHourRate + mentorLoad*mentorHourRate) * duration
 	return round2(amount), nil

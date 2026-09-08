@@ -15,7 +15,7 @@ const (
 )
 
 func (teachersCalc) Calculate(audience models.Audience, payload map[string]interface{}) (float64, error) {
-	hours, err := num(payload, "academic_hours")
+	hours, err := positiveNum(payload, "academic_hours")
 	if err != nil {
 		return 0, err
 	}

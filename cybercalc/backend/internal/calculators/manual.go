@@ -6,16 +6,12 @@ import (
 	"cybercalc/internal/models"
 )
 
-// manualCalc — категории «Реализация по Решению Минцифры», «ИТ-кружки для
-// школьников», «Образовательный контент»: ни ТЗ, ни приказ не задают ставку
-// или формулу для них (см. calculator.go, комментарий вверху файла).
-// Пользователь указывает итоговую сумму затрат самостоятельно, обязательно
-// сопроводив комментарием (это уже требование ТЗ для любого редактирования)
-// и, для факта, подтверждающим документом.
+// manualCalc используется только для мероприятий по Решению Минцифры:
+// метрика, ставка и методика определяются самим Решением.
 type manualCalc struct{}
 
 func (manualCalc) Calculate(_ models.Audience, payload map[string]interface{}) (float64, error) {
-	amount, err := num(payload, "amount_manual")
+	amount, err := positiveNum(payload, "amount_manual")
 	if err != nil {
 		return 0, err
 	}
@@ -24,8 +20,11 @@ func (manualCalc) Calculate(_ models.Audience, payload map[string]interface{}) (
 
 func (manualCalc) Fields() []FieldSpec {
 	return []FieldSpec{
-		{Key: "org_name", Label: "Наименование ОО", Type: "select"},
+		{Key: "org_name", Label: "Наименование ОО", Type: "select", Required: true},
+		{Key: "decision_reference", Label: "Реквизиты Решения Минцифры", Type: "text", Required: true},
 		{Key: "activity_description", Label: "Описание мероприятия", Type: "text", Required: true},
+		{Key: "metric_description", Label: "Метрика и объёмный показатель по Решению", Type: "text", Required: true},
+		{Key: "calculation_basis", Label: "Основание и методика расчёта", Type: "text", Required: true},
 		{Key: "amount_manual", Label: "Сумма затрат, руб.", Type: "number", Required: true},
 	}
 }
