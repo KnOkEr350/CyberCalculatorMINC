@@ -146,6 +146,7 @@ jobs:
           for attempt in {1..30}; do
             if curl --fail --silent --show-error \
               --cookie-jar /tmp/cybercalc-ci-cookies \
+              --header "X-Cybercalc-Request: 1" \
               --header "Content-Type: application/json" \
               --data '{"email":"ci-admin@example.invalid","password":"ci-only-admin-password"}' \
               "${base_url}/api/auth/login" > /dev/null; then
@@ -173,12 +174,14 @@ jobs:
 
           curl --fail --silent --show-error \
             --cookie "$cookie_file" \
+            --header "X-Cybercalc-Request: 1" \
             --header "Content-Type: application/json" \
             --data '{"entity_type":"organization"}' \
             "${base_url}/api/auth/entity-type" > /dev/null
 
           partner_response="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
+            --header "X-Cybercalc-Request: 1" \
             --header "Content-Type: application/json" \
             --data '{"name":"CI test university","partner_kind":"vuz","agreement_number":"CI-1"}' \
             "${base_url}/api/partners")"
@@ -201,6 +204,7 @@ jobs:
           printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
           entry_response="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
+            --header "X-Cybercalc-Request: 1" \
             --header "Content-Type: application/json" \
             --data "$entry_payload" \
             "${base_url}/api/entries")"
@@ -209,6 +213,7 @@ jobs:
           # Fact can be created and edited without attachments.
           curl --fail --silent --show-error \
             --cookie "$cookie_file" \
+            --header "X-Cybercalc-Request: 1" \
             --form 'files=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
             "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
 
@@ -225,6 +230,7 @@ jobs:
           }')"
           curl --fail --silent --show-error --request PUT \
             --cookie "$cookie_file" \
+            --header "X-Cybercalc-Request: 1" \
             --header "Content-Type: application/json" \
             --data "$update_payload" \
             "${base_url}/api/entries/${entry_id}" > /dev/null
@@ -232,6 +238,7 @@ jobs:
           printf 'attached after edit\n' > /tmp/cybercalc-second-attachment.txt
           curl --fail --silent --show-error \
             --cookie "$cookie_file" \
+            --header "X-Cybercalc-Request: 1" \
             --form 'file=@/tmp/cybercalc-second-attachment.txt;filename=second.txt' \
             "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
 
