@@ -1,4 +1,4 @@
-FROM nginx:1.30.4-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c
+FROM nginx:1.31.5-alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3
 RUN apk add --no-cache --upgrade libuuid=2.42.3-r1
 COPY nginx.conf /etc/nginx/nginx.conf
 USER 101:101
