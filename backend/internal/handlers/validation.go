@@ -3,6 +3,8 @@ package handlers
 import (
 	"fmt"
 	"net/mail"
+	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -82,4 +84,71 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 		return fmt.Errorf("для образовательной организации необходимо выбрать партнёра")
 	}
 	return nil
+}
+
+func digits(value string, lengths ...int) ([]int, bool) {
+	validLength := false
+	for _, length := range lengths {
+		if len(value) == length {
+			validLength = true
+		}
+	}
+	if !validLength {
+		return nil, false
+	}
+	out := make([]int, len(value))
+	for i, r := range value {
+		if r < '0' || r > '9' {
+			return nil, false
+		}
+		out[i] = int(r - '0')
+	}
+	return out, true
+}
+
+func weightedCheck(values, weights []int) int {
+	total := 0
+	for i, weight := range weights {
+		total += values[i] * weight
+	}
+	return total % 11 % 10
+}
+
+func validINN(value string) bool {
+	numbers, ok := digits(value, 10, 12)
+	if !ok {
+		return false
+	}
+	if len(numbers) == 10 {
+		return weightedCheck(numbers, []int{2, 4, 10, 3, 5, 9, 4, 6, 8}) == numbers[9]
+	}
+	return weightedCheck(numbers, []int{7, 2, 4, 10, 3, 5, 9, 4, 6, 8}) == numbers[10] &&
+		weightedCheck(numbers, []int{3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8}) == numbers[11]
+}
+
+func validOGRN(value string) bool {
+	numbers, ok := digits(value, 13, 15)
+	if !ok {
+		return false
+	}
+	prefix, err := strconv.ParseUint(value[:len(value)-1], 10, 64)
+	if err != nil {
+		return false
+	}
+	modulus := uint64(11)
+	if len(numbers) == 15 {
+		modulus = 13
+	}
+	return int(prefix%modulus%10) == numbers[len(numbers)-1]
+}
+
+func officialRegistryURL(value string) bool {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Hostname() == "" {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	// The federal register is the preferred source. Regional licensing
+	// authorities may publish official extracts on government domains.
+	return host == "obrnadzor.gov.ru" || strings.HasSuffix(host, ".obrnadzor.gov.ru") || strings.HasSuffix(host, ".gov.ru")
 }

@@ -87,5 +87,12 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := db.QueryRow(`SELECT count(*) FROM education_directory`).Scan(&count); e != nil || count != 1257 {
 		t.Fatalf("expected 1257 source records, got %d: %v", count, e)
 	}
-	t.Log("legacy entries, amounts, attachments and budget retained; mentors backfilled; 1257 directory records; migration rerun safe")
+	var agreement, agreementStatus string
+	if e := db.QueryRow(`SELECT e.agreement_id,a.status FROM entries e JOIN agreements a ON a.id=e.agreement_id WHERE e.id=$1`, entry).Scan(&agreement, &agreementStatus); e != nil {
+		t.Fatal("legacy agreement backfill failed:", e)
+	}
+	if agreement == "" || agreementStatus != "needs_review" {
+		t.Fatal("legacy agreement must be retained and marked for review")
+	}
+	t.Log("legacy entries, amounts, attachments and budget retained; mentors and agreements backfilled; 1257 monitoring records preserved; migration rerun safe")
 }

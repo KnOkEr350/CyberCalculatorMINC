@@ -51,13 +51,52 @@ type User struct {
 }
 
 type Partner struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	PartnerKind     string    `json:"partner_kind"` // vuz|kolledj|school
-	AgreementDate   *string   `json:"agreement_date,omitempty"`
-	AgreementNumber string    `json:"agreement_number,omitempty"`
-	OtherAgreement  string    `json:"other_agreement,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID                    string    `json:"id"`
+	Name                  string    `json:"name"`
+	PartnerKind           string    `json:"partner_kind"` // vuz|kolledj|school
+	DirectoryID           string    `json:"directory_id,omitempty"`
+	AgreementDate         *string   `json:"agreement_date,omitempty"` // latest agreement, legacy API compatibility
+	AgreementNumber       string    `json:"agreement_number,omitempty"`
+	OtherAgreement        string    `json:"other_agreement,omitempty"`
+	AgreementsCount       int       `json:"agreements_count"`
+	ActiveAgreementsCount int       `json:"active_agreements_count"`
+	VerificationStatus    string    `json:"verification_status"`
+	INN                   string    `json:"inn,omitempty"`
+	OGRN                  string    `json:"ogrn,omitempty"`
+	LicenseNumber         string    `json:"license_number,omitempty"`
+	LicenseStatus         string    `json:"license_status,omitempty"`
+	InstitutionStatus     string    `json:"institution_status,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+type AgreementResponsiblePerson struct {
+	ID       string `json:"id,omitempty"`
+	Party    string `json:"party"` // cyberprotect|counterparty
+	FullName string `json:"full_name"`
+	Position string `json:"position,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Phone    string `json:"phone,omitempty"`
+}
+
+type Agreement struct {
+	ID                string                       `json:"id"`
+	PartnerIDs        []string                     `json:"partner_ids"`
+	AgreementKind     string                       `json:"agreement_kind"`
+	Number            string                       `json:"number"`
+	Status            string                       `json:"status"`
+	SignedOn          string                       `json:"signed_on"`
+	ValidFrom         string                       `json:"valid_from"`
+	ValidUntil        string                       `json:"valid_until"`
+	ROIVName          string                       `json:"roiv_name,omitempty"`
+	LegalEntityGroup  string                       `json:"legal_entity_group,omitempty"`
+	SignatureMethod   string                       `json:"signature_method"`
+	SignedBy          string                       `json:"signed_by,omitempty"`
+	SignatureDate     string                       `json:"signature_date,omitempty"`
+	DocumentReference string                       `json:"document_reference,omitempty"`
+	Notes             string                       `json:"notes,omitempty"`
+	ResponsiblePeople []AgreementResponsiblePerson `json:"responsible_people"`
+	CreatedAt         time.Time                    `json:"created_at"`
+	UpdatedAt         time.Time                    `json:"updated_at"`
 }
 
 type ActivityCategory struct {
@@ -71,6 +110,7 @@ type Entry struct {
 	ID           string                 `json:"id"`
 	CategoryCode string                 `json:"category_code"`
 	PartnerID    *string                `json:"partner_id,omitempty"`
+	AgreementID  string                 `json:"agreement_id"`
 	PeriodType   PeriodType             `json:"period_type"`
 	ReportYear   int                    `json:"report_year"`
 	Audience     Audience               `json:"audience"`

@@ -20,17 +20,19 @@ type Config struct {
 	DBName     string
 	DBSSLMode  string
 
-	HTTPAddr          string
-	UploadDir         string
-	SessionTTLh       int
-	AdminBootEmail    string
-	AdminBootPassword string
-	PublicURL         string
-	Environment       string
-	CookieSecure      bool
-	ScannerAddress    string
-	UploadQuotaBytes  int64
-	MFAKey            string
+	HTTPAddr           string
+	UploadDir          string
+	SessionTTLh        int
+	AdminBootEmail     string
+	AdminBootPassword  string
+	PublicURL          string
+	Environment        string
+	CookieSecure       bool
+	ScannerAddress     string
+	UploadQuotaBytes   int64
+	MFAKey             string
+	DirectorySyncURL   string
+	DirectorySyncHours int
 }
 
 func getenv(key, def string) string {
@@ -65,6 +67,11 @@ func Load() Config {
 	c.CookieSecure = strings.HasPrefix(c.PublicURL, "https://")
 	c.ScannerAddress = os.Getenv("CLAMAV_ADDRESS")
 	c.MFAKey = os.Getenv("MFA_ENCRYPTION_KEY")
+	c.DirectorySyncURL = strings.TrimSpace(os.Getenv("DIRECTORY_SYNC_URL"))
+	c.DirectorySyncHours = 24
+	if raw := os.Getenv("DIRECTORY_SYNC_INTERVAL_HOURS"); raw != "" {
+		c.DirectorySyncHours, _ = strconv.Atoi(raw)
+	}
 	c.UploadQuotaBytes = 1 << 30
 	if raw := os.Getenv("UPLOAD_QUOTA_BYTES"); raw != "" {
 		c.UploadQuotaBytes, _ = strconv.ParseInt(raw, 10, 64)
@@ -90,6 +97,20 @@ func (c Config) Validate() error {
 	}
 	if c.SessionTTLh < 1 || c.SessionTTLh > 24 {
 		return fmt.Errorf("SESSION_TTL_HOURS должен быть от 1 до 24")
+	}
+	if c.DirectorySyncHours < 1 || c.DirectorySyncHours > 168 {
+		return fmt.Errorf("DIRECTORY_SYNC_INTERVAL_HOURS должен быть от 1 до 168")
+	}
+	if c.DirectorySyncURL != "" {
+		u, err := url.Parse(c.DirectorySyncURL)
+		host := ""
+		if err == nil {
+			host = strings.ToLower(u.Hostname())
+		}
+		if err != nil || u.Scheme != "https" || u.User != nil || host == "" ||
+			!(host == "obrnadzor.gov.ru" || strings.HasSuffix(host, ".obrnadzor.gov.ru") || strings.HasSuffix(host, ".gov.ru")) {
+			return fmt.Errorf("DIRECTORY_SYNC_URL должен быть HTTPS-адресом официального домена Рособрнадзора или *.gov.ru")
+		}
 	}
 	if _, err := mail.ParseAddress(c.AdminBootEmail); err != nil {
 		return fmt.Errorf("некорректный ADMIN_BOOTSTRAP_EMAIL")

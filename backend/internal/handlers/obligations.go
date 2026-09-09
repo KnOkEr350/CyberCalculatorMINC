@@ -29,6 +29,7 @@ func obligations(kind string, teachers, programs, top bool) obligationStatus {
 func (h *EntryHandlers) Obligations(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	q := r.URL.Query()
 	partner := q.Get("partner_id")
+	agreement := q.Get("agreement_id")
 	year, err := strconv.Atoi(q.Get("report_year"))
 	period := q.Get("period_type")
 	if err != nil || year < 2000 || year > 2100 || (period != "plan" && period != "fact") || partner == "" {
@@ -44,7 +45,7 @@ func (h *EntryHandlers) Obligations(w http.ResponseWriter, r *http.Request, u mi
 		return
 	}
 	var teacher, program, top bool
-	err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(bool_or(category_code='teachers'),false), COALESCE(bool_or(category_code='ood_rpd'),false), COALESCE(bool_or(category_code='top_it'),false) FROM entries WHERE partner_id::text=$1 AND report_year=$2 AND period_type=$3 AND amount_rub>0`, partner, year, period).Scan(&teacher, &program, &top)
+	err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(bool_or(category_code='teachers'),false), COALESCE(bool_or(category_code='ood_rpd'),false), COALESCE(bool_or(category_code='top_it'),false) FROM entries WHERE partner_id::text=$1 AND report_year=$2 AND period_type=$3 AND ($4='' OR agreement_id::text=$4) AND amount_rub>0`, partner, year, period, agreement).Scan(&teacher, &program, &top)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка проверки обязательностей")
 		return

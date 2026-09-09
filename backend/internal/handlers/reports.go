@@ -21,13 +21,16 @@ type ReportHandlers struct {
 }
 
 type reportEntryRow struct {
-	Eligible     bool
-	PartnerID    string
-	PartnerName  sql.NullString
-	CategoryCode string
-	Audience     string
-	AmountRub    money.Amount
-	Payload      []byte
+	Eligible        bool
+	PartnerID       string
+	PartnerName     sql.NullString
+	CategoryCode    string
+	Audience        string
+	AmountRub       money.Amount
+	Payload         []byte
+	AgreementNumber string
+	AgreementKind   string
+	AgreementStatus string
 }
 
 // «Сформировать годовой план активностей» / «отчёт по реализованным
@@ -49,8 +52,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
-	query := `SELECT COALESCE(e.partner_id::text,''), p.name, e.category_code, e.audience, e.amount_rub, e.payload, eligibility.eligible
-		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id = e.partner_id
+	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.payload,eligibility.eligible,
+		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,'')
+		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id
+		LEFT JOIN agreements a ON a.id=e.agreement_id
 		WHERE e.period_type = $1 AND e.report_year = $2`
 	args := []interface{}{periodType, year}
 	if categoryFilter != "" {
@@ -65,6 +70,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		args = append(args, mentor)
 		query += fmt.Sprintf(" AND e.payload->>'mentor_id'=$%d", len(args))
 	}
+	if agreement := q.Get("agreement_id"); agreement != "" {
+		args = append(args, agreement)
+		query += fmt.Sprintf(" AND e.agreement_id::text=$%d", len(args))
+	}
 	query += ` ORDER BY p.name NULLS LAST, e.category_code LIMIT 10001`
 
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
@@ -78,7 +87,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	var payloadBytes int
 	for rows.Next() {
 		var row reportEntryRow
-		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.Payload, &row.Eligible); err != nil {
+		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.Payload, &row.Eligible,
+			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -121,7 +131,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	audiences := map[string]string{"vuz": "Вуз", "kolledj": "СПО", "school": "Школа"}
 
 	wb := xlsx.New()
-	headers := []string{"Партнёр", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Проверка обязательностей (не согласование)"}
+	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Проверка обязательностей (не согласование)"}
 	status := func(d reportEntryRow) string {
 		if d.Eligible {
 			return "Условия заполнены; требуется проверка документов"
@@ -137,7 +147,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
-		consolidated = append(consolidated, []interface{}{partnerName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 		var sumErr error
 		total, sumErr = money.Add(total, d.AmountRub)
 		if sumErr != nil {
@@ -145,7 +155,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			return
 		}
 	}
-	consolidated = append(consolidated, []interface{}{"ИТОГО (включая незавершённые записи)", "", "", total, "", "Рабочий расчёт, не согласованный отчёт"})
+	consolidated = append(consolidated, []interface{}{"ИТОГО (включая незавершённые записи)", "", "", "", "", total, "", "Рабочий расчёт, не согласованный отчёт"})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	if q.Get("format") == "docx" {
 		docRows := [][]string{}
@@ -173,7 +183,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	if categoryFilter != "" {
 		if calc, e := calculators.Get(categoryFilter); e == nil {
 			fields := []calculators.FieldSpec{}
-			cols := []string{"Учебное заведение"}
+			cols := []string{"Учебное заведение", "Соглашение"}
 			for _, f := range calc.Fields() {
 				if f.Key != "org_name" && f.Key != "mentor_id" {
 					fields = append(fields, f)
@@ -185,7 +195,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			for _, d := range data {
 				var payload map[string]interface{}
 				json.Unmarshal(d.Payload, &payload)
-				row := []interface{}{d.PartnerName.String}
+				row := []interface{}{d.PartnerName.String, d.AgreementNumber}
 				for _, f := range fields {
 					v, ok := payload[f.Key]
 					if !ok {
@@ -212,7 +222,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if _, ok := byPartner[key]; !ok {
 			order = append(order, key)
 		}
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 	}
 	for _, key := range order {
 		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])

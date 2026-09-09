@@ -90,13 +90,42 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if adminDashboard["target_amount_rub"].(float64) != 6000 {
 		t.Fatal("owner-scoped target upsert failed")
 	}
-	p1 := object(call(admin, "POST", "/partners", map[string]string{"name": "Тестовый вуз A " + stamp, "partner_kind": "vuz", "agreement_date": "2026-01-01"}, 201))["id"].(string)
-	p2 := object(call(admin, "POST", "/partners", map[string]string{"name": "Тестовый вуз B " + stamp, "partner_kind": "vuz"}, 201))["id"].(string)
+	var directory1, directory2 string
+	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
+		VALUES($1,'vuz','Республика Татарстан','https://islod.obrnadzor.gov.ru','1650084264','1021602020384','Л035-ТЕСТ-1','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-1',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовый вуз A "+stamp, "test-a-"+stamp).Scan(&directory1); e != nil {
+		t.Fatal(e)
+	}
+	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
+		VALUES($1,'vuz','г.Москва','https://islod.obrnadzor.gov.ru','7707083893','1027700132195','Л035-ТЕСТ-2','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-2',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовый вуз B "+stamp, "test-b-"+stamp).Scan(&directory2); e != nil {
+		t.Fatal(e)
+	}
+	agreement := func(number string) map[string]interface{} {
+		return map[string]interface{}{
+			"agreement_kind": "education_organization", "number": number, "status": "active",
+			"signed_on": "2026-01-01", "valid_from": "2026-01-01", "valid_until": "2026-12-31",
+			"signature_method": "qualified_electronic", "signed_by": "Иванов Иван Иванович", "signature_date": "2026-01-01",
+			"responsible_people": []map[string]string{{"party": "cyberprotect", "full_name": "Петров Пётр Петрович"}, {"party": "counterparty", "full_name": "Сидоров Сидор Сидорович"}},
+		}
+	}
+	created1 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory1, "initial_agreement": agreement("A-" + stamp)}, 201))
+	created2 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("B-" + stamp)}, 201))
+	p1, agreement1 := created1["id"].(string), created1["agreement_id"].(string)
+	p2, agreement2 := created2["id"].(string), created2["agreement_id"].(string)
+	groupAgreement := agreement("GROUP-" + stamp)
+	groupAgreement["partner_ids"] = []string{p1, p2}
+	groupAgreement["legal_entity_group"] = "Тестовая группа юридических лиц"
+	groupID := object(call(admin, "POST", "/agreements", groupAgreement, 201))["id"].(string)
+	listedAgreements := call(admin, "GET", "/agreements?partner_id="+p1, nil, 200)
+	if !bytes.Contains(listedAgreements, []byte(agreement1)) || !bytes.Contains(listedAgreements, []byte(groupID)) || bytes.Contains(listedAgreements, []byte(agreement2)) {
+		t.Fatal("agreement-to-partner scope is broken")
+	}
+	groupAgreement["status"] = "suspended"
+	call(admin, "PUT", "/agreements/"+groupID, groupAgreement, 200)
 	partnerEmail := "partner" + stamp + "@workspace.test"
 	call(admin, "POST", "/admin/users", map[string]interface{}{"email": partnerEmail, "password": password, "full_name": "Представитель Вуза", "role": "user", "entity_type": "edu_institution", "partner_id": p1}, 201)
 	call(partnerClient, "POST", "/auth/login", map[string]string{"email": partnerEmail, "password": password}, 200)
 	call(partnerClient, "POST", "/auth/entity-type", map[string]string{"entity_type": "organization"}, 403)
-	call(partnerClient, "POST", "/partners", map[string]string{"name": "Чужой вуз", "partner_kind": "vuz"}, 403)
+	call(partnerClient, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("foreign")}, 403)
 	call(partnerClient, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 1000}, 403)
 	partners := call(partnerClient, "GET", "/partners", nil, 200)
 	if !bytes.Contains(partners, []byte(p1)) || bytes.Contains(partners, []byte(p2)) {
@@ -108,17 +137,19 @@ func TestWorkspaceIntegration(t *testing.T) {
 	teacher := func(p string) map[string]interface{} {
 		return map[string]interface{}{"org_name": p, "course_name": "ИТ", "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 2}
 	}
-	create := func(client *http.Client, p, category, period string, payload map[string]interface{}, want int) []byte {
-		return call(client, "POST", "/entries", map[string]interface{}{"partner_id": p, "category_code": category, "period_type": period, "report_year": 2026, "audience": "vuz", "payload": payload}, want)
+	create := func(client *http.Client, p, agreementID, category, period string, payload map[string]interface{}, want int) []byte {
+		return call(client, "POST", "/entries", map[string]interface{}{"partner_id": p, "agreement_id": agreementID, "category_code": category, "period_type": period, "report_year": 2026, "audience": "vuz", "payload": payload}, want)
 	}
-	first := object(create(partnerClient, p1, "teachers", "plan", teacher(p1), 201))
+	first := object(create(partnerClient, p1, agreement1, "teachers", "plan", teacher(p1), 201))
 	id := first["id"].(string)
 	if first["amount_rub"].(float64) != 8280 {
 		t.Fatal("wrong teacher formula")
 	}
-	foreign := object(create(admin, p2, "teachers", "fact", teacher(p2), 201))["id"].(string)
-	shared := object(create(admin, p1, "teachers", "plan", teacher(p1), 201))["id"].(string)
-	create(partnerClient, p2, "teachers", "plan", teacher(p2), 403)
+	create(partnerClient, p1, agreement2, "teachers", "plan", teacher(p1), 400)
+	create(partnerClient, p1, groupID, "teachers", "plan", teacher(p1), 400)
+	foreign := object(create(admin, p2, agreement2, "teachers", "fact", teacher(p2), 201))["id"].(string)
+	shared := object(create(admin, p1, agreement1, "teachers", "plan", teacher(p1), 201))["id"].(string)
+	create(partnerClient, p2, agreement2, "teachers", "plan", teacher(p2), 403)
 	call(partnerClient, "PUT", "/entries/"+foreign, map[string]interface{}{"payload": teacher(p2), "comment": "изменение"}, 403)
 	call(partnerClient, "GET", "/entries/"+foreign+"/comments", nil, 403)
 	call(partnerClient, "GET", "/entries/"+foreign+"/attachments", nil, 403)
@@ -131,7 +162,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(partnerClient, "GET", "/entries?report_year=oops", nil, 400)
 	internship := map[string]interface{}{"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор", "duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3}
-	trainee := object(create(partnerClient, p1, "internship", "fact", internship, 201))
+	trainee := object(create(partnerClient, p1, agreement1, "internship", "fact", internship, 201))
 	if trainee["amount_rub"].(float64) != 30340 {
 		t.Fatal("wrong internship formula")
 	}
@@ -140,13 +171,13 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal("mentor snapshot forged")
 	}
 	internship["mentor_id"] = "wrong"
-	create(partnerClient, p1, "internship", "fact", internship, 400)
-	statusPath := "/obligations?partner_id=" + p1 + "&report_year=2026&period_type=plan"
+	create(partnerClient, p1, agreement1, "internship", "fact", internship, 400)
+	statusPath := "/obligations?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&report_year=2026&period_type=plan"
 	status := object(call(partnerClient, "GET", statusPath, nil, 200))
 	if !status["required"].(bool) || !status["teachers"].(bool) || status["ood_rpd"].(bool) {
 		t.Fatal("wrong obligations")
 	}
-	create(partnerClient, p1, "top_it", "plan", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт 01", "cofinancing_amount_rub": 1000}, 201)
+	create(partnerClient, p1, agreement1, "top_it", "plan", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт 01", "cofinancing_amount_rub": 1000}, 201)
 	status = object(call(partnerClient, "GET", statusPath, nil, 200))
 	if status["required"].(bool) || !status["top_it"].(bool) {
 		t.Fatal("TOP exemption missing")
@@ -199,7 +230,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	wb := xlsx.New()
 	wb.AddSheet("Данные", []string{"course_name", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"Импорт", "Петров Пётр", "ГПХ", 3}})
 	book, _ := wb.Bytes()
-	importPath := "/entries/import?partner_id=" + p1 + "&category_code=teachers&period_type=fact&report_year=2026"
+	importPath := "/entries/import?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&category_code=teachers&period_type=fact&report_year=2026"
 	preview := object(upload(partnerClient, importPath, map[string][]byte{"data.xlsx": book}, 200))
 	if preview["committed"].(bool) || preview["total_rub"].(float64) != 12420 {
 		t.Fatal("bad preview")
@@ -237,7 +268,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatalf("dashboard scope/formulas wrong: %v", dash)
 	}
 	directoryBook := xlsx.New()
-	directoryBook.AddSheet("Данные", []string{"name", "partner_kind", "region", "source"}, [][]interface{}{{"Колледж для импорта " + stamp, "kolledj", "Тестовый регион", "Тестовый набор 2026"}})
+	directoryBook.AddSheet("Данные", []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}, [][]interface{}{{"Колледж для импорта " + stamp, "kolledj", "Тестовый регион", "7736050003", "1027700070518", "Л035-ТЕСТ-3", "active", "active", "test-c-" + stamp, "https://islod.obrnadzor.gov.ru/rlic/details/test-3", "2026-09-09"}})
 	directoryData, _ := directoryBook.Bytes()
 	previewDirectory := object(upload(admin, "/admin/directory-import", map[string][]byte{"directory.xlsx": directoryData}, 200))
 	if previewDirectory["committed"].(bool) {

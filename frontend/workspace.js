@@ -3,6 +3,120 @@ function isStaffUser() {
   return state.me?.role === "admin" || state.me?.entity_type === "organization";
 }
 
+function agreementIsUsable(agreement, year = state.year) {
+  return Boolean(
+    agreement &&
+      agreement.status === "active" &&
+      agreement.valid_from <= `${year}-12-31` &&
+      agreement.valid_until >= `${year}-01-01`,
+  );
+}
+
+function agreementLabel(agreement) {
+  if (!agreement) return "—";
+  return `№ ${agreement.number} · ${AGREEMENT_STATUS_LABELS[agreement.status] || agreement.status} · ${agreement.valid_from}—${agreement.valid_until}`;
+}
+
+function peopleToText(agreement, party) {
+  return (agreement?.responsible_people || [])
+    .filter((person) => person.party === party)
+    .map((person) =>
+      [person.full_name, person.position, person.email, person.phone]
+        .map((value) => String(value || "").replaceAll("|", "/"))
+        .join(" | "),
+    )
+    .join("\n");
+}
+
+function agreementFieldsMarkup(prefix, agreement = {}, withPartners = false) {
+  const today = new Date().toISOString().slice(0, 10);
+  const yearEnd = `${new Date().getFullYear()}-12-31`;
+  return `<div class="grid cols-3">
+    <div class="field"><label>Тип соглашения *</label><select id="${prefix}-kind"><option value="education_organization">С образовательной организацией</option><option value="roiv">С РОИВ</option></select></div>
+    <div class="field"><label>Номер *</label><input id="${prefix}-number" required maxlength="100" value="${escapeHTML(agreement.number || "")}"></div>
+    <div class="field"><label>Статус *</label><select id="${prefix}-status"><option value="draft">Проект</option><option value="active">Действует</option><option value="suspended">Приостановлено</option><option value="expired">Истекло</option><option value="terminated">Расторгнуто</option></select></div>
+    <div class="field"><label>Дата соглашения *</label><input type="date" id="${prefix}-signed-on" required value="${escapeHTML(agreement.signed_on || today)}"></div>
+    <div class="field"><label>Действует с *</label><input type="date" id="${prefix}-valid-from" required value="${escapeHTML(agreement.valid_from || today)}"></div>
+    <div class="field"><label>Действует до *</label><input type="date" id="${prefix}-valid-until" required value="${escapeHTML(agreement.valid_until || yearEnd)}"></div>
+    <div class="field" id="${prefix}-roiv-box"><label>Наименование РОИВ *</label><input id="${prefix}-roiv" maxlength="300" value="${escapeHTML(agreement.roiv_name || "")}"></div>
+    <div class="field"><label>Группа юридических лиц</label><input id="${prefix}-group" maxlength="1000" value="${escapeHTML(agreement.legal_entity_group || "")}" placeholder="Название группы или периметра соглашения"></div>
+    <div class="field"><label>Способ подписания *</label><select id="${prefix}-signature"><option value="unsigned">Не подписано</option><option value="paper">Бумажный документ</option><option value="qualified_electronic">УКЭП</option><option value="goskey">Госключ</option></select></div>
+    <div class="field"><label>Подписант (обязательно для действующего)</label><input id="${prefix}-signed-by" maxlength="300" value="${escapeHTML(agreement.signed_by || "")}"></div>
+    <div class="field"><label>Дата подписания (обязательно для действующего)</label><input type="date" id="${prefix}-signature-date" value="${escapeHTML(agreement.signature_date || "")}"></div>
+    <div class="field"><label>Ссылка / реквизиты документа</label><input id="${prefix}-document" maxlength="1000" value="${escapeHTML(agreement.document_reference || "")}"></div>
+  </div>
+  ${withPartners ? `<div class="field"><label>Учебные заведения, охваченные соглашением *</label><select id="${prefix}-partners" multiple size="5" required>${state.partners.map((partner) => `<option value="${partner.id}" ${(agreement.partner_ids || []).includes(partner.id) ? "selected" : ""}>${escapeHTML(partner.name)}</option>`).join("")}</select><div class="field-hint">Можно выбрать несколько организаций для соглашения с группой юридических лиц.</div></div>` : ""}
+  <div class="grid cols-2">
+    <div class="field"><label>Ответственные Киберпротекта</label><textarea id="${prefix}-people-cp" rows="3" placeholder="ФИО | должность | email | телефон">${escapeHTML(peopleToText(agreement, "cyberprotect"))}</textarea></div>
+    <div class="field"><label>Ответственные контрагента</label><textarea id="${prefix}-people-other" rows="3" placeholder="ФИО | должность | email | телефон">${escapeHTML(peopleToText(agreement, "counterparty"))}</textarea></div>
+  </div><div class="field-hint">Одно ответственное лицо на строку. Для действующего соглашения укажите хотя бы по одному с каждой стороны.</div>
+  <div class="field"><label>Примечание</label><textarea id="${prefix}-notes" rows="2" maxlength="1000">${escapeHTML(agreement.notes || "")}</textarea></div>`;
+}
+
+function wireAgreementFields(root, prefix, agreement = {}) {
+  const kind = root.querySelector(`#${prefix}-kind`);
+  const status = root.querySelector(`#${prefix}-status`);
+  const signature = root.querySelector(`#${prefix}-signature`);
+  kind.value = agreement.agreement_kind || "education_organization";
+  status.value = agreement.status === "needs_review" ? "draft" : agreement.status || "active";
+  signature.value = agreement.signature_method || "paper";
+  const sync = () => {
+	const roiv = root.querySelector(`#${prefix}-roiv`);
+	const active = status.value === "active";
+    root.querySelector(`#${prefix}-roiv-box`).hidden = kind.value !== "roiv";
+	roiv.required = kind.value === "roiv";
+	root.querySelector(`#${prefix}-signed-by`).required = active;
+	root.querySelector(`#${prefix}-signature-date`).required = active;
+	root.querySelector(`#${prefix}-people-cp`).required = active;
+	root.querySelector(`#${prefix}-people-other`).required = active;
+	signature.setCustomValidity(active && signature.value === "unsigned" ? "Для действующего соглашения выберите способ подписания" : "");
+  };
+  kind.onchange = sync;
+	status.onchange = sync;
+	signature.onchange = sync;
+  sync();
+}
+
+function parseResponsiblePeople(text, party) {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [full_name = "", position = "", email = "", phone = ""] = line
+        .split("|")
+        .map((value) => value.trim());
+      return { party, full_name, position, email, phone };
+    });
+}
+
+function collectAgreement(root, prefix, partnerIDs) {
+  const selectedPartners = root.querySelector(`#${prefix}-partners`);
+  const ids = selectedPartners
+    ? [...selectedPartners.selectedOptions].map((option) => option.value)
+    : partnerIDs;
+  return {
+    partner_ids: ids,
+    agreement_kind: root.querySelector(`#${prefix}-kind`).value,
+    number: root.querySelector(`#${prefix}-number`).value.trim(),
+    status: root.querySelector(`#${prefix}-status`).value,
+    signed_on: root.querySelector(`#${prefix}-signed-on`).value,
+    valid_from: root.querySelector(`#${prefix}-valid-from`).value,
+    valid_until: root.querySelector(`#${prefix}-valid-until`).value,
+    roiv_name: root.querySelector(`#${prefix}-roiv`).value.trim(),
+    legal_entity_group: root.querySelector(`#${prefix}-group`).value.trim(),
+    signature_method: root.querySelector(`#${prefix}-signature`).value,
+    signed_by: root.querySelector(`#${prefix}-signed-by`).value.trim(),
+    signature_date: root.querySelector(`#${prefix}-signature-date`).value,
+    document_reference: root.querySelector(`#${prefix}-document`).value.trim(),
+    notes: root.querySelector(`#${prefix}-notes`).value.trim(),
+    responsible_people: [
+      ...parseResponsiblePeople(root.querySelector(`#${prefix}-people-cp`).value, "cyberprotect"),
+      ...parseResponsiblePeople(root.querySelector(`#${prefix}-people-other`).value, "counterparty"),
+    ],
+  };
+}
+
 function openUserProfile(user, refresh) {
   const modal = el(
     `<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Доступ: ${escapeHTML(user.full_name)}</h2><div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="admin">Администратор — полный доступ</option></select></div><div class="field"><label>Представляет</label><select name="entity"><option value="organization">Киберпротект — все партнёры</option><option value="edu_institution">Учебное заведение — только свой партнёр</option></select></div><div class="field"><label>Учебное заведение</label><select name="partner"><option value="">Не назначено</option>${state.partners.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("")}</select></div><p class="error" role="alert"></p><button class="btn" type="submit">Сохранить доступ</button><button class="btn secondary" type="button">Закрыть</button></form></div>`,
@@ -70,6 +184,7 @@ async function uploadFileBatch(id, files) {
 function workspaceQuery() {
   return new URLSearchParams({
     partner_id: state.partnerID,
+    agreement_id: state.agreementID,
     category_code: state.categoryCode,
     period_type: state.period,
     report_year: state.year,
@@ -88,12 +203,30 @@ async function renderPartnerEntries(root) {
     state.partnerID = partner.id;
   }
   if (partner) state.partnerKind = partner.partner_kind;
+	if (partner && state.agreementPartnerID !== partner.id) {
+	  state.agreements = await api(`/agreements?partner_id=${encodeURIComponent(partner.id)}`);
+	  state.agreementPartnerID = partner.id;
+	  state.agreementID = "";
+	}
+	if (!partner) {
+	  state.agreements = [];
+	  state.agreementPartnerID = "";
+	  state.agreementID = "";
+	}
+	if (!state.agreements.some((agreement) => agreement.id === state.agreementID)) {
+	  state.agreementID =
+	    state.agreements.find((agreement) => agreementIsUsable(agreement))?.id ||
+	    state.agreements[0]?.id ||
+	    "";
+	}
+	const selectedAgreement = state.agreements.find((agreement) => agreement.id === state.agreementID);
+	const writable = agreementIsUsable(selectedAgreement);
   const available = state.categories.filter((c) =>
     c.audience_scope.includes(partner?.partner_kind || state.partnerKind),
   );
   if (!available.some((c) => c.code === state.categoryCode))
     state.categoryCode = available[0]?.code || "";
-  root.innerHTML = `<section class="page-heading"><div><span class="eyebrow">Работа с партнёром</span><h1>План и факт</h1><p>Учебное заведение → доступная активность → расчёт и необязательные вложения.</p></div></section>
+  root.innerHTML = `<section class="page-heading"><div><span class="eyebrow">Работа с партнёром</span><h1>План и факт</h1><p>Учебное заведение → действующее соглашение → доступная активность → расчёт и необязательные вложения.</p></div></section>
   <div class="card"><div class="grid cols-3">
     <div class="field"><label for="workspace-kind">1. Тип ОО</label><select id="workspace-kind">${Object.entries(
       AUDIENCE_LABELS,
@@ -105,12 +238,13 @@ async function renderPartnerEntries(root) {
       .join("")}</select></div>
     <div class="field"><label for="partner-search">Поиск своего партнёра</label><input id="partner-search" placeholder="Часть названия"></div>
     <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>
-  </div><button class="btn secondary" id="open-directory">Справочник учебных заведений</button><p class="muted">${partner ? `Соглашение: ${escapeHTML(partner.agreement_number || "не указано")}; дата: ${escapeHTML(partner.agreement_date || "не указана")}` : "Сначала выберите партнёра. Нового партнёра добавляет сотрудник Киберпротекта."}</p></div>
+	<div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
+  </div><button class="btn secondary" id="open-directory">Справочник и соглашения</button><p class="muted">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)}. ${writable ? "Можно вносить план/факт за выбранный год." : "Просмотр доступен, но для ввода нужен статус «Действует» и период, охватывающий выбранный год."}` : "Сначала выберите партнёра и соглашение. Нового партнёра добавляет сотрудник Киберпротекта."}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
-    <div class="field"><label>3. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
-    <div class="field"><label>Действия</label><button class="btn" id="add-entry" ${partner ? "" : "disabled"}>+ Добавить запись</button></div></div>
-    <div class="flex"><button class="btn secondary" id="import-entries" ${partner ? "" : "disabled"}>Импорт из Excel</button><a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности партнёра</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="field"><label>4. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
+    <div class="field"><label>Действия</label><button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button></div></div>
+    <div class="flex"><button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button><a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности партнёра</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><div class="field"><label for="entry-search">Поиск по реквизитам, студенту, наставнику, программе</label><input id="entry-search" placeholder="Введите текст"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const partnerSelect = root.querySelector("#workspace-partner");
@@ -139,12 +273,20 @@ async function renderPartnerEntries(root) {
   root.querySelector("#workspace-kind").onchange = (e) => {
     state.partnerKind = e.target.value;
     state.partnerID = "";
+	state.agreementID = "";
+	state.agreementPartnerID = "";
     renderEntries(root);
   };
   partnerSelect.onchange = (e) => {
     state.partnerID = e.target.value;
+	state.agreementID = "";
+	state.agreementPartnerID = "";
     renderEntries(root);
   };
+	root.querySelector("#workspace-agreement").onchange = (e) => {
+	  state.agreementID = e.target.value;
+	  renderEntries(root);
+	};
   root.querySelector("#open-directory").onclick = () => {
     state.view = "partners";
     render();
@@ -254,7 +396,7 @@ async function openImportDialog(directory) {
     ? "/api/admin/directory-template"
     : `/api/entries/import-template?${query}`;
   const modal = el(
-    `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true"><h2>Импорт ${directory ? "справочника" : "записей"} из Excel</h2><p>Первый лист .xlsx, до 8 МБ и ${directory ? "10000" : "1000"} строк. Сначала скачайте шаблон. Формулы замените значениями. ${directory ? "Укажите источник и дату актуальности." : "Наставник должен заранее присутствовать в справочнике выбранного партнёра. Суммы рассчитывает сервер."}</p><a class="btn secondary" href="${template}">Скачать шаблон</a><div class="field"><input type="file" accept=".xlsx" id="import-file" aria-label="Файл Excel"></div><div id="import-result" role="status"></div><div class="flex"><button class="btn" id="preview">Проверить</button><button class="btn" id="commit" disabled>Импортировать</button><button class="btn secondary" id="close-import">Закрыть</button></div></div></div>`,
+    `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true"><h2>Импорт ${directory ? "справочника" : "записей"} из Excel</h2><p>Первый лист .xlsx, до 8 МБ и ${directory ? "10000" : "1000"} строк. Сначала скачайте шаблон. Формулы замените значениями. ${directory ? "Для каждой записи обязательны ИНН, ОГРН, лицензия, оба статуса, идентификатор, дата и HTTPS-ссылка официального реестра." : "Наставник должен заранее присутствовать в справочнике выбранного партнёра. Суммы рассчитывает сервер."}</p><a class="btn secondary" href="${template}">Скачать шаблон</a><div class="field"><input type="file" accept=".xlsx" id="import-file" aria-label="Файл Excel"></div><div id="import-result" role="status"></div><div class="flex"><button class="btn" id="preview">Проверить</button><button class="btn" id="commit" disabled>Импортировать</button><button class="btn secondary" id="close-import">Закрыть</button></div></div></div>`,
   );
   let busy = false,
     checkedFile = null;
@@ -306,7 +448,9 @@ async function openImportDialog(directory) {
       if (result.committed) {
         checkedFile = null;
         showToast("Импорт завершён", "success");
-        if (!directory) renderEntries(document.getElementById("content"));
+		const content = document.getElementById("content");
+		if (!directory) renderEntries(content);
+		else if (content) renderPartnerDirectory(content);
       }
     } catch (e) {
       checkedFile = null;
@@ -325,8 +469,9 @@ async function openImportDialog(directory) {
 }
 
 async function renderPartnerDirectory(root) {
-  root.innerHTML = `<section class="page-heading"><div><span class="eyebrow">Справочники</span><h1>Учебные заведения</h1><p>Партнёры Киберпротекта — только образовательные организации. Наличие в справочнике не означает наличие соглашения.</p></div></section>
-  <div class="card"><h2>Поиск в справочнике</h2><p class="muted">Начальное наполнение: 1 257 вузов и филиалов — участников мониторинга ВО 2025. Источник указан у каждой записи. Это не полный реестр лицензий; школы и СПО добавляются отдельно вручную или импортом.</p><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
+  root.innerHTML = `<section class="page-heading"><div><span class="eyebrow">Справочники</span><h1>Учебные заведения и соглашения</h1><p>Новые партнёры создаются только из записей, подтверждённых официальным реестром лицензий.</p></div></section>
+  <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><p class="muted">Старый набор мониторинга сохранён для истории, но не считается лицензированным реестром и не доступен для создания нового партнёра. ИНН и ОГРН проверяются по контрольным суммам; запись должна иметь действующие статусы организации и лицензии.</p></div>
+  <div class="card"><h2>Поиск в официальном справочнике</h2><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
     AUDIENCE_LABELS,
   )
     .map(
@@ -335,7 +480,7 @@ async function renderPartnerDirectory(root) {
     )
     .join(
       "",
-    )}</select></div><div class="field"><label>Название или регион</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${state.me.role === "admin" ? '<button class="btn secondary" id="d-import">Загрузить справочник из Excel</button>' : ""}</div>
+    )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${state.me.role === "admin" ? '<button class="btn secondary" id="d-import">Обновить из выгрузки реестра</button>' : ""}</div>
   <div class="card"><h2>Наши партнёры</h2><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
   let generation = 0;
   const search = async () => {
@@ -352,18 +497,19 @@ async function renderPartnerDirectory(root) {
       );
       if (version !== generation) return;
       box.innerHTML = items.length
-        ? `<p class="muted">Показано до 100 результатов. Уточните запрос для поиска остальных.</p><div class="table-wrap"><table><thead><tr><th>Название</th><th>Регион / источник</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(p.region)}<br><small>${escapeHTML(p.source)}</small></td><td>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}">Выбрать</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
-        : "<p>Совпадений нет. Администратор может импортировать справочник; сотрудник — добавить партнёра вручную ниже.</p>";
+        ? `<p class="muted">Показано до 100 результатов. Уточните запрос для поиска остальных.</p><div class="table-wrap"><table><thead><tr><th>Название</th><th>Реквизиты</th><th>Лицензия и актуальность</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(p.region)}</small></td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${p.selectable ? "active" : "inactive"}">${p.selectable ? "Подтверждено" : "Не подтверждено"}</span><br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(p.license_status)}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+        : "<p>Совпадений нет. Администратор должен обновить справочник официальной выгрузкой — произвольный ручной ввод отключён.</p>";
       box.querySelectorAll("[data-directory]").forEach(
         (b) =>
           (b.onclick = () => {
             const item = items.find((i) => i.id === b.dataset.directory);
             const form = root.querySelector("#partner-create");
             form.dataset.directoryId = item.id;
-            form.querySelector("#p-name").value = item.name;
-            form.querySelector("#p-kind").value = item.partner_kind;
-            form.querySelector("#p-name").readOnly = true;
-            form.querySelector("#p-kind").disabled = true;
+			form.querySelector("#p-selected").innerHTML = `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ОГРН ${escapeHTML(item.ogrn)} · лицензия ${escapeHTML(item.license_number)}`;
+			form.querySelector("[type=submit]").disabled = false;
+			const kind = form.querySelector("#p-a-kind");
+			kind.value = item.partner_kind === "school" ? "roiv" : "education_organization";
+			kind.dispatchEvent(new Event("change"));
             form.scrollIntoView({ behavior: "smooth" });
           }),
       );
@@ -382,10 +528,18 @@ async function renderPartnerDirectory(root) {
   root
     .querySelector("#d-import")
     ?.addEventListener("click", () => openImportDialog(true));
+	api("/directory/stats").then((stats) => {
+	  const box = root.querySelector("#directory-stats");
+	  if (!box) return;
+	  box.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${stats.total}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">Вузы / СПО / школы</div><div class="value">${stats.universities} / ${stats.colleges} / ${stats.schools}</div></div></div><p class="muted">Последняя проверка: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "официальная выгрузка ещё не загружена"}. ${stats.sync_status ? `Автообновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автообновление включается переменной DIRECTORY_SYNC_URL."}</p>`;
+	}).catch((error) => {
+	  const box = root.querySelector("#directory-stats");
+	  if (box) box.textContent = error.message;
+	});
   const refreshPartners = async () => {
     state.partners = await api("/partners");
     root.querySelector("#partner-list").innerHTML =
-      `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Тип</th><th>Соглашение</th><th></th></tr></thead><tbody>${state.partners.map((p) => `<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</td><td>${escapeHTML(p.agreement_number || "—")}<br>${escapeHTML(p.agreement_date || "")}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`;
+      `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Проверка</th><th>Соглашения</th><th></th></tr></thead><tbody>${state.partners.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</small></td><td><span class="status-badge ${p.verification_status === "verified" ? "active" : "inactive"}">${p.verification_status === "verified" ? "Реестр подтверждён" : "Историческая запись"}</span><br><small>${escapeHTML(p.inn || "ИНН не указан")}</small></td><td>Всего: ${p.agreements_count}<br>Действующих сейчас: ${p.active_agreements_count}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-agreements="${p.id}">Соглашения</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`;
     root.querySelectorAll("[data-partner]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -397,21 +551,14 @@ async function renderPartnerDirectory(root) {
     root
       .querySelectorAll("[data-mentors]")
       .forEach((b) => (b.onclick = () => openMentors(b.dataset.mentors)));
+	root.querySelectorAll("[data-agreements]").forEach(
+	  (button) => (button.onclick = () => openAgreements(button.dataset.agreements, refreshPartners)),
+	);
   };
   if (isStaffUser()) {
     const box = root.querySelector("#partner-create");
-    box.innerHTML = `<form class="card" id="p-form"><h2>Добавить учебное заведение в партнёры</h2><div class="grid cols-3"><div class="field"><label>Название *</label><input id="p-name" maxlength="1000" required></div><div class="field"><label>Тип ОО</label><select id="p-kind">${Object.entries(
-      AUDIENCE_LABELS,
-    )
-      .map(([k, v]) => `<option value="${k}">${v}</option>`)
-      .join(
-        "",
-      )}</select></div><div class="field"><label>Дата соглашения</label><input type="date" id="p-date"></div><div class="field"><label>Номер соглашения</label><input id="p-number" maxlength="100"></div><div class="field"><label>Другие соглашения</label><input id="p-other" maxlength="1000"></div></div><button class="btn" type="submit">Добавить партнёра</button><button class="btn secondary" type="reset">Ввести вручную</button><p id="p-error" class="error" role="alert"></p></form>`;
-    box.querySelector("form").onreset = () => {
-      box.dataset.directoryId = "";
-      box.querySelector("#p-name").readOnly = false;
-      box.querySelector("#p-kind").disabled = false;
-    };
+    box.innerHTML = `<form class="card" id="p-form"><h2>Новый партнёр и первое соглашение</h2><p id="p-selected" class="notice">Сначала найдите выше подтверждённую организацию и нажмите «Выбрать».</p>${agreementFieldsMarkup("p-a")}<button class="btn" type="submit" disabled>Создать партнёра и соглашение</button><p id="p-error" class="error" role="alert"></p></form>`;
+	wireAgreementFields(box, "p-a");
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
       const button = box.querySelector("[type=submit]");
@@ -421,17 +568,12 @@ async function renderPartnerDirectory(root) {
           method: "POST",
           body: JSON.stringify({
             directory_id: box.dataset.directoryId || "",
-            name: box.querySelector("#p-name").value,
-            partner_kind: box.querySelector("#p-kind").value,
-            agreement_date: box.querySelector("#p-date").value,
-            agreement_number: box.querySelector("#p-number").value,
-            other_agreement: box.querySelector("#p-other").value,
+			initial_agreement: collectAgreement(box, "p-a", []),
           }),
         });
-        e.target.reset();
-        await refreshPartners();
+		box.dataset.directoryId = "";
+		await renderPartnerDirectory(root);
         showToast("Партнёр добавлен", "success");
-        box.querySelector("#p-error").textContent = "";
       } catch (error) {
         box.querySelector("#p-error").textContent = error.message;
       } finally {
@@ -440,6 +582,66 @@ async function renderPartnerDirectory(root) {
     };
   }
   await Promise.all([search(), refreshPartners()]);
+}
+
+async function openAgreements(partnerID, onSaved = async () => {}) {
+  const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Соглашения: ${escapeHTML(partnerName(partnerID))}</h2><button class="btn secondary" id="agreement-close">Закрыть</button></div><div id="agreement-list">Загрузка…</div>${isStaffUser() ? `<form id="agreement-form"><h2 id="agreement-form-title">Добавить соглашение</h2>${agreementFieldsMarkup("agreement", {partner_ids: [partnerID]}, true)}<div class="flex"><button class="btn" type="submit">Сохранить соглашение</button><button class="btn secondary" type="button" id="agreement-reset">Новое</button></div><p class="error" role="alert"></p></form>` : ""}</div></div>`);
+  document.body.appendChild(modal);
+  modal.querySelector("#agreement-close").onclick = () => modal.remove();
+  const form = modal.querySelector("#agreement-form");
+  let agreements = [];
+  let editingID = "";
+  const renderList = () => {
+    modal.querySelector("#agreement-list").innerHTML = agreements.length
+      ? agreements.map((agreement) => `<div class="agreement-card"><div><b>${escapeHTML(agreementLabel(agreement))}</b><br>${escapeHTML(AGREEMENT_KIND_LABELS[agreement.agreement_kind])}${agreement.roiv_name ? `: ${escapeHTML(agreement.roiv_name)}` : ""}<br><small>Подписание: ${escapeHTML(agreement.signature_method)}${agreement.signed_by ? ` · ${escapeHTML(agreement.signed_by)}` : ""}. Организаций: ${agreement.partner_ids.length}. Ответственных: ${agreement.responsible_people.length}.</small></div>${isStaffUser() ? `<button class="btn secondary" data-edit-agreement="${agreement.id}">Изменить</button>` : ""}</div>`).join("")
+      : "<p>Соглашений нет.</p>";
+    modal.querySelectorAll("[data-edit-agreement]").forEach((button) => {
+      button.onclick = () => fillForm(agreements.find((item) => item.id === button.dataset.editAgreement));
+    });
+  };
+  const load = async () => {
+    agreements = await api(`/agreements?partner_id=${encodeURIComponent(partnerID)}`);
+    renderList();
+  };
+  const fillForm = (agreement = { partner_ids: [partnerID] }) => {
+    if (!form) return;
+    editingID = agreement.id || "";
+    modal.querySelector("#agreement-form-title").textContent = editingID ? `Изменить соглашение № ${agreement.number}` : "Добавить соглашение";
+    const replacement = el(`<div id="agreement-fields">${agreementFieldsMarkup("agreement", agreement, true)}</div>`);
+    const old = form.querySelector("#agreement-fields");
+    if (old) old.replaceWith(replacement);
+    else form.querySelector("h2").after(replacement);
+    wireAgreementFields(form, "agreement", agreement);
+  };
+  if (form) {
+    const initialFields = document.createElement("div");
+    initialFields.id = "agreement-fields";
+    while (form.children[1] && !form.children[1].classList?.contains("flex") && form.children[1].tagName !== "P") initialFields.appendChild(form.children[1]);
+    form.querySelector("h2").after(initialFields);
+    wireAgreementFields(form, "agreement", { partner_ids: [partnerID] });
+    form.querySelector("#agreement-reset").onclick = () => fillForm();
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("[type=submit]");
+      const error = form.querySelector(".error");
+      button.disabled = true;
+      error.textContent = "";
+      try {
+        const body = collectAgreement(form, "agreement", [partnerID]);
+        await api(editingID ? `/agreements/${editingID}` : "/agreements", { method: editingID ? "PUT" : "POST", body: JSON.stringify(body) });
+        await load();
+        await onSaved();
+        fillForm();
+        state.agreementPartnerID = "";
+        showToast("Соглашение сохранено", "success");
+      } catch (err) {
+        error.textContent = err.message;
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
+  try { await load(); } catch (error) { modal.querySelector("#agreement-list").textContent = error.message; }
 }
 
 async function openMentors(partnerID) {

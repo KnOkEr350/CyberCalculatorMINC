@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"cybercalc/internal/middleware"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -127,24 +129,83 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 400, "некорректный тип организации")
 		return
 	}
-	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,name,partner_kind,region,source FROM education_directory WHERE ($1='' OR partner_kind=$1) AND ($2='' OR name ILIKE '%'||$2||'%' OR region ILIKE '%'||$2||'%') ORDER BY name LIMIT 100`, q.Get("partner_kind"), q.Get("q"))
+	verifiedOnly := q.Get("verified_only")
+	if verifiedOnly != "" && verifiedOnly != "0" && verifiedOnly != "1" {
+		middleware.WriteError(w, 400, "verified_only должен быть 0 или 1")
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,name,partner_kind,region,source,
+		COALESCE(inn,''),COALESCE(ogrn,''),COALESCE(license_number,''),license_status,institution_status,
+		COALESCE(registry_record_id,''),COALESCE(source_url,''),COALESCE(registry_updated_at::text,''),
+		COALESCE(verified_at::text,''),verification_status,
+		(verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days')
+		FROM education_directory
+		WHERE ($1='' OR partner_kind=$1)
+		AND ($2='' OR name ILIKE '%'||$2||'%' OR region ILIKE '%'||$2||'%' OR inn=$2 OR ogrn=$2 OR license_number ILIKE '%'||$2||'%')
+		AND ($3<>'1' OR (verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days'))
+		ORDER BY (verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days') DESC,name LIMIT 100`, q.Get("partner_kind"), strings.TrimSpace(q.Get("q")), verifiedOnly)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка справочника")
 		return
 	}
 	defer rows.Close()
-	out := []map[string]string{}
+	out := []map[string]interface{}{}
 	for rows.Next() {
-		var id, name, kind, region, source string
-		if rows.Scan(&id, &name, &kind, &region, &source) != nil {
+		var id, name, kind, region, source, inn, ogrn, licenseNumber, licenseStatus, institutionStatus string
+		var recordID, sourceURL, registryUpdatedAt, verifiedAt, verificationStatus string
+		var selectable bool
+		if rows.Scan(&id, &name, &kind, &region, &source, &inn, &ogrn, &licenseNumber, &licenseStatus,
+			&institutionStatus, &recordID, &sourceURL, &registryUpdatedAt, &verifiedAt, &verificationStatus, &selectable) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
-		out = append(out, map[string]string{"id": id, "name": name, "partner_kind": kind, "region": region, "source": source})
+		out = append(out, map[string]interface{}{
+			"id": id, "name": name, "partner_kind": kind, "region": region, "source": source,
+			"inn": inn, "ogrn": ogrn, "license_number": licenseNumber, "license_status": licenseStatus,
+			"institution_status": institutionStatus, "registry_record_id": recordID, "source_url": sourceURL,
+			"registry_updated_at": registryUpdatedAt, "verified_at": verifiedAt, "verification_status": verificationStatus,
+			"selectable": selectable,
+		})
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения")
 		return
 	}
 	middleware.WriteJSON(w, 200, out)
+}
+
+func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	var total, verified, universities, colleges, schools int
+	var lastVerified sql.NullTime
+	err := h.DB.QueryRowContext(r.Context(), `SELECT count(*),
+		count(*) FILTER(WHERE verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days'),
+		count(*) FILTER(WHERE partner_kind='vuz' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days'),
+		count(*) FILTER(WHERE partner_kind='kolledj' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days'),
+		count(*) FILTER(WHERE partner_kind='school' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days'),
+		max(verified_at) FROM education_directory`).Scan(&total, &verified, &universities, &colleges, &schools, &lastVerified)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка статистики справочника")
+		return
+	}
+	last := ""
+	if lastVerified.Valid {
+		last = lastVerified.Time.Format(time.RFC3339)
+	}
+	var syncStatus, syncSource, syncError string
+	var syncFinished sql.NullTime
+	err = h.DB.QueryRowContext(r.Context(), `SELECT status,source_url,COALESCE(error_text,''),finished_at
+		FROM directory_sync_runs ORDER BY started_at DESC,id DESC LIMIT 1`).Scan(&syncStatus, &syncSource, &syncError, &syncFinished)
+	if err != nil && err != sql.ErrNoRows {
+		middleware.WriteError(w, 500, "ошибка состояния автообновления")
+		return
+	}
+	syncFinishedAt := ""
+	if syncFinished.Valid {
+		syncFinishedAt = syncFinished.Time.Format(time.RFC3339)
+	}
+	middleware.WriteJSON(w, 200, map[string]interface{}{
+		"total": total, "verified_active": verified, "universities": universities,
+		"colleges": colleges, "schools": schools, "last_verified_at": last,
+		"sync_status": syncStatus, "sync_source": syncSource, "sync_error": syncError, "sync_finished_at": syncFinishedAt,
+	})
 }

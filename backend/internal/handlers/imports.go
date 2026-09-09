@@ -95,7 +95,7 @@ type importResult struct {
 
 func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	q := r.URL.Query()
-	category, partner, period := q.Get("category_code"), q.Get("partner_id"), q.Get("period_type")
+	category, partner, agreementID, period := q.Get("category_code"), q.Get("partner_id"), q.Get("agreement_id"), q.Get("period_type")
 	year, err := strconv.Atoi(q.Get("report_year"))
 	if err != nil || year < 2000 || year > 2100 || (period != "plan" && period != "fact") {
 		middleware.WriteError(w, 400, "укажите корректные год и план/факт")
@@ -110,6 +110,10 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		return
 	}
 	if err := h.validateEntryContext(r, category, audience, partner); err != nil {
+		middleware.WriteError(w, 400, err.Error())
+		return
+	}
+	if err := h.validateAgreementContext(r, agreementID, partner, year); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
@@ -223,7 +227,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteJSON(w, 200, result)
 		return
 	}
-	context, _ := json.Marshal([]interface{}{u.ID, category, partner, period, year})
+	context, _ := json.Marshal([]interface{}{u.ID, category, partner, agreementID, period, year})
 	digest := sha256.Sum256(append(context, data...))
 	fingerprint := hex.EncodeToString(digest[:])
 	tx, err := h.DB.BeginTx(r.Context(), nil)
@@ -249,7 +253,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	for _, row := range result.Rows {
 		payload, _ := json.Marshal(row.Payload)
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, category, partner, period, year, audience, payload, row.Amount, u.ID).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, category, partner, agreementID, period, year, audience, payload, row.Amount, u.ID).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}
@@ -268,8 +272,21 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 
 func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	wb := xlsx.New()
-	wb.AddSheet("Справочник", []string{"name", "partner_kind", "region", "source"}, nil)
-	wb.AddSheet("Инструкция", []string{"Поле", "Описание"}, [][]interface{}{{"name", "Полное название учебного заведения"}, {"partner_kind", "vuz / kolledj / school"}, {"region", "Регион"}, {"source", "Источник и дата актуальности сведений"}})
+	headers := []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}
+	wb.AddSheet("Справочник", headers, nil)
+	wb.AddSheet("Инструкция", []string{"Поле", "Описание"}, [][]interface{}{
+		{"name", "Полное наименование из реестра лицензий"},
+		{"partner_kind", "vuz / kolledj / school"},
+		{"region", "Субъект Российской Федерации"},
+		{"inn", "ИНН с корректной контрольной суммой"},
+		{"ogrn", "ОГРН/ОГРНИП с корректной контрольной суммой"},
+		{"license_number", "Регистрационный номер лицензии"},
+		{"license_status", "active / suspended / expired / revoked"},
+		{"institution_status", "active / inactive / reorganized / liquidated"},
+		{"registry_record_id", "Уникальный идентификатор записи официального реестра"},
+		{"source_url", "HTTPS-ссылка на Рособрнадзор или официальный домен *.gov.ru"},
+		{"registry_updated_at", "Дата актуальности сведений, ГГГГ-ММ-ДД"},
+	})
 	writeWorkbook(w, wb, "education_directory.xlsx")
 }
 func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -278,35 +295,7 @@ func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
-	if strings.Join(rows[0], "|") != "name|partner_kind|region|source" {
-		middleware.WriteError(w, 400, "используйте заголовки из шаблона справочника")
-		return
-	}
-	valid := [][]string{}
-	errors := []string{}
-	seen := map[string]bool{}
-	for i, row := range rows[1:] {
-		if strings.Join(row, "") == "" {
-			continue
-		}
-		for len(row) < 4 {
-			row = append(row, "")
-		}
-		if len(row) != 4 || len([]rune(row[0])) < 2 || len([]rune(row[0])) > 1000 || (row[1] != "vuz" && row[1] != "kolledj" && row[1] != "school") || len([]rune(row[2])) > 200 || row[3] == "" || len([]rune(row[3])) > 1000 {
-			errors = append(errors, fmt.Sprintf("Строка %d: проверьте название, тип, регион и источник", i+2))
-			continue
-		}
-		key := strings.Join(row[:3], "\x00")
-		if seen[key] {
-			errors = append(errors, fmt.Sprintf("Строка %d: дубль организации", i+2))
-			continue
-		}
-		seen[key] = true
-		valid = append(valid, row)
-	}
-	if len(valid) == 0 && len(errors) == 0 {
-		errors = append(errors, "нет строк данных")
-	}
+	valid, errors := validateDirectoryRows(rows)
 	commit := r.URL.Query().Get("commit") == "1" && len(errors) == 0
 	if commit {
 		tx, e := h.DB.BeginTx(r.Context(), nil)
@@ -315,11 +304,9 @@ func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request
 			return
 		}
 		defer tx.Rollback()
-		for _, row := range valid {
-			if _, e := tx.ExecContext(r.Context(), `INSERT INTO education_directory(name,partner_kind,region,source) VALUES($1,$2,$3,$4) ON CONFLICT(name,partner_kind,region) DO UPDATE SET source=EXCLUDED.source,updated_at=now()`, row[0], row[1], row[2], row[3]); e != nil {
-				middleware.WriteError(w, 500, "импорт отменён")
-				return
-			}
+		if e := upsertVerifiedDirectoryRows(r.Context(), tx, valid); e != nil {
+			middleware.WriteError(w, 500, "импорт отменён: конфликт записи реестра")
+			return
 		}
 		if logAudit(tx, "directory", "", "import", u.ID, fmt.Sprintf("%d организаций", len(valid)), nil, nil) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита")

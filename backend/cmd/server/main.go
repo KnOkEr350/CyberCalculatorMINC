@@ -69,6 +69,7 @@ func main() {
 	stop := make(chan struct{})
 	defer close(stop)
 	go retention.Run(db, 1*time.Hour, stop, cfg.UploadDir)
+	go handlers.RunDirectorySync(db, cfg.DirectorySyncURL, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
 
 	mux := buildRoutes(db, cfg)
 
@@ -134,6 +135,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 		middleware.WriteJSON(w, 200, map[string]string{"status": "ok"})
 	})
 	partnerH := &handlers.PartnerHandlers{DB: db}
+	agreementH := &handlers.AgreementHandlers{DB: db}
 	entryH := &handlers.EntryHandlers{DB: db}
 	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir, ScannerAddress: cfg.ScannerAddress, QuotaBytes: cfg.UploadQuotaBytes}
 	dashH := &handlers.DashboardHandlers{DB: db}
@@ -153,6 +155,12 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/partners", middleware.RequireAuth(db, partnerH.List))
 	mux.HandleFunc("POST /api/partners", middleware.RequireAuth(db, partnerH.Create))
 	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
+	mux.HandleFunc("GET /api/directory/stats", middleware.RequireAuth(db, partnerH.DirectoryStats))
+	mux.HandleFunc("GET /api/agreements", middleware.RequireAuth(db, agreementH.List))
+	mux.HandleFunc("POST /api/agreements", middleware.RequireAuth(db, agreementH.Create))
+	mux.HandleFunc("PUT /api/agreements/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		agreementH.Update(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/mentors", middleware.RequireAuth(db, entryH.Mentors))
 	mux.HandleFunc("POST /api/mentors", middleware.RequireAuth(db, entryH.CreateMentor))
 	mux.HandleFunc("GET /api/obligations", middleware.RequireAuth(db, entryH.Obligations))

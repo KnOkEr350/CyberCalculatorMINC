@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 
@@ -56,6 +57,7 @@ func (h *EntryHandlers) Categories(w http.ResponseWriter, r *http.Request, u mid
 type createEntryRequest struct {
 	CategoryCode string                 `json:"category_code"`
 	PartnerID    *string                `json:"partner_id"`
+	AgreementID  string                 `json:"agreement_id"`
 	PeriodType   string                 `json:"period_type"`
 	ReportYear   int                    `json:"report_year"`
 	Audience     string                 `json:"audience"`
@@ -98,6 +100,10 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	if !requirePartner(w, u, partnerID) {
 		return
 	}
+	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, req.ReportYear); err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := h.validateMentor(r, req.CategoryCode, partnerID, req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
@@ -126,9 +132,9 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 
 	var id string
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO entries (category_code, partner_id, period_type, report_year, audience, payload, amount_rub, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		req.CategoryCode, partnerID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, u.ID,
+		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, u.ID,
 	).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
@@ -176,6 +182,9 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	if v := q.Get("partner_id"); v != "" {
 		conds = append(conds, "partner_id::text = "+arg(v))
 	}
+	if v := q.Get("agreement_id"); v != "" {
+		conds = append(conds, "agreement_id::text = "+arg(v))
+	}
 	if v := q.Get("audience"); v != "" {
 		conds = append(conds, "audience = "+arg(v))
 	}
@@ -189,7 +198,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 			return
 		}
 	}
-	query := `SELECT id, category_code, partner_id, period_type, report_year, audience, payload, amount_rub,
+	query := `SELECT id, category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,
 		created_by, updated_by, created_at, updated_at FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
@@ -203,7 +212,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 		var e models.Entry
 		var partnerID, updatedBy sql.NullString
 		var payloadRaw []byte
-		if err := rows.Scan(&e.ID, &e.CategoryCode, &partnerID, &e.PeriodType, &e.ReportYear, &e.Audience,
+		if err := rows.Scan(&e.ID, &e.CategoryCode, &partnerID, &e.AgreementID, &e.PeriodType, &e.ReportYear, &e.Audience,
 			&payloadRaw, &e.AmountRub, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
@@ -231,9 +240,10 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 }
 
 type updateEntryRequest struct {
-	Payload  map[string]interface{} `json:"payload"`
-	Audience string                 `json:"audience"`
-	Comment  string                 `json:"comment"` // ОБЯЗАТЕЛЕН по ТЗ при любом редактировании плана/факта
+	Payload     map[string]interface{} `json:"payload"`
+	Audience    string                 `json:"audience"`
+	AgreementID string                 `json:"agreement_id"`
+	Comment     string                 `json:"comment"` // ОБЯЗАТЕЛЕН по ТЗ при любом редактировании плана/факта
 }
 
 func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
@@ -258,12 +268,13 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	defer tx.Rollback()
 
-	var categoryCode, audience string
+	var categoryCode, audience, oldAgreementID string
+	var reportYear int
 	var oldPartnerID sql.NullString
 	var oldPayloadRaw []byte
 	var oldAmount money.Amount
-	err = tx.QueryRowContext(r.Context(), `SELECT category_code, partner_id, audience, payload, amount_rub FROM entries WHERE id = $1 FOR UPDATE`, entryID).
-		Scan(&categoryCode, &oldPartnerID, &audience, &oldPayloadRaw, &oldAmount)
+	err = tx.QueryRowContext(r.Context(), `SELECT category_code, partner_id,COALESCE(agreement_id::text,''),report_year,audience,payload,amount_rub FROM entries WHERE id = $1 FOR UPDATE`, entryID).
+		Scan(&categoryCode, &oldPartnerID, &oldAgreementID, &reportYear, &audience, &oldPayloadRaw, &oldAmount)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, http.StatusNotFound, "запись не найдена")
 		return
@@ -297,6 +308,13 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "перенос записи к другому партнёру не допускается")
 		return
 	}
+	if req.AgreementID == "" {
+		req.AgreementID = oldAgreementID
+	}
+	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, reportYear); err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := h.validateMentor(r, categoryCode, partnerID, req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
@@ -317,9 +335,9 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
 	_, err = tx.ExecContext(r.Context(),
-		`UPDATE entries SET payload = $1, audience = $2, partner_id = $3, amount_rub = $4, updated_by = $5, updated_at = now()
-		 WHERE id = $6`,
-		newPayloadJSON, audience, partnerID, newAmount, u.ID, entryID,
+		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,updated_by=$6,updated_at=now()
+		 WHERE id=$7`,
+		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, u.ID, entryID,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
@@ -342,8 +360,8 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		oldPartner = oldPartnerID.String
 	}
 	if err := logAudit(tx, "entry", entryID, "update", u.ID, req.Comment,
-		map[string]interface{}{"partner_id": oldPartner, "audience": oldAudience, "payload": oldPayload, "amount_rub": oldAmount},
-		map[string]interface{}{"partner_id": partnerID, "audience": audience, "payload": req.Payload, "amount_rub": newAmount},
+		map[string]interface{}{"partner_id": oldPartner, "agreement_id": oldAgreementID, "audience": oldAudience, "payload": oldPayload, "amount_rub": oldAmount},
+		map[string]interface{}{"partner_id": partnerID, "agreement_id": req.AgreementID, "audience": audience, "payload": req.Payload, "amount_rub": newAmount},
 	); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
 		return
@@ -433,6 +451,33 @@ func (h *EntryHandlers) validateEntryContext(r *http.Request, categoryCode, audi
 	}
 	if partnerKind != audience {
 		return fmt.Errorf("вид выбранной организации %q не соответствует аудитории %q", partnerKind, audience)
+	}
+	return nil
+}
+
+func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, partnerID string, reportYear int) error {
+	agreementID = strings.TrimSpace(agreementID)
+	if agreementID == "" {
+		return fmt.Errorf("выберите соглашение, к которому относится активность")
+	}
+	var status string
+	var validFrom, validUntil time.Time
+	err := h.DB.QueryRowContext(r.Context(), `SELECT a.status,a.valid_from,a.valid_until
+		FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id
+		WHERE a.id::text=$1 AND ap.partner_id::text=$2`, agreementID, partnerID).Scan(&status, &validFrom, &validUntil)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("соглашение не найдено или не относится к выбранной организации")
+	}
+	if err != nil {
+		return fmt.Errorf("не удалось проверить соглашение")
+	}
+	if status != "active" {
+		return fmt.Errorf("для план/факта требуется действующее соглашение; текущий статус: %s", status)
+	}
+	yearStart := time.Date(reportYear, 1, 1, 0, 0, 0, 0, time.UTC)
+	yearEnd := time.Date(reportYear, 12, 31, 0, 0, 0, 0, time.UTC)
+	if validFrom.After(yearEnd) || validUntil.Before(yearStart) {
+		return fmt.Errorf("соглашение не действует в %d году", reportYear)
 	}
 	return nil
 }

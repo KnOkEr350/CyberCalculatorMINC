@@ -5,6 +5,7 @@ const state = {
   me: null,
   categories: [],
   partners: [],
+  agreements: [],
   view: "dashboard",
   period: "plan",
   year: new Date().getFullYear(),
@@ -13,12 +14,26 @@ const state = {
   dashboard: null,
   categoriesError: null,
   partnerID: "",
+  agreementID: "",
+  agreementPartnerID: "",
   partnerKind: "vuz",
   mentors: [],
 };
 
 const CATEGORY_LABELS = {}; // заполняется из /api/categories
 const AUDIENCE_LABELS = { vuz: "Вуз", kolledj: "СПО", school: "Школьный трек" };
+const AGREEMENT_STATUS_LABELS = {
+  needs_review: "Требует проверки",
+  draft: "Проект",
+  active: "Действует",
+  suspended: "Приостановлено",
+  expired: "Истекло",
+  terminated: "Расторгнуто",
+};
+const AGREEMENT_KIND_LABELS = {
+  education_organization: "С образовательной организацией",
+  roiv: "С РОИВ",
+};
 const CHART_COLORS = [
   "#1a79ff",
   "#00a6a6",
@@ -767,6 +782,18 @@ async function openEntryModal(entry) {
     showToast("Сначала выберите учебное заведение");
     return;
   }
+  const agreementID = entry?.agreement_id || state.agreementID;
+  const agreement = state.agreements.find((item) => item.id === agreementID);
+  if (!agreement) {
+    showToast("Сначала выберите соглашение");
+    return;
+  }
+  if (!isEdit && !agreementIsUsable(agreement)) {
+    showToast(
+      "Новая запись возможна только по действующему соглашению за выбранный год",
+    );
+    return;
+  }
   try {
     state.mentors = await api(
       `/mentors?partner_id=${encodeURIComponent(partner.id)}`,
@@ -792,6 +819,7 @@ async function openEntryModal(entry) {
     <div class="field"><label>Аудитория</label>
       <select id="m-audience" disabled><option value="${escapeHTML(audience)}">${escapeHTML(AUDIENCE_LABELS[audience])}</option></select>
     </div>
+    <div class="field"><label>Соглашение</label><input value="${escapeHTML(agreementLabel(agreement))}" disabled></div>
     <div id="m-fields"></div>
     ${
       isEdit
@@ -898,7 +926,12 @@ async function openEntryModal(entry) {
           throw new Error("Комментарий обязателен при редактировании");
         await api(`/entries/${entry.id}`, {
           method: "PUT",
-          body: JSON.stringify({ payload: newPayload, audience: aud, comment }),
+          body: JSON.stringify({
+            payload: newPayload,
+            audience: aud,
+            agreement_id: agreementID,
+            comment,
+          }),
         });
         savedID = entry.id;
       } else if (!savedID) {
@@ -908,6 +941,7 @@ async function openEntryModal(entry) {
           body: JSON.stringify({
             category_code: state.categoryCode,
             partner_id: partnerId,
+            agreement_id: agreementID,
             period_type: state.period,
             report_year: state.year,
             audience: aud,

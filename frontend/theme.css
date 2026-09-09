@@ -224,7 +224,10 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
 
 .modal-backdrop { z-index: 60; padding: 20px; background: rgba(0, 32, 77, .56); backdrop-filter: blur(5px); }
 .modal { width: min(560px, 100%); max-height: min(88vh, 900px); padding: 25px; border: 1px solid rgba(255,255,255,.7); border-radius: 11px; background: white; box-shadow: 0 24px 80px rgba(0, 32, 77, .25); }
+.modal.modal-wide { width: min(1040px, 100%); }
 .modal h2 { color: var(--navy); font-size: 20px; }
+.agreement-card { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin: 10px 0; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--blue-soft); }
+.notice { padding: 12px 14px; border-left: 4px solid var(--accent); border-radius: 7px; background: var(--blue-soft); }
 .attach-list { display: grid; gap: 7px; }
 .attach-list a { color: var(--accent-2); font-weight: 600; }
 .attachment-panel { margin-top: 18px; padding: 17px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
