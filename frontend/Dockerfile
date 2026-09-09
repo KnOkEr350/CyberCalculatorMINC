@@ -7,7 +7,7 @@ RUN mkdir -p /dist \
     && cp index.html app.js workspace.js mfa.js style.css theme.css /dist/ \
     && printf '%s\n' "$APP_VERSION" > /dist/version.txt
 
-FROM nginx:1.30.4-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c AS runtime
+FROM nginx:1.31.5-alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3 AS runtime
 RUN apk add --no-cache --upgrade libuuid=2.42.3-r1
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
