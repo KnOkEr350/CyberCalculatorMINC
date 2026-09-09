@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crypto/rand"
+	"cybercalc/internal/filestore"
 	"cybercalc/internal/middleware"
 	"database/sql"
 	"encoding/hex"
@@ -16,19 +17,21 @@ import (
 )
 
 type AttachmentHandlers struct {
-	DB        *sql.DB
-	UploadDir string
+	DB             *sql.DB
+	UploadDir      string
+	ScannerAddress string
+	QuotaBytes     int64
 }
 
 const maxAttachmentSize int64 = 64 << 20
 const maxAttachmentCount = 20
 
-func randomHex(n int) string {
+func randomHex(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		panic(err)
+		return "", err
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 // Optional attachments for plan and fact. One batch is all-or-nothing.
@@ -64,7 +67,7 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	}
 	days := 365
 	var raw string
-	if h.DB.QueryRow("SELECT value FROM settings WHERE key='attachment_retention_days'").Scan(&raw) == nil {
+	if h.DB.QueryRowContext(r.Context(), "SELECT value FROM settings WHERE key='attachment_retention_days'").Scan(&raw) == nil {
 		if v, e := strconv.Atoi(raw); e == nil && v > 0 && v <= 3650 {
 			days = v
 		}
@@ -75,12 +78,30 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 500, "не удалось создать каталог")
 		return
 	}
-	tx, err := h.DB.Begin()
+	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
+	// One quota lock across replicas prevents concurrent uploads exceeding quota.
+	if _, err := tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(270006)`); err != nil {
+		middleware.WriteError(w, 503, "загрузка временно недоступна")
+		return
+	}
+	quota := h.QuotaBytes
+	if quota <= 0 {
+		quota = 1 << 30
+	}
+	var used int64
+	if tx.QueryRowContext(r.Context(), `SELECT COALESCE(sum(size_bytes),0) FROM attachments WHERE uploaded_by=$1`, u.ID).Scan(&used) != nil {
+		middleware.WriteError(w, 500, "ошибка проверки квоты")
+		return
+	}
+	if used+total > quota {
+		middleware.WriteError(w, 413, "исчерпана квота хранения пользователя")
+		return
+	}
 	paths := []string{}
 	committed := false
 	defer func() {
@@ -97,7 +118,13 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 400, "не удалось прочитать файл")
 			return
 		}
-		path := filepath.Join(dir, randomHex(16))
+		filename, err := randomHex(16)
+		if err != nil {
+			src.Close()
+			middleware.WriteError(w, 500, "ошибка создания файла")
+			return
+		}
+		path := filepath.Join(dir, filename)
 		dst, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
 		if err != nil {
 			src.Close()
@@ -112,8 +139,16 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 500, "ошибка записи файла")
 			return
 		}
+		if err := filestore.Validate(header.Filename, path); err != nil {
+			middleware.WriteError(w, 400, err.Error())
+			return
+		}
+		if err := filestore.Scan(r.Context(), h.ScannerAddress, path); err != nil {
+			middleware.WriteError(w, 422, "файл не прошёл проверку или антивирус недоступен")
+			return
+		}
 		var id string
-		err = tx.QueryRow("INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", entryID, header.Filename, path, "application/octet-stream", size, u.ID, expires).Scan(&id)
+		err = tx.QueryRowContext(r.Context(), "INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", entryID, header.Filename, path, "application/octet-stream", size, u.ID, expires).Scan(&id)
 		if err != nil {
 			middleware.WriteError(w, 500, "ошибка метаданных")
 			return
@@ -134,10 +169,14 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 }
 
 func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
+	page, ok := pageClause(w, r)
+	if !ok {
+		return
+	}
 	if !requireEntry(w, h.DB, u, entryID) {
 		return
 	}
-	rows, err := h.DB.Query("SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC", entryID)
+	rows, err := h.DB.QueryContext(r.Context(), "SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id"+page, entryID)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка запроса")
 		return
@@ -158,13 +197,13 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, 500, "ошибка чтения")
 		return
 	}
-	middleware.WriteJSON(w, 200, list)
+	writePage(w, r, list)
 }
 
 func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {
 	var name, path, entry string
 	var expires time.Time
-	err := h.DB.QueryRow("SELECT file_name,storage_path,entry_id,retention_expires_at FROM attachments WHERE id::text=$1", attachmentID).Scan(&name, &path, &entry, &expires)
+	err := h.DB.QueryRowContext(r.Context(), "SELECT file_name,storage_path,entry_id,retention_expires_at FROM attachments WHERE id::text=$1", attachmentID).Scan(&name, &path, &entry, &expires)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, 404, "файл не найден")
 		return
@@ -180,7 +219,7 @@ func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 410, "срок хранения файла истёк")
 		return
 	}
-	f, err := os.Open(path)
+	f, err := filestore.Open(h.UploadDir, path)
 	if err != nil {
 		middleware.WriteError(w, 410, "файл недоступен")
 		return

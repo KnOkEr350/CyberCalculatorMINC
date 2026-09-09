@@ -14,6 +14,7 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
   });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1050 },
+    extraHTTPHeaders: { "X-Cybercalc-Request": "1" },
   });
   const request = context.request;
   const post = async (path, data) => {
@@ -26,8 +27,8 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
   page.on("pageerror", (e) => errors.push(e.message));
   try {
     await post("/auth/login", {
-      email: "admin@workspace.test",
-      password: "WorkspaceTest1!",
+      email: process.env.TEST_ADMIN_EMAIL || "admin@workspace.test",
+      password: process.env.TEST_ADMIN_PASSWORD || "WorkspaceTest1!",
     });
     const suffix = Date.now();
     const partner = await post("/partners", {

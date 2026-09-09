@@ -4,10 +4,14 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"cybercalc/internal/auth"
@@ -20,6 +24,21 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		client := &http.Client{Timeout: 3 * time.Second}
+		res, err := client.Get("http://127.0.0.1:8080/api/health")
+		if err != nil {
+			os.Exit(1)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			os.Exit(1)
+		}
+		return
+	}
 
 	db, err := dbx.Connect(cfg.DSN())
 	if err != nil {
@@ -27,26 +46,51 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := dbx.RunMigrations(db, "/app/migrations"); err != nil {
-		log.Fatalf("ошибка применения миграций: %v", err)
+	migrationMode := len(os.Args) > 1 && os.Args[1] == "migrate"
+	if migrationMode || os.Getenv("RUN_MIGRATIONS") != "false" {
+		if err := dbx.RunMigrations(db, "/app/migrations"); err != nil {
+			log.Fatalf("ошибка применения миграций: %v", err)
+		}
 	}
 
 	if err := ensureBootstrapAdmin(db, cfg); err != nil {
 		log.Fatalf("ошибка создания admin-пользователя по умолчанию: %v", err)
+	}
+	if migrationMode {
+		if err := dbx.ProvisionRuntime(db, os.Getenv("RUNTIME_DB_USER"), os.Getenv("RUNTIME_DB_PASSWORD")); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 	if err := os.MkdirAll(cfg.UploadDir, 0o750); err != nil {
 		log.Fatalf("не удалось создать каталог загрузок: %v", err)
 	}
 
 	stop := make(chan struct{})
-	go retention.Run(db, 1*time.Hour, stop)
+	defer close(stop)
+	go retention.Run(db, 1*time.Hour, stop, cfg.UploadDir)
 
 	mux := buildRoutes(db, cfg)
 
 	log.Printf("сервер запущен на %s", cfg.HTTPAddr)
-	if err := http.ListenAndServe(cfg.HTTPAddr, mux); err != nil {
-		log.Fatal(err)
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 90 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		shutdown, stopShutdown := context.WithTimeout(context.Background(), 100*time.Second)
+		defer stopShutdown()
+		if err := server.Shutdown(shutdown); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
+		close(done)
+	}()
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Printf("server: %v", err)
+		cancel()
 	}
+	<-done
 }
 
 func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
@@ -76,13 +120,22 @@ func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 	return nil
 }
 
-func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
+func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 
-	authH := &handlers.AuthHandlers{DB: db}
+	authH := &handlers.AuthHandlers{DB: db, SessionTTL: time.Duration(cfg.SessionTTLh) * time.Hour, SecureCookie: cfg.CookieSecure, MFAKey: cfg.MFAKey, RequireMFA: cfg.Environment == "production"}
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if db.PingContext(ctx) != nil {
+			middleware.WriteError(w, 503, "база данных недоступна")
+			return
+		}
+		middleware.WriteJSON(w, 200, map[string]string{"status": "ok"})
+	})
 	partnerH := &handlers.PartnerHandlers{DB: db}
 	entryH := &handlers.EntryHandlers{DB: db}
-	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir}
+	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir, ScannerAddress: cfg.ScannerAddress, QuotaBytes: cfg.UploadQuotaBytes}
 	dashH := &handlers.DashboardHandlers{DB: db}
 	adminH := &handlers.AdminHandlers{DB: db}
 	reportH := &handlers.ReportHandlers{DB: db}
@@ -90,6 +143,9 @@ func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
 	// --- Аутентификация ---
 	mux.HandleFunc("POST /api/auth/login", authH.Login)
 	mux.HandleFunc("POST /api/auth/logout", authH.Logout)
+	mux.HandleFunc("POST /api/auth/password", middleware.RequireAuth(db, authH.ChangePassword))
+	mux.HandleFunc("POST /api/auth/mfa/enroll", middleware.RequireAuth(db, authH.MFAEnroll))
+	mux.HandleFunc("POST /api/auth/mfa/confirm", middleware.RequireAuth(db, authH.MFAConfirm))
 	mux.HandleFunc("GET /api/auth/me", middleware.RequireAuth(db, authH.Me))
 	mux.HandleFunc("POST /api/auth/entity-type", middleware.RequireAuth(db, authH.SetEntityType))
 
@@ -146,5 +202,5 @@ func buildRoutes(db *sql.DB, cfg config.Config) *http.ServeMux {
 	mux.HandleFunc("POST /api/admin/settings", middleware.RequireAdmin(db, adminH.UpdateSetting))
 	mux.HandleFunc("GET /api/admin/logs", middleware.RequireAdmin(db, adminH.AuditLog))
 
-	return mux
+	return middleware.Security(mux, cfg.PublicURL, cfg.Environment == "production")
 }

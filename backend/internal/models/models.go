@@ -1,7 +1,10 @@
 // Package models описывает основные сущности предметной области.
 package models
 
-import "time"
+import (
+	"cybercalc/internal/money"
+	"time"
+)
 
 type Role string
 
@@ -34,14 +37,17 @@ const (
 )
 
 type User struct {
-	ID         string     `json:"id"`
-	Email      string     `json:"email"`
-	FullName   string     `json:"full_name"`
-	Role       Role       `json:"role"`
-	EntityType EntityType `json:"entity_type,omitempty"`
-	PartnerID  *string    `json:"partner_id,omitempty"`
-	IsActive   bool       `json:"is_active"`
-	CreatedAt  time.Time  `json:"created_at"`
+	MFAEnabled   bool       `json:"mfa_enabled"`
+	MFARequired  bool       `json:"mfa_required"`
+	MFAAvailable bool       `json:"mfa_available"`
+	ID           string     `json:"id"`
+	Email        string     `json:"email"`
+	FullName     string     `json:"full_name"`
+	Role         Role       `json:"role"`
+	EntityType   EntityType `json:"entity_type,omitempty"`
+	PartnerID    *string    `json:"partner_id,omitempty"`
+	IsActive     bool       `json:"is_active"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type Partner struct {
@@ -69,7 +75,7 @@ type Entry struct {
 	ReportYear   int                    `json:"report_year"`
 	Audience     Audience               `json:"audience"`
 	Payload      map[string]interface{} `json:"payload"`
-	AmountRub    float64                `json:"amount_rub"`
+	AmountRub    money.Amount           `json:"amount_rub"`
 	CreatedBy    string                 `json:"created_by"`
 	UpdatedBy    *string                `json:"updated_by,omitempty"`
 	CreatedAt    time.Time              `json:"created_at"`

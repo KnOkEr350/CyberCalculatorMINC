@@ -39,12 +39,12 @@ func (h *EntryHandlers) Obligations(w http.ResponseWriter, r *http.Request, u mi
 		return
 	}
 	var kind string
-	if h.DB.QueryRow(`SELECT partner_kind FROM partners WHERE id::text=$1`, partner).Scan(&kind) != nil {
+	if h.DB.QueryRowContext(r.Context(), `SELECT partner_kind FROM partners WHERE id::text=$1`, partner).Scan(&kind) != nil {
 		middleware.WriteError(w, 404, "партнёр не найден")
 		return
 	}
 	var teacher, program, top bool
-	err = h.DB.QueryRow(`SELECT COALESCE(bool_or(category_code='teachers'),false), COALESCE(bool_or(category_code='ood_rpd'),false), COALESCE(bool_or(category_code='top_it'),false) FROM entries WHERE partner_id::text=$1 AND report_year=$2 AND period_type=$3 AND amount_rub>0`, partner, year, period).Scan(&teacher, &program, &top)
+	err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(bool_or(category_code='teachers'),false), COALESCE(bool_or(category_code='ood_rpd'),false), COALESCE(bool_or(category_code='top_it'),false) FROM entries WHERE partner_id::text=$1 AND report_year=$2 AND period_type=$3 AND amount_rub>0`, partner, year, period).Scan(&teacher, &program, &top)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка проверки обязательностей")
 		return

@@ -172,6 +172,8 @@ async function renderPartnerEntries(root) {
   root.querySelector("#add-entry").onclick = () => openEntryModal(null);
   root.querySelector("#import-entries").onclick = () => openImportDialog(false);
   const query = workspaceQuery();
+  const pageKey = String(query);
+  if (state.entryPageKey !== pageKey) { state.entryPageKey = pageKey; state.entryPageOffset = 0; }
   root.querySelector("#export-link").href = `/api/reports/export?${query}`;
   const all = new URLSearchParams(query);
   all.delete("category_code");
@@ -184,7 +186,7 @@ async function renderPartnerEntries(root) {
   }
   const chosen = state.partnerID;
   const [entries, status] = await Promise.all([
-    api(`/entries?${query}`),
+    api(`/entries?${query}&offset=${state.entryPageOffset || 0}`),
     api(`/obligations?${query}`),
   ]);
   if (
@@ -235,6 +237,12 @@ async function renderPartnerEntries(root) {
   };
   root.querySelector("#entry-search").oninput = paint;
   paint();
+  const paging = el(`<div class="actions"><button class="btn secondary" id="entries-prev">Назад</button><span>Страница ${Math.floor((state.entryPageOffset || 0) / 200) + 1}. Поиск и сумма — на этой странице.</span><button class="btn secondary" id="entries-next">Далее</button></div>`);
+  root.querySelector("#entries-table").after(paging);
+  paging.querySelector("#entries-prev").disabled = !state.entryPageOffset;
+  paging.querySelector("#entries-next").disabled = entries.nextOffset == null;
+  paging.querySelector("#entries-prev").onclick = () => { state.entryPageOffset = Math.max(0, state.entryPageOffset - 200); renderEntries(root); };
+  paging.querySelector("#entries-next").onclick = () => { state.entryPageOffset = entries.nextOffset; renderEntries(root); };
 }
 
 async function openImportDialog(directory) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cybercalc/internal/auth"
 	"cybercalc/internal/config"
+	"cybercalc/internal/dbx"
 	"cybercalc/internal/xlsx"
 	"database/sql"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -34,7 +36,14 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer db.Close()
-	cfg := config.Config{UploadDir: t.TempDir()}
+	dir := os.Getenv("TEST_MIGRATIONS_DIR")
+	if dir == "" {
+		t.Fatal("TEST_MIGRATIONS_DIR required")
+	}
+	if err := dbx.RunMigrations(db, dir); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{UploadDir: t.TempDir(), MFAKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}
 	server := httptest.NewServer(buildRoutes(db, cfg))
 	defer server.Close()
 	stamp := fmt.Sprint(time.Now().UnixNano())
@@ -53,6 +62,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 			data, _ = json.Marshal(body)
 		}
 		req, _ := http.NewRequest(method, server.URL+"/api"+path, bytes.NewReader(data))
+		req.Header.Set("X-Cybercalc-Request", "1")
 		req.Header.Set("Content-Type", "application/json")
 		res, e := client.Do(req)
 		if e != nil {
@@ -161,6 +171,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		}
 		mw.Close()
 		req, _ := http.NewRequest("POST", server.URL+"/api"+path, &body)
+		req.Header.Set("X-Cybercalc-Request", "1")
 		req.Header.Set("Content-Type", mw.FormDataContentType())
 		res, e := client.Do(req)
 		if e != nil {
@@ -245,5 +256,37 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal("directory type filter failed")
 	}
 	upload(partnerClient, "/admin/directory-import?commit=1", map[string][]byte{"directory.xlsx": directoryData}, 403)
+	// MFA enrolment revokes old sessions; recovery codes are single-use.
+	setup := object(call(admin, "POST", "/auth/mfa/enroll", map[string]string{"password": password}, 200))
+	code, err := auth.TOTP(setup["secret"].(string), time.Now().Unix()/30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmed := object(call(admin, "POST", "/auth/mfa/confirm", map[string]string{"code": code}, 200))
+	recovery := confirmed["recovery_codes"].([]interface{})
+	call(admin, "GET", "/auth/me", nil, 401)
+	call(admin, "POST", "/auth/login", map[string]string{"email": email, "password": password, "code": code}, 401)
+	call(admin, "POST", "/auth/login", map[string]string{"email": email, "password": password, "code": recovery[0].(string)}, 200)
+	call(newClient(), "POST", "/auth/login", map[string]string{"email": email, "password": password, "code": recovery[0].(string)}, 401)
+	call(admin, "POST", "/auth/password", map[string]string{"current_password": password, "new_password": "UpdatedPassword2!"}, 200)
+	call(admin, "GET", "/auth/me", nil, 401)
+	call(admin, "POST", "/auth/login", map[string]string{"email": email, "password": "UpdatedPassword2!", "code": recovery[1].(string)}, 200)
+	for _, cookie := range admin.Jar.Cookies(mustURL(t, server.URL)) {
+		if cookie.Name == auth.CookieName {
+			var raw int
+			if err := db.QueryRow(`SELECT count(*) FROM sessions WHERE token=$1`, cookie.Value).Scan(&raw); err != nil || raw != 0 {
+				t.Fatal("bearer token stored in plaintext", err)
+			}
+		}
+	}
 	t.Log("ACL, formulas, mentors, optional batch files, expiry, Excel atomicity/idempotency and exports verified")
+}
+
+func mustURL(t *testing.T, s string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }

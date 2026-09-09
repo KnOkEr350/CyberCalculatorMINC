@@ -61,14 +61,15 @@ function valueLabel(value) {
   return VALUE_LABELS[value] || value;
 }
 
-async function api(path, opts = {}) {
+async function api(path, opts = {}, pageCount = 0) {
   const res = await fetch("/api" + path, {
     credentials: "same-origin",
-    headers:
-      opts.body && !(opts.body instanceof FormData)
-        ? { "Content-Type": "application/json" }
-        : undefined,
     ...opts,
+    headers: {
+      "X-Cybercalc-Request": "1",
+      ...(opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+      ...(opts.headers || {}),
+    },
   });
   if (res.status === 401 && path !== "/auth/login" && path !== "/auth/me") {
     state.me = null;
@@ -81,6 +82,12 @@ async function api(path, opts = {}) {
   const data = isJSON ? await res.json().catch(() => null) : null;
   if (!res.ok) {
     throw new Error((data && data.error) || `Ошибка ${res.status}`);
+  }
+  if (Array.isArray(data) && res.headers.has("X-Next-Offset")) data.nextOffset = Number(res.headers.get("X-Next-Offset"));
+  if (Array.isArray(data) && data.nextOffset != null && path.split("?")[0] !== "/entries") {
+    if (pageCount >= 19) throw new Error("Список превышает 10000 элементов. Сузьте выборку.");
+    const next = new URL(path, "http://local"); next.searchParams.set("offset", String(data.nextOffset));
+    return data.concat(await api(next.pathname + next.search, opts, pageCount + 1));
   }
   return data;
 }
@@ -179,6 +186,7 @@ function render() {
     app.appendChild(renderLogin());
     return;
   }
+  if (state.me.mfa_required) { app.appendChild(renderMFASetup()); return; }
   if (
     state.me.role !== "admin" &&
     (!state.me.entity_type ||
@@ -186,7 +194,7 @@ function render() {
   ) {
     app.appendChild(
       el(
-        `<div class="card"><h2>Профиль не назначен</h2><p>Попросите администратора назначить роль и учебное заведение. Самостоятельная смена прав недоступна.</p><button class="btn" onclick="location.reload()">Проверить назначение</button><button class="btn secondary" id="unassigned-logout">Выйти</button></div>`,
+        `<div class="card"><h2>Профиль не назначен</h2><p>Попросите администратора назначить роль и учебное заведение. Самостоятельная смена прав недоступна.</p><button class="btn" id="reload-profile">Проверить назначение</button><button class="btn secondary" id="unassigned-logout">Выйти</button></div>`,
       ),
     );
     app.querySelector("#unassigned-logout").onclick = async () => {
@@ -194,6 +202,7 @@ function render() {
       state.me = null;
       render();
     };
+    app.querySelector("#reload-profile").onclick = () => location.reload();
     return;
   }
   app.appendChild(renderLayout());
@@ -219,6 +228,7 @@ function renderLogin() {
         <p class="muted">Используйте учётную запись, выданную администратором.</p>
         <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
         <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Введите пароль"></div>
+        <div class="field"><label for="login-code">Код двухфакторной защиты, если настроена</label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"></div>
         <div class="error form-message" id="login-error" style="display:none" role="alert"></div>
         <button type="submit" class="btn wide" id="login-submit">Войти</button>
       </form>
@@ -236,7 +246,7 @@ function renderLogin() {
     try {
       await api("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, code: wrap.querySelector("#login-code").value.trim() }),
       });
       await boot();
     } catch (e) {
@@ -266,6 +276,8 @@ function renderLayout() {
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
         <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${isStaffUser() ? "Киберпротект" : "Учебное заведение"}${isAdmin ? " · Администратор" : ""}</small></span>
+        <button id="change-password" title="Изменить пароль">Пароль</button>
+        ${state.me.mfa_available && !state.me.mfa_enabled ? '<button id="setup-mfa">Защита входа</button>' : ''}
         <button id="logout" title="Выйти из системы">Выйти</button>
       </div>
     </div>
@@ -287,6 +299,9 @@ function renderLayout() {
       showToast(e.message);
     }
   };
+  wrap.querySelector("#change-password").onclick = openPasswordDialog;
+  const setupMFA = wrap.querySelector("#setup-mfa");
+  if (setupMFA) setupMFA.onclick = () => { app.replaceChildren(renderMFASetup()); };
   const content = wrap.querySelector("#content");
   if (state.view === "dashboard") renderDashboard(content);
   else if (state.view === "entries") renderEntries(content);
@@ -294,6 +309,29 @@ function renderLayout() {
     renderPartnerDirectory(content).catch((e) => showToast(e.message));
   else if (state.view === "admin") renderAdmin(content);
   return wrap;
+}
+
+function openPasswordDialog() {
+  const modal = el(`<div class="modal-backdrop"><div class="card modal"><h2>Смена пароля</h2>
+    <p>После смены пароля потребуется войти заново на всех устройствах.</p>
+    <form><label>Текущий пароль<input name="current" type="password" autocomplete="current-password" required maxlength="128"></label>
+    <label>Новый пароль<input name="next" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+    <label>Повторите новый пароль<input name="repeat" type="password" autocomplete="new-password" required maxlength="128"></label>
+    <p>10–128 символов: заглавная и строчная буквы, цифра и специальный символ.</p>
+    <p role="alert" class="error"></p><button class="btn" type="submit">Сменить пароль</button><button class="btn secondary" type="button">Отмена</button></form></div></div>`);
+  document.body.append(modal);
+  const form = modal.querySelector("form");
+  form.querySelector('[type="button"]').onclick = () => modal.remove();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const error = form.querySelector('[role="alert"]');
+    if (form.elements.next.value !== form.elements.repeat.value) { error.textContent = "Пароли не совпадают"; return; }
+    const button = form.querySelector('[type="submit"]'); button.disabled = true;
+    try {
+      await api("/auth/password", { method: "POST", body: JSON.stringify({current_password: form.elements.current.value, new_password: form.elements.next.value}) });
+      form.reset(); modal.remove(); state.me = null; render(); showToast("Пароль изменён. Войдите с новым паролем.");
+    } catch (e) { error.textContent = e.message; } finally { button.disabled = false; }
+  };
 }
 
 // ------------------------------------------------------------- DASHBOARD --
@@ -422,8 +460,8 @@ async function renderDashboard(root) {
             ? fmtMoney(d.target_amount_rub)
             : "не задана"
         }</div></div>
-        <div class="stat"><div class="label">План, руб.</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
-        <div class="stat"><div class="label">Факт, руб.</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
+        <div class="stat"><div class="label">План: все расчёты, руб.</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
+        <div class="stat"><div class="label">Факт: все расчёты, руб.</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
       </div>
       <div class="progress-card" style="margin-top:10px">
         <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
@@ -442,6 +480,7 @@ async function renderDashboard(root) {
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
+      <div class="card"><h2>Контроль обязательностей</h2><p>План с заполненными условиями: ${fmtMoney(d.eligible_plan_total_rub)}. Факт: ${fmtMoney(d.eligible_fact_total_rub)}.</p><p>Записей с незаполненными условиями: ${Number(d.incomplete_entries || 0)}. Для TOP IT проверяется наличие других мероприятий в другой ОО в том же году и плане/факте. Проверка заполнения не заменяет согласование документов.</p></div>
       <div class="card"><h2>Диаграмма структуры — План</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
       <div class="card"><h2>Диаграмма структуры — Факт</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
     </div>
@@ -1183,7 +1222,7 @@ async function renderAdminSettings(box) {
       <div class="field"><label>Хранение подтверждающих документов, дней</label>
         <input id="s-attach" type="number" min="1" max="3650" step="1" value="${settings.attachment_retention_days || 365}"></div>
       <div class="field"><label>Хранение журнала изменений, дней</label>
-        <input id="s-audit" type="number" min="1" max="3650" step="1" value="${settings.audit_log_retention_days || 60}"></div>
+        <input id="s-audit" type="number" min="60" max="3650" step="1" value="${settings.audit_log_retention_days || 60}"></div>
     </div>
     <button class="btn" id="s-save">Сохранить</button>
     <p class="muted">По ТЗ подтверждающие документы хранятся год, но администратор может изменить срок; журнал изменений — 2 месяца.</p>
@@ -1192,6 +1231,7 @@ async function renderAdminSettings(box) {
     const button = box.querySelector("#s-save");
     const attachmentDays = Number(box.querySelector("#s-attach").value);
     const auditDays = Number(box.querySelector("#s-audit").value);
+    if (auditDays < 60) { showToast("Журнал аудита хранится минимум 60 дней"); return; }
     if (
       ![attachmentDays, auditDays].every(
         (value) => Number.isInteger(value) && value >= 1 && value <= 3650,

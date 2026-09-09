@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 )
 
 func decodeJSON(r *http.Request, v interface{}) error {
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		return fmt.Errorf("ожидается application/json")
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
+	decoder.UseNumber()
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(v); err != nil {
 		return err

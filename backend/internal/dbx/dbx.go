@@ -6,7 +6,9 @@ package dbx
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -23,12 +25,16 @@ func Connect(dsn string) (*sql.DB, error) {
 	for i := 0; i < 20; i++ {
 		db, err = sql.Open("postgres", dsn)
 		if err == nil {
-			if pingErr := db.Ping(); pingErr == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err = db.PingContext(ctx)
+			cancel()
+			if err == nil {
 				db.SetMaxOpenConns(20)
 				db.SetMaxIdleConns(5)
 				db.SetConnMaxLifetime(30 * time.Minute)
 				return db, nil
 			}
+			db.Close()
 		}
 		log.Printf("ожидание базы данных (попытка %d/20)...", i+1)
 		time.Sleep(2 * time.Second)
@@ -40,7 +46,8 @@ func Connect(dsn string) (*sql.DB, error) {
 // уже применённые в таблице schema_migrations. Простая замена внешним
 // инструментам вроде golang-migrate, чтобы не тянуть зависимость.
 func RunMigrations(db *sql.DB, dir string) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -61,6 +68,9 @@ func RunMigrations(db *sql.DB, dir string) error {
 	)`); err != nil {
 		return err
 	}
+	if _, err := conn.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT`); err != nil {
+		return err
+	}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -75,14 +85,30 @@ func RunMigrations(db *sql.DB, dir string) error {
 	sort.Strings(files)
 
 	for _, f := range files {
-		var already int
-		conn.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE filename = $1`, f).Scan(&already)
-		if already > 0 {
-			continue
-		}
 		content, err := os.ReadFile(filepath.Join(dir, f))
 		if err != nil {
 			return err
+		}
+		digest := sha256.Sum256(content)
+		checksum := hex.EncodeToString(digest[:])
+		var already int
+		if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE filename = $1`, f).Scan(&already); err != nil {
+			return err
+		}
+		if already > 0 {
+			var previous sql.NullString
+			if err := conn.QueryRowContext(ctx, `SELECT checksum FROM schema_migrations WHERE filename=$1`, f).Scan(&previous); err != nil {
+				return err
+			}
+			if previous.Valid && previous.String != checksum {
+				return fmt.Errorf("применённая миграция %s была изменена", f)
+			}
+			if !previous.Valid {
+				if _, err := conn.ExecContext(ctx, `UPDATE schema_migrations SET checksum=$1 WHERE filename=$2`, checksum, f); err != nil {
+					return err
+				}
+			}
+			continue
 		}
 		log.Printf("применяю миграцию %s", f)
 		tx, err := conn.BeginTx(ctx, nil)
@@ -93,7 +119,7 @@ func RunMigrations(db *sql.DB, dir string) error {
 			tx.Rollback()
 			return fmt.Errorf("миграция %s: %w", f, err)
 		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations (filename) VALUES ($1)`, f); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (filename,checksum) VALUES ($1,$2)`, f, checksum); err != nil {
 			tx.Rollback()
 			return err
 		}

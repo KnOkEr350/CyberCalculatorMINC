@@ -5,8 +5,10 @@ package calculators
 
 import (
 	"cybercalc/internal/models"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -61,6 +63,17 @@ func num(payload map[string]interface{}, key string) (float64, error) {
 		return 0, fmt.Errorf("поле %q обязательно", key)
 	}
 	switch n := v.(type) {
+	case json.Number:
+		if len(n.String()) > 64 {
+			return 0, fmt.Errorf("слишком длинное число")
+		}
+		if pos := strings.IndexAny(n.String(), "eE"); pos >= 0 {
+			exponent, e := strconv.Atoi(n.String()[pos+1:])
+			if e != nil || exponent < -12 || exponent > 12 {
+				return 0, fmt.Errorf("экспонента числа вне допустимого диапазона")
+			}
+		}
+		return n.Float64()
 	case float64:
 		return n, nil
 	case int:

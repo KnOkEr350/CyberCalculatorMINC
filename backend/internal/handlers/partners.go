@@ -15,8 +15,12 @@ type PartnerHandlers struct {
 }
 
 func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	rows, err := h.DB.Query(`SELECT id, name, partner_kind, agreement_number, other_agreement, created_at, agreement_date
-		FROM partners WHERE ($1='' OR id::text=$1) ORDER BY name`, partnerScope(u, ""))
+	page, ok := pageClause(w, r)
+	if !ok {
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, name, partner_kind, agreement_number, other_agreement, created_at, agreement_date
+		FROM partners WHERE ($1='' OR id::text=$1) ORDER BY name,id`+page, partnerScope(u, ""))
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
@@ -40,7 +44,11 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		}
 		partners = append(partners, p)
 	}
-	middleware.WriteJSON(w, http.StatusOK, partners)
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения организаций")
+		return
+	}
+	writePage(w, r, partners)
 }
 
 type createPartnerRequest struct {
@@ -64,7 +72,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.DirectoryID != "" {
-		if err := h.DB.QueryRow(`SELECT name,partner_kind FROM education_directory WHERE id::text=$1`, req.DirectoryID).Scan(&req.Name, &req.PartnerKind); err != nil {
+		if err := h.DB.QueryRowContext(r.Context(), `SELECT name,partner_kind FROM education_directory WHERE id::text=$1`, req.DirectoryID).Scan(&req.Name, &req.PartnerKind); err != nil {
 			middleware.WriteError(w, 400, "организация не найдена в справочнике")
 			return
 		}
@@ -91,13 +99,13 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 	if req.AgreementDate != "" {
 		agreementDate = req.AgreementDate
 	}
-	tx, err := h.DB.Begin()
+	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
-	err = tx.QueryRow(
+	err = tx.QueryRowContext(r.Context(),
 		`INSERT INTO partners (name, partner_kind, agreement_date, agreement_number, other_agreement, directory_id)
 		 VALUES ($1, $2, $3, $4, $5, NULLIF($6,'')::uuid) RETURNING id`,
 		req.Name, req.PartnerKind, agreementDate, req.AgreementNumber, req.OtherAgreement, req.DirectoryID,

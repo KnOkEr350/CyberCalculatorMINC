@@ -8,7 +8,7 @@ import (
 	"unicode"
 )
 
-func (h *EntryHandlers) validateMentor(category, partner string, payload map[string]interface{}) error {
+func (h *EntryHandlers) validateMentor(r *http.Request, category, partner string, payload map[string]interface{}) error {
 	if category != "internship" && category != "employment_practice" {
 		return nil
 	}
@@ -17,13 +17,13 @@ func (h *EntryHandlers) validateMentor(category, partner string, payload map[str
 		// Compatibility for existing clients: only an already registered mentor
 		// may be resolved by exact name. No implicit directory creation.
 		name, _ := payload["mentor_full_name"].(string)
-		if h.DB.QueryRow(`SELECT id FROM mentors WHERE partner_id::text=$1 AND lower(full_name)=lower($2)`, partner, strings.Join(strings.Fields(name), " ")).Scan(&id) != nil {
+		if h.DB.QueryRowContext(r.Context(), `SELECT id FROM mentors WHERE partner_id::text=$1 AND lower(full_name)=lower($2)`, partner, strings.Join(strings.Fields(name), " ")).Scan(&id) != nil {
 			return fmt.Errorf("выберите наставника из справочника этого партнёра")
 		}
 		payload["mentor_id"] = id
 	}
 	var name string
-	if err := h.DB.QueryRow(`SELECT full_name FROM mentors WHERE id::text=$1 AND partner_id::text=$2`, id, partner).Scan(&name); err != nil {
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT full_name FROM mentors WHERE id::text=$1 AND partner_id::text=$2`, id, partner).Scan(&name); err != nil {
 		return fmt.Errorf("выберите наставника из справочника этого партнёра")
 	}
 	// Snapshot used in reports: callers cannot forge a mentor's full name.
@@ -32,6 +32,10 @@ func (h *EntryHandlers) validateMentor(category, partner string, payload map[str
 }
 
 func (h *EntryHandlers) Mentors(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	page, ok := pageClause(w, r)
+	if !ok {
+		return
+	}
 	partner := r.URL.Query().Get("partner_id")
 	if partner == "" {
 		middleware.WriteError(w, 400, "сначала выберите партнёра")
@@ -40,7 +44,7 @@ func (h *EntryHandlers) Mentors(w http.ResponseWriter, r *http.Request, u middle
 	if !requirePartner(w, u, partner) {
 		return
 	}
-	rows, err := h.DB.Query(`SELECT id,full_name FROM mentors WHERE partner_id::text=$1 ORDER BY full_name`, partner)
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,full_name FROM mentors WHERE partner_id::text=$1 ORDER BY full_name,id`+page, partner)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка справочника")
 		return
@@ -59,7 +63,7 @@ func (h *EntryHandlers) Mentors(w http.ResponseWriter, r *http.Request, u middle
 		middleware.WriteError(w, 500, "ошибка чтения")
 		return
 	}
-	middleware.WriteJSON(w, 200, out)
+	writePage(w, r, out)
 }
 
 func validMentorName(name string) bool {
@@ -91,14 +95,14 @@ func (h *EntryHandlers) CreateMentor(w http.ResponseWriter, r *http.Request, u m
 		middleware.WriteError(w, 400, "укажите полное имя наставника: фамилию, имя и отчество при наличии (до 200 символов)")
 		return
 	}
-	tx, err := h.DB.Begin()
+	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
 	var id string
-	if err := tx.QueryRow(`INSERT INTO mentors(partner_id,full_name) VALUES($1,$2) RETURNING id`, req.PartnerID, req.FullName).Scan(&id); err != nil {
+	if err := tx.QueryRowContext(r.Context(), `INSERT INTO mentors(partner_id,full_name) VALUES($1,$2) RETURNING id`, req.PartnerID, req.FullName).Scan(&id); err != nil {
 		middleware.WriteError(w, 409, "наставник уже есть в справочнике или партнёр не найден")
 		return
 	}
@@ -115,7 +119,15 @@ func (h *EntryHandlers) CreateMentor(w http.ResponseWriter, r *http.Request, u m
 
 func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	q := r.URL.Query()
-	rows, err := h.DB.Query(`SELECT id,name,partner_kind,region,source FROM education_directory WHERE ($1='' OR partner_kind=$1) AND ($2='' OR name ILIKE '%'||$2||'%' OR region ILIKE '%'||$2||'%') ORDER BY name LIMIT 100`, q.Get("partner_kind"), q.Get("q"))
+	if len([]rune(q.Get("q"))) > 200 {
+		middleware.WriteError(w, 400, "поисковый запрос не должен превышать 200 символов")
+		return
+	}
+	if kind := q.Get("partner_kind"); kind != "" && kind != "vuz" && kind != "kolledj" && kind != "school" {
+		middleware.WriteError(w, 400, "некорректный тип организации")
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,name,partner_kind,region,source FROM education_directory WHERE ($1='' OR partner_kind=$1) AND ($2='' OR name ILIKE '%'||$2||'%' OR region ILIKE '%'||$2||'%') ORDER BY name LIMIT 100`, q.Get("partner_kind"), q.Get("q"))
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка справочника")
 		return

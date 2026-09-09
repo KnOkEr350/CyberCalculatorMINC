@@ -5,79 +5,94 @@
 package retention
 
 import (
+	"context"
+	"cybercalc/internal/filestore"
 	"database/sql"
 	"log"
 	"os"
-	"strconv"
 	"time"
 )
 
 // Run запускает бесконечный цикл очистки с заданным интервалом. Предполагается
 // вызов в отдельной горутине из main().
-func Run(db *sql.DB, interval time.Duration, stop <-chan struct{}) {
+func Run(db *sql.DB, interval time.Duration, stop <-chan struct{}, root ...string) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	cleanupOnce(db)
+	uploadRoot := "/data/uploads"
+	if len(root) > 0 {
+		uploadRoot = root[0]
+	}
+	cleanupOnce(db, uploadRoot)
 	for {
 		select {
 		case <-ticker.C:
-			cleanupOnce(db)
+			cleanupOnce(db, uploadRoot)
 		case <-stop:
 			return
 		}
 	}
 }
 
-func cleanupOnce(db *sql.DB) {
+func cleanupOnce(db *sql.DB, root string) {
 	purgeAuditLog(db)
-	purgeExpiredAttachments(db)
+	purgeExpiredAttachments(db, root)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < now()`); err != nil {
+		log.Printf("retention sessions: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM auth_rate_limits WHERE expires_at < now()`); err != nil {
+		log.Printf("retention rate limits: %v", err)
+	}
 }
 
 func purgeAuditLog(db *sql.DB) {
-	days := 60
-	var raw string
-	if err := db.QueryRow(`SELECT value FROM settings WHERE key = 'audit_log_retention_days'`).Scan(&raw); err == nil {
-		if v, err2 := strconv.Atoi(raw); err2 == nil {
-			days = v
-		}
-	}
-	res, err := db.Exec(`DELETE FROM audit_log WHERE created_at < now() - ($1 || ' days')::interval`, days)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var n int64
+	err := db.QueryRowContext(ctx, `SELECT purge_expired_audit()`).Scan(&n)
 	if err != nil {
 		log.Printf("retention: ошибка очистки audit_log: %v", err)
 		return
 	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		log.Printf("retention: удалено %d устаревших записей журнала (> %d дней)", n, days)
+	if n > 0 {
+		log.Printf("retention: удалено %d устаревших записей журнала", n)
 	}
 }
 
-func purgeExpiredAttachments(db *sql.DB) {
-	rows, err := db.Query(`SELECT id, storage_path FROM attachments WHERE retention_expires_at < now()`)
-	if err != nil {
-		log.Printf("retention: ошибка выборки просроченных вложений: %v", err)
+func purgeExpiredAttachments(db *sql.DB, root string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	// The database trigger queues disk deletion atomically with metadata removal.
+	if _, err := db.ExecContext(ctx, `DELETE FROM attachments WHERE id IN (SELECT id FROM attachments WHERE retention_expires_at<now() LIMIT 500)`); err != nil {
+		log.Printf("retention metadata: %v", err)
 		return
 	}
-	type toDelete struct{ id, path string }
-	var items []toDelete
-	for rows.Next() {
-		var t toDelete
-		if err := rows.Scan(&t.id, &t.path); err == nil {
-			items = append(items, t)
+	for i := 0; i < 500; i++ {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return
 		}
-	}
-	rows.Close()
-
-	for _, it := range items {
-		if err := os.Remove(it.path); err != nil && !os.IsNotExist(err) {
-			log.Printf("retention: не удалось удалить файл %s: %v", it.path, err)
-			continue
+		var id int64
+		var path string
+		err = tx.QueryRowContext(ctx, `SELECT id,storage_path FROM file_deletion_queue ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id, &path)
+		if err != nil {
+			tx.Rollback()
+			return
 		}
-		if _, err := db.Exec(`DELETE FROM attachments WHERE id = $1`, it.id); err != nil {
-			log.Printf("retention: не удалось удалить запись вложения %s: %v", it.id, err)
+		if err := filestore.Remove(root, path); err != nil && !os.IsNotExist(err) {
+			tx.Rollback()
+			log.Printf("retention: file deletion failed for job %d", id)
+			return
 		}
-	}
-	if len(items) > 0 {
-		log.Printf("retention: удалено %d просроченных вложений", len(items))
+		if _, err := tx.ExecContext(ctx, `DELETE FROM file_deletion_queue WHERE id=$1`, id); err != nil {
+			tx.Rollback()
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			log.Printf("retention commit: %v", err)
+			return
+		}
 	}
 }

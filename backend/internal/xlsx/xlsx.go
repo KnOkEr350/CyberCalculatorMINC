@@ -9,6 +9,7 @@ package xlsx
 import (
 	"archive/zip"
 	"bytes"
+	"cybercalc/internal/money"
 	"fmt"
 	"io"
 	"strings"
@@ -111,6 +112,8 @@ func (s Sheet) sheetXML() string {
 		for colIdx, v := range values {
 			ref := fmt.Sprintf("%s%d", colLetter(colIdx), rowIdx+1)
 			switch val := v.(type) {
+			case money.Amount:
+				fmt.Fprintf(&b, `<c r="%s"><v>%s</v></c>`, ref, val.String())
 			case float64:
 				fmt.Fprintf(&b, `<c r="%s"><v>%v</v></c>`, ref, val)
 			case int:

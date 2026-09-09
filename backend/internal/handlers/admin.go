@@ -46,7 +46,7 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 	}
 	if req.PartnerID != nil {
 		var exists bool
-		if err := h.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM partners WHERE id::text = $1)`, *req.PartnerID).Scan(&exists); err != nil {
+		if err := h.DB.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text = $1)`, *req.PartnerID).Scan(&exists); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "не удалось проверить выбранного партнёра")
 			return
 		}
@@ -66,22 +66,35 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		entityType = req.EntityType
 	}
 	var id string
-	err = h.DB.QueryRow(
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка сервера")
+		return
+	}
+	defer tx.Rollback()
+	err = tx.QueryRowContext(r.Context(),
 		`INSERT INTO users (email, password_hash, full_name, role, entity_type, partner_id)
 		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
 		req.Email, hash, req.FullName, req.Role, entityType, req.PartnerID,
 	).Scan(&id)
 	if err != nil {
-		middleware.WriteError(w, http.StatusConflict, "не удалось создать пользователя (возможно, email уже занят): "+err.Error())
+		middleware.WriteError(w, http.StatusConflict, "не удалось создать пользователя; возможно, email уже занят")
 		return
 	}
-	logAudit(h.DB, "user", id, "create", admin.ID, "", nil, map[string]string{"email": req.Email, "role": req.Role})
+	if logAudit(tx, "user", id, "create", admin.ID, "", nil, map[string]string{"email": req.Email, "role": req.Role}) != nil || tx.Commit() != nil {
+		middleware.WriteError(w, 500, "ошибка сохранения")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
-	rows, err := h.DB.Query(`SELECT id, email, full_name, role, entity_type, partner_id, is_active, created_at
-		FROM users ORDER BY created_at`)
+	page, ok := pageClause(w, r)
+	if !ok {
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, email, full_name, role, entity_type, partner_id, is_active, created_at
+		FROM users ORDER BY created_at,id`+page)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
@@ -104,7 +117,11 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 		}
 		out = append(out, u)
 	}
-	middleware.WriteJSON(w, http.StatusOK, out)
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения пользователей")
+		return
+	}
+	writePage(w, r, out)
 }
 
 type updateUserRequest struct {
@@ -130,19 +147,19 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, 400, "некорректный тип профиля")
 		return
 	}
-	tx, err := h.DB.Begin()
+	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`SELECT pg_advisory_xact_lock(270004)`); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(270004)`); err != nil {
 		middleware.WriteError(w, 500, "ошибка блокировки")
 		return
 	}
 	var active bool
 	var role, entity, partner string
-	if tx.QueryRow(`SELECT is_active,role,COALESCE(entity_type,''),COALESCE(partner_id::text,'') FROM users WHERE id::text=$1 FOR UPDATE`, userID).Scan(&active, &role, &entity, &partner) != nil {
+	if tx.QueryRowContext(r.Context(), `SELECT is_active,role,COALESCE(entity_type,''),COALESCE(partner_id::text,'') FROM users WHERE id::text=$1 FOR UPDATE`, userID).Scan(&active, &role, &entity, &partner) != nil {
 		middleware.WriteError(w, 404, "пользователь не найден")
 		return
 	}
@@ -171,14 +188,14 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 	}
 	if partner != "" {
 		var exists bool
-		if tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1)`, partner).Scan(&exists) != nil || !exists {
+		if tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1)`, partner).Scan(&exists) != nil || !exists {
 			middleware.WriteError(w, 400, "партнёр не найден")
 			return
 		}
 	}
 	if !active || role != "admin" {
 		var count int
-		if tx.QueryRow(`SELECT count(*) FROM users WHERE role='admin' AND is_active AND id::text<>$1`, userID).Scan(&count) != nil {
+		if tx.QueryRowContext(r.Context(), `SELECT count(*) FROM users WHERE role='admin' AND is_active AND id::text<>$1`, userID).Scan(&count) != nil {
 			middleware.WriteError(w, 500, "ошибка проверки администраторов")
 			return
 		}
@@ -187,12 +204,16 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 			return
 		}
 	}
-	if _, err := tx.Exec(`UPDATE users SET is_active=$1,role=$2,entity_type=NULLIF($3,''),partner_id=NULLIF($4,'')::uuid,updated_at=now() WHERE id::text=$5`, active, role, entity, partner, userID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET is_active=$1,role=$2,entity_type=NULLIF($3,''),partner_id=NULLIF($4,'')::uuid,updated_at=now() WHERE id::text=$5`, active, role, entity, partner, userID); err != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
 	if logAudit(tx, "user", userID, "update", admin.ID, "", old, req) != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM sessions WHERE user_id::text=$1`, userID); err != nil {
+		middleware.WriteError(w, 500, "ошибка отзыва сессий")
 		return
 	}
 	if tx.Commit() != nil {
@@ -205,7 +226,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 // --- Настройки (сроки хранения и т.п.) -------------------------------------
 
 func (h *AdminHandlers) GetSettings(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
-	rows, err := h.DB.Query(`SELECT key, value FROM settings`)
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT key, value FROM settings`)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
@@ -214,8 +235,15 @@ func (h *AdminHandlers) GetSettings(w http.ResponseWriter, r *http.Request, admi
 	out := map[string]string{}
 	for rows.Next() {
 		var k, v string
-		rows.Scan(&k, &v)
+		if rows.Scan(&k, &v) != nil {
+			middleware.WriteError(w, 500, "ошибка чтения настроек")
+			return
+		}
 		out[k] = v
+	}
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения настроек")
+		return
 	}
 	middleware.WriteJSON(w, http.StatusOK, out)
 }
@@ -247,7 +275,20 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 			return
 		}
 	}
-	_, err := h.DB.Exec(
+	if req.Key == "audit_log_retention_days" {
+		days, _ := strconv.Atoi(req.Value)
+		if days < 60 {
+			middleware.WriteError(w, 400, "журнал аудита хранится минимум 60 дней")
+			return
+		}
+	}
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка сервера")
+		return
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(r.Context(),
 		`INSERT INTO settings (key, value, updated_by) VALUES ($1,$2,$3)
 		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_by = $3, updated_at = now()`,
 		req.Key, req.Value, admin.ID,
@@ -258,7 +299,10 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 	}
 	// audit_log.entity_id имеет тип UUID, а ключ настройки — строка; сам ключ
 	// сохраняется в new_value, поэтому UUID для этого типа события не задаём.
-	logAudit(h.DB, "settings", "", "settings_change", admin.ID, "", nil, req)
+	if logAudit(tx, "settings", "", "settings_change", admin.ID, "", nil, req) != nil || tx.Commit() != nil {
+		middleware.WriteError(w, 500, "ошибка сохранения")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -287,9 +331,9 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 
 	query := `SELECT id, entity_type, entity_id, action, user_id, comment_text, old_value, new_value, created_at
 		FROM audit_log WHERE ` + joinAnd(conds) + ` ORDER BY created_at DESC LIMIT ` + strconv.Itoa(limit)
-	rows, err := h.DB.Query(query, args...)
+	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса: "+err.Error())
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
 	}
 	defer rows.Close()
@@ -322,6 +366,10 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 			json.Unmarshal(newRaw, &item.NewValue)
 		}
 		out = append(out, item)
+	}
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения аудита")
+		return
 	}
 	middleware.WriteJSON(w, http.StatusOK, out)
 }

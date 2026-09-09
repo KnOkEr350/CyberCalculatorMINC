@@ -5,6 +5,7 @@ import (
 	"cybercalc/internal/calculators"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	"cybercalc/internal/money"
 	"cybercalc/internal/xlsx"
 	"encoding/hex"
 	"encoding/json"
@@ -83,13 +84,13 @@ func uploadedWorkbook(w http.ResponseWriter, r *http.Request) ([]byte, [][]strin
 type importRow struct {
 	Row     int                    `json:"row"`
 	Payload map[string]interface{} `json:"payload"`
-	Amount  float64                `json:"amount_rub"`
+	Amount  money.Amount           `json:"amount_rub"`
 }
 type importResult struct {
-	Rows      []importRow `json:"rows"`
-	Errors    []string    `json:"errors"`
-	Total     float64     `json:"total_rub"`
-	Committed bool        `json:"committed"`
+	Rows      []importRow  `json:"rows"`
+	Errors    []string     `json:"errors"`
+	Total     money.Amount `json:"total_rub"`
+	Committed bool         `json:"committed"`
 }
 
 func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -104,11 +105,11 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		return
 	}
 	var audience string
-	if h.DB.QueryRow(`SELECT partner_kind FROM partners WHERE id::text=$1`, partner).Scan(&audience) != nil {
+	if h.DB.QueryRowContext(r.Context(), `SELECT partner_kind FROM partners WHERE id::text=$1`, partner).Scan(&audience) != nil {
 		middleware.WriteError(w, 400, "партнёр не найден")
 		return
 	}
-	if err := h.validateEntryContext(category, audience, partner); err != nil {
+	if err := h.validateEntryContext(r, category, audience, partner); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
@@ -169,11 +170,12 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 					continue
 				}
 				if f.Type == "number" {
-					n, e := strconv.ParseFloat(strings.ReplaceAll(value, ",", "."), 64)
+					n := strings.ReplaceAll(value, ",", ".")
+					_, e := strconv.ParseFloat(n, 64)
 					if e != nil {
 						return fmt.Errorf("%s: нужно число", f.Label)
 					}
-					row.Payload[key] = n
+					row.Payload[key] = json.Number(n)
 				} else {
 					row.Payload[key] = value
 				}
@@ -181,22 +183,22 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 			if category == "internship" || category == "employment_practice" {
 				var id string
 				name, _ := row.Payload["mentor_full_name"].(string)
-				if h.DB.QueryRow(`SELECT id FROM mentors WHERE partner_id::text=$1 AND lower(full_name)=lower($2)`, partner, strings.Join(strings.Fields(name), " ")).Scan(&id) != nil {
+				if h.DB.QueryRowContext(r.Context(), `SELECT id FROM mentors WHERE partner_id::text=$1 AND lower(full_name)=lower($2)`, partner, strings.Join(strings.Fields(name), " ")).Scan(&id) != nil {
 					return fmt.Errorf("наставник %q отсутствует в справочнике партнёра", name)
 				}
 				row.Payload["mentor_id"] = id
 			}
-			if err := h.validateMentor(category, partner, row.Payload); err != nil {
+			if err := h.validateMentor(r, category, partner, row.Payload); err != nil {
 				return err
 			}
 			if err := calculators.ValidatePayload(calc, row.Payload); err != nil {
 				return err
 			}
-			amount, e := calc.Calculate(models.Audience(audience), row.Payload)
+			amount, e := calculators.CalculateAmount(category, models.Audience(audience), row.Payload)
 			if e != nil {
 				return e
 			}
-			if e := calculators.ValidateAmount(amount); e != nil {
+			if e := calculators.ValidateAmount(amount.Rubles()); e != nil {
 				return e
 			}
 			row.Amount = amount
@@ -206,7 +208,12 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: %s", row.Row, rowErr))
 		} else {
 			result.Rows = append(result.Rows, row)
-			result.Total += row.Amount
+			var sumErr error
+			result.Total, sumErr = money.Add(result.Total, row.Amount)
+			if sumErr != nil {
+				middleware.WriteError(w, 400, sumErr.Error())
+				return
+			}
 		}
 	}
 	if len(result.Rows) == 0 && len(result.Errors) == 0 {
@@ -219,13 +226,13 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	context, _ := json.Marshal([]interface{}{u.ID, category, partner, period, year})
 	digest := sha256.Sum256(append(context, data...))
 	fingerprint := hex.EncodeToString(digest[:])
-	tx, err := h.DB.Begin()
+	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
-	inserted, err := tx.Exec(`INSERT INTO entry_imports(fingerprint,created_by) VALUES($1,$2) ON CONFLICT DO NOTHING`, fingerprint, u.ID)
+	inserted, err := tx.ExecContext(r.Context(), `INSERT INTO entry_imports(fingerprint,created_by) VALUES($1,$2) ON CONFLICT DO NOTHING`, fingerprint, u.ID)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка регистрации импорта")
 		return
@@ -242,7 +249,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	for _, row := range result.Rows {
 		payload, _ := json.Marshal(row.Payload)
 		var id string
-		if tx.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, category, partner, period, year, audience, payload, row.Amount, u.ID).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, category, partner, period, year, audience, payload, row.Amount, u.ID).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}
@@ -302,14 +309,14 @@ func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request
 	}
 	commit := r.URL.Query().Get("commit") == "1" && len(errors) == 0
 	if commit {
-		tx, e := h.DB.Begin()
+		tx, e := h.DB.BeginTx(r.Context(), nil)
 		if e != nil {
 			middleware.WriteError(w, 500, "ошибка транзакции")
 			return
 		}
 		defer tx.Rollback()
 		for _, row := range valid {
-			if _, e := tx.Exec(`INSERT INTO education_directory(name,partner_kind,region,source) VALUES($1,$2,$3,$4) ON CONFLICT(name,partner_kind,region) DO UPDATE SET source=EXCLUDED.source,updated_at=now()`, row[0], row[1], row[2], row[3]); e != nil {
+			if _, e := tx.ExecContext(r.Context(), `INSERT INTO education_directory(name,partner_kind,region,source) VALUES($1,$2,$3,$4) ON CONFLICT(name,partner_kind,region) DO UPDATE SET source=EXCLUDED.source,updated_at=now()`, row[0], row[1], row[2], row[3]); e != nil {
 				middleware.WriteError(w, 500, "импорт отменён")
 				return
 			}

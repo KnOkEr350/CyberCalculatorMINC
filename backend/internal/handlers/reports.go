@@ -3,6 +3,7 @@ package handlers
 import (
 	"cybercalc/internal/calculators"
 	"cybercalc/internal/docx"
+	"cybercalc/internal/money"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -20,11 +21,12 @@ type ReportHandlers struct {
 }
 
 type reportEntryRow struct {
+	Eligible     bool
 	PartnerID    string
 	PartnerName  sql.NullString
 	CategoryCode string
 	Audience     string
-	AmountRub    float64
+	AmountRub    money.Amount
 	Payload      []byte
 }
 
@@ -47,8 +49,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
-	query := `SELECT COALESCE(e.partner_id::text,''), p.name, e.category_code, e.audience, e.amount_rub, e.payload
-		FROM entries e LEFT JOIN partners p ON p.id = e.partner_id
+	query := `SELECT COALESCE(e.partner_id::text,''), p.name, e.category_code, e.audience, e.amount_rub, e.payload, eligibility.eligible
+		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id = e.partner_id
 		WHERE e.period_type = $1 AND e.report_year = $2`
 	args := []interface{}{periodType, year}
 	if categoryFilter != "" {
@@ -63,30 +65,40 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		args = append(args, mentor)
 		query += fmt.Sprintf(" AND e.payload->>'mentor_id'=$%d", len(args))
 	}
-	query += ` ORDER BY p.name NULLS LAST, e.category_code`
+	query += ` ORDER BY p.name NULLS LAST, e.category_code LIMIT 10001`
 
-	rows, err := h.DB.Query(query, args...)
+	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
-		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса: "+err.Error())
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
 	}
 	defer rows.Close()
 
 	var data []reportEntryRow
+	var payloadBytes int
 	for rows.Next() {
 		var row reportEntryRow
-		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.Payload); err != nil {
+		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.Payload, &row.Eligible); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
 		data = append(data, row)
+		payloadBytes += len(row.Payload)
+		if payloadBytes > 16<<20 {
+			middleware.WriteError(w, 422, "слишком большой отчёт; сузьте фильтры")
+			return
+		}
+		if len(data) > 10000 {
+			middleware.WriteError(w, 422, "в отчёте более 10000 записей; выберите партнёра или категорию")
+			return
+		}
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения отчёта")
 		return
 	}
 	categoryNames := map[string]string{}
-	categoryRows, err := h.DB.Query(`SELECT code,name FROM activity_categories`)
+	categoryRows, err := h.DB.QueryContext(r.Context(), `SELECT code,name FROM activity_categories`)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка справочника")
 		return
@@ -109,20 +121,31 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	audiences := map[string]string{"vuz": "Вуз", "kolledj": "СПО", "school": "Школа"}
 
 	wb := xlsx.New()
-	headers := []string{"Партнёр", "Категория активности", "Аудитория", "Сумма затрат, руб.", "Параметры"}
+	headers := []string{"Партнёр", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Проверка обязательностей (не согласование)"}
+	status := func(d reportEntryRow) string {
+		if d.Eligible {
+			return "Условия заполнены; требуется проверка документов"
+		}
+		return "Не учитывается в проверенной сумме: обязательные активности или условие другой ОО для TOP IT не заполнены"
+	}
 
 	// Сводный лист для МЦ — все партнёры вместе.
 	var consolidated [][]interface{}
-	var total float64
+	var total money.Amount
 	for _, d := range data {
 		partnerName := "—"
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
-		consolidated = append(consolidated, []interface{}{partnerName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload)})
-		total += d.AmountRub
+		consolidated = append(consolidated, []interface{}{partnerName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		var sumErr error
+		total, sumErr = money.Add(total, d.AmountRub)
+		if sumErr != nil {
+			middleware.WriteError(w, 422, sumErr.Error())
+			return
+		}
 	}
-	consolidated = append(consolidated, []interface{}{"ИТОГО", "", "", total, ""})
+	consolidated = append(consolidated, []interface{}{"ИТОГО (включая незавершённые записи)", "", "", total, "", "Рабочий расчёт, не согласованный отчёт"})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	if q.Get("format") == "docx" {
 		docRows := [][]string{}
@@ -189,7 +212,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if _, ok := byPartner[key]; !ok {
 			order = append(order, key)
 		}
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload)})
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 	}
 	for _, key := range order {
 		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])

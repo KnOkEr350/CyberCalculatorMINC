@@ -57,13 +57,22 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 		var entityType sql.NullString
 		var partnerID sql.NullString
 		var role string
-		err := db.QueryRow(`SELECT id, role, entity_type, partner_id FROM users WHERE id = $1 AND is_active`, userID).
-			Scan(&u.ID, &role, &entityType, &partnerID)
+		var mfaEnabled bool
+		err := db.QueryRowContext(r.Context(), `SELECT id, role, entity_type, partner_id,mfa_secret IS NOT NULL FROM users WHERE id = $1 AND is_active`, userID).
+			Scan(&u.ID, &role, &entityType, &partnerID, &mfaEnabled)
 		if err != nil {
 			WriteError(w, http.StatusUnauthorized, "пользователь не найден или деактивирован")
 			return
 		}
 		u.Role = models.Role(role)
+		if required, _ := r.Context().Value(ctxKey("require_mfa")).(bool); required && role == "admin" && !mfaEnabled {
+			switch r.URL.Path {
+			case "/api/auth/me", "/api/auth/password", "/api/auth/mfa/enroll", "/api/auth/mfa/confirm":
+			default:
+				WriteError(w, 403, "сначала настройте двухфакторную защиту администратора")
+				return
+			}
+		}
 		if entityType.Valid {
 			u.EntityType = models.EntityType(entityType.String)
 		}
