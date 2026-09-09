@@ -2,6 +2,7 @@ package filestore
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -18,13 +19,13 @@ import (
 
 // Validate permits supporting documents, images and plain text, not active web
 // content, executables or macro-enabled Office files.
-func Validate(name, path string) error {
+func Validate(name, path string, roots ...string) error {
 	for _, c := range name {
 		if unicode.IsControl(c) {
 			return fmt.Errorf("недопустимое имя файла")
 		}
 	}
-	f, err := os.Open(path)
+	f, err := openForInspection(path, roots)
 	if err != nil {
 		return err
 	}
@@ -55,11 +56,14 @@ func Validate(name, path string) error {
 			return nil
 		}
 	case ".docx", ".xlsx", ".pptx":
-		z, err := zip.OpenReader(path)
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		z, err := zip.NewReader(f, info.Size())
 		if err != nil {
 			return fmt.Errorf("повреждённый документ Office")
 		}
-		defer z.Close()
 		if len(z.File) > 2000 {
 			return fmt.Errorf("слишком сложный документ Office")
 		}
@@ -89,7 +93,7 @@ func Validate(name, path string) error {
 
 // Scan streams to clamd without exposing local filesystem paths. Failure is
 // fail-closed when a scanner is configured; infected files are never published.
-func Scan(ctx context.Context, address, path string) error {
+func Scan(ctx context.Context, address, path string, roots ...string) error {
 	if address == "" {
 		return nil
 	}
@@ -98,6 +102,8 @@ func Scan(ctx context.Context, address, path string) error {
 		return fmt.Errorf("антивирус недоступен")
 	}
 	defer conn.Close()
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopCancel()
 	deadline := time.Now().Add(60 * time.Second)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
@@ -108,7 +114,7 @@ func Scan(ctx context.Context, address, path string) error {
 	if _, err := io.WriteString(conn, "zINSTREAM\x00"); err != nil {
 		return err
 	}
-	f, err := os.Open(path)
+	f, err := openForInspection(path, roots)
 	if err != nil {
 		return err
 	}
@@ -136,12 +142,20 @@ func Scan(ctx context.Context, address, path string) error {
 	if _, err := conn.Write([]byte{0, 0, 0, 0}); err != nil {
 		return err
 	}
-	response, err := io.ReadAll(io.LimitReader(conn, 4096))
+	// zINSTREAM replies end with NUL; clamd may keep the connection open.
+	response, err := bufio.NewReader(io.LimitReader(conn, 4097)).ReadString(0)
 	if err != nil {
 		return fmt.Errorf("ошибка проверки антивирусом")
 	}
-	if strings.TrimRight(string(response), "\x00\r\n") != "stream: OK" {
+	if len(response) > 4096 || response != "stream: OK\x00" {
 		return fmt.Errorf("файл не прошёл антивирусную проверку")
 	}
 	return nil
+}
+
+func openForInspection(path string, roots []string) (*os.File, error) {
+	if len(roots) > 0 {
+		return Open(roots[0], path)
+	}
+	return os.Open(path)
 }

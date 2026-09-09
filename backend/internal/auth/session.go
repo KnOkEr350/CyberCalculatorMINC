@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -27,36 +28,54 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
-// CreateSession создаёт запись сессии в БД и выставляет cookie.
-func CreateSession(w http.ResponseWriter, db *sql.DB, userID string, ttl time.Duration, secure ...bool) error {
+type sessionExecer interface {
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+}
+
+// InsertSession participates in the login transaction. The caller locks the
+// user row, commits authentication and only then sends the bearer cookie.
+func InsertSession(ctx context.Context, db sessionExecer, userID string, ttl time.Duration) (Session, error) {
 	token, err := NewToken()
 	if err != nil {
-		return err
+		return Session{}, err
 	}
 	expires := time.Now().Add(ttl)
 	hash := TokenHash(token)
-	_, err = db.Exec(`INSERT INTO sessions (token, token_hash, user_id, expires_at) VALUES ($1, $1, $2, $3)`,
+	_, err = db.ExecContext(ctx, `INSERT INTO sessions (token, token_hash, user_id, expires_at) VALUES ($1, $1, $2, $3)`,
 		hash, userID, expires)
 	if err != nil {
-		return err
+		return Session{}, err
 	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1 AND token<>$2 AND (expires_at<=now() OR token NOT IN (SELECT token FROM sessions WHERE user_id=$1 AND token<>$2 ORDER BY created_at DESC,token LIMIT 4))`, userID, hash); err != nil {
+		return Session{}, err
+	}
+	return Session{Token: token, UserID: userID, ExpiresAt: expires}, nil
+}
+
+func SetSessionCookie(w http.ResponseWriter, session Session, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
-		Value:    token,
+		Value:    session.Token,
 		Path:     "/",
-		Expires:  expires,
+		Expires:  session.ExpiresAt,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   len(secure) > 0 && secure[0],
+		Secure:   secure,
 	})
-	return nil
 }
 
 // DestroySession удаляет сессию из БД и стирает cookie.
-func DestroySession(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+func DestroySession(w http.ResponseWriter, r *http.Request, db *sql.DB, secure bool) error {
 	if c, err := r.Cookie(CookieName); err == nil {
-		db.ExecContext(r.Context(), `DELETE FROM sessions WHERE token_hash = $1 OR (token_hash IS NULL AND token = $2)`, TokenHash(c.Value), c.Value)
+		if _, err := db.ExecContext(r.Context(), `DELETE FROM sessions WHERE token_hash = $1 OR (token_hash IS NULL AND token = $2)`, TokenHash(c.Value), c.Value); err != nil {
+			return err
+		}
 	}
+	ClearSessionCookie(w, secure)
+	return nil
+}
+
+func ClearSessionCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    "",
@@ -65,7 +84,7 @@ func DestroySession(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
-		Secure:   r.TLS != nil || r.URL.Scheme == "https",
+		Secure:   secure,
 	})
 }
 

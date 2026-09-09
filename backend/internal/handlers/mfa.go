@@ -46,8 +46,13 @@ func (h *AuthHandlers) MFAEnroll(w http.ResponseWriter, r *http.Request, u middl
 		middleware.WriteError(w, 503, "на сервере не настроен ключ MFA")
 		return
 	}
-	if _, err := h.DB.ExecContext(r.Context(), `UPDATE users SET mfa_pending_secret=$1,mfa_pending_expires=now()+interval '10 minutes' WHERE id=$2 AND mfa_secret IS NULL`, sealed, u.ID); err != nil {
+	result, err := h.DB.ExecContext(r.Context(), `UPDATE users SET mfa_pending_secret=$1,mfa_pending_expires=now()+interval '10 minutes' WHERE id=$2 AND mfa_secret IS NULL AND is_active=true AND password_hash=$3`, sealed, u.ID, password)
+	if err != nil {
 		middleware.WriteError(w, 500, "ошибка сервера")
+		return
+	}
+	if n, err := result.RowsAffected(); err != nil || n != 1 {
+		middleware.WriteError(w, 409, "учётная запись изменилась; начните настройку заново")
 		return
 	}
 	middleware.WriteJSON(w, 200, map[string]string{"secret": secret, "issuer": "CyberCalculator", "algorithm": "SHA1", "digits": "6", "period": "30"})
@@ -73,7 +78,7 @@ func (h *AuthHandlers) MFAConfirm(w http.ResponseWriter, r *http.Request, u midd
 	}
 	defer tx.Rollback()
 	var sealed string
-	if tx.QueryRowContext(r.Context(), `SELECT mfa_pending_secret FROM users WHERE id=$1 AND mfa_secret IS NULL AND mfa_pending_expires>now() FOR UPDATE`, u.ID).Scan(&sealed) != nil {
+	if tx.QueryRowContext(r.Context(), `SELECT mfa_pending_secret FROM users WHERE id=$1 AND is_active=true AND mfa_secret IS NULL AND mfa_pending_expires>now() FOR UPDATE`, u.ID).Scan(&sealed) != nil {
 		middleware.WriteError(w, 400, "начните настройку заново")
 		return
 	}
@@ -113,15 +118,15 @@ func (h *AuthHandlers) MFAConfirm(w http.ResponseWriter, r *http.Request, u midd
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
-	auth.DestroySession(w, r, h.DB)
+	auth.ClearSessionCookie(w, h.SecureCookie)
 	middleware.WriteJSON(w, 200, map[string]interface{}{"recovery_codes": codes})
 }
 
-func (h *AuthHandlers) verifySecondFactor(r *http.Request, id, sealed, code string) bool {
+func (h *AuthHandlers) verifySecondFactor(r *http.Request, tx *sql.Tx, id, sealed, code string) bool {
 	code = strings.TrimSpace(code)
 	if len(code) == 20 {
 		var removed string
-		return h.DB.QueryRowContext(r.Context(), `DELETE FROM mfa_recovery_codes WHERE user_id=$1 AND code_hash=$2 RETURNING code_hash`, id, auth.TokenHash(code)).Scan(&removed) == nil
+		return tx.QueryRowContext(r.Context(), `DELETE FROM mfa_recovery_codes WHERE user_id=$1 AND code_hash=$2 RETURNING code_hash`, id, auth.TokenHash(code)).Scan(&removed) == nil
 	}
 	secret, err := auth.OpenMFA(h.MFAKey, sealed, id)
 	if err != nil {
@@ -132,6 +137,6 @@ func (h *AuthHandlers) verifySecondFactor(r *http.Request, id, sealed, code stri
 		return false
 	}
 	var advanced int64
-	err = h.DB.QueryRowContext(r.Context(), `UPDATE users SET mfa_last_counter=$1 WHERE id=$2 AND mfa_last_counter<$1 RETURNING mfa_last_counter`, counter, id).Scan(&advanced)
-	return err != sql.ErrNoRows && err == nil
+	err = tx.QueryRowContext(r.Context(), `UPDATE users SET mfa_last_counter=$1 WHERE id=$2 AND mfa_last_counter<$1 RETURNING mfa_last_counter`, counter, id).Scan(&advanced)
+	return err == nil
 }

@@ -237,7 +237,7 @@ type updateEntryRequest struct {
 }
 
 func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
-	if !requireEntry(w, h.DB, u, entryID) {
+	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}
 	var req updateEntryRequest
@@ -361,7 +361,7 @@ func (h *EntryHandlers) Comments(w http.ResponseWriter, r *http.Request, u middl
 	if !ok {
 		return
 	}
-	if !requireEntry(w, h.DB, u, entryID) {
+	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, entry_id, user_id, comment_text, created_at

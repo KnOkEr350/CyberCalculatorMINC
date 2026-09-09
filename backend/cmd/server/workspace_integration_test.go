@@ -279,6 +279,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 			}
 		}
 	}
+	t.Run("atomic authentication and session rollback", func(t *testing.T) { checkAtomicAuthentication(t, db) })
 	t.Log("ACL, formulas, mentors, optional batch files, expiry, Excel atomicity/idempotency and exports verified")
 }
 

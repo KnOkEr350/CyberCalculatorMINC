@@ -21,9 +21,9 @@ func requirePartner(w http.ResponseWriter, u middleware.AuthUser, id string) boo
 	}
 	return true
 }
-func requireEntry(w http.ResponseWriter, db *sql.DB, u middleware.AuthUser, id string) bool {
+func requireEntry(w http.ResponseWriter, r *http.Request, db *sql.DB, u middleware.AuthUser, id string) bool {
 	var partner sql.NullString
-	err := db.QueryRow(`SELECT partner_id FROM entries WHERE id::text=$1`, id).Scan(&partner)
+	err := db.QueryRowContext(r.Context(), `SELECT partner_id FROM entries WHERE id::text=$1`, id).Scan(&partner)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, 404, "запись не найдена")
 		return false

@@ -27,6 +27,24 @@ func TestStorageConfinement(t *testing.T) {
 	if _, err := os.Stat(secret); err != nil {
 		t.Fatal("external file lost")
 	}
+	for _, entry := range []string{"escape", "../outside", "/absolute"} {
+		if f, _, err := Create(root, entry, "new-file"); err == nil {
+			f.Close()
+			t.Fatal("created file outside storage", entry)
+		}
+	}
+	f, path, err := Create(root, "entry", "file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if f, _, err := Create(root, "entry", "file"); err == nil {
+		f.Close()
+		t.Fatal("overwrote existing file")
+	}
+	if err := Remove(root, path); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestContentValidation(t *testing.T) {

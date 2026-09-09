@@ -39,8 +39,13 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	for key, limit := range map[string]int{"email:" + email: 12, "peer:" + ip: 100} {
-		allowed, err := auth.AllowAttempt(r.Context(), h.DB, key, limit)
+	// Check the bounded peer bucket before allocating an email bucket. Never
+	// trust client-supplied forwarded IP headers at this layer.
+	for _, bucket := range []struct {
+		key   string
+		limit int
+	}{{"peer:" + ip, 600}, {"email:" + email, 12}} {
+		allowed, err := auth.AllowAttempt(r.Context(), h.DB, bucket.key, bucket.limit)
 		if err != nil {
 			middleware.WriteError(w, 503, "вход временно недоступен")
 			return
@@ -72,6 +77,25 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, http.StatusUnauthorized, "неверный email или пароль")
 		return
 	}
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, 503, "вход временно недоступен")
+		return
+	}
+	defer tx.Rollback()
+	// Password changes, deactivation and MFA enrolment take the same row lock.
+	// Recheck the snapshot after the expensive KDF before minting a session.
+	var currentHash string
+	var currentMFA sql.NullString
+	var currentActive bool
+	if err := tx.QueryRowContext(r.Context(), `SELECT password_hash,mfa_secret,is_active FROM users WHERE id=$1 FOR UPDATE`, id).Scan(&currentHash, &currentMFA, &currentActive); err != nil {
+		middleware.WriteError(w, 503, "вход временно недоступен")
+		return
+	}
+	if currentHash != passwordHash || currentMFA != mfa || !currentActive {
+		middleware.WriteError(w, 401, "учётная запись изменилась; повторите вход")
+		return
+	}
 
 	if auth.NeedsRehash(passwordHash) {
 		hash, hashErr := auth.HashPassword(req.Password)
@@ -79,12 +103,12 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 			middleware.WriteError(w, 500, "ошибка сервера")
 			return
 		}
-		if _, err := h.DB.ExecContext(r.Context(), `UPDATE users SET password_hash=$1 WHERE id=$2 AND password_hash=$3`, hash, id, passwordHash); err != nil {
+		if _, err := tx.ExecContext(r.Context(), `UPDATE users SET password_hash=$1 WHERE id=$2 AND password_hash=$3`, hash, id, passwordHash); err != nil {
 			middleware.WriteError(w, 500, "ошибка сервера")
 			return
 		}
 	}
-	if mfa.Valid && !h.verifySecondFactor(r, id, mfa.String, req.Code) {
+	if mfa.Valid && !h.verifySecondFactor(r, tx, id, mfa.String, req.Code) {
 		middleware.WriteError(w, 401, "введите действующий код приложения-аутентификатора или резервный код")
 		return
 	}
@@ -92,14 +116,20 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 	if ttl <= 0 {
 		ttl = 12 * time.Hour
 	}
-	if err := logAudit(h.DB, "user", id, "login", id, "", nil, nil); err != nil {
+	if err := logAudit(tx, "user", id, "login", id, "", nil, nil); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
-	if err := auth.CreateSession(w, h.DB, id, ttl, h.SecureCookie); err != nil {
+	session, err := auth.InsertSession(r.Context(), tx, id, ttl)
+	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "не удалось создать сессию")
 		return
 	}
+	if err := tx.Commit(); err != nil {
+		middleware.WriteError(w, 503, "вход временно недоступен")
+		return
+	}
+	auth.SetSessionCookie(w, session, h.SecureCookie)
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -149,7 +179,7 @@ func (h *AuthHandlers) ChangePassword(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET password_hash=$1, updated_at=now() WHERE id=$2`, hash, u.ID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET password_hash=$1, mfa_pending_secret=NULL, mfa_pending_expires=NULL, updated_at=now() WHERE id=$2`, hash, u.ID); err != nil {
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
@@ -161,12 +191,15 @@ func (h *AuthHandlers) ChangePassword(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
-	auth.DestroySession(w, r, h.DB)
+	auth.ClearSessionCookie(w, h.SecureCookie)
 	middleware.WriteJSON(w, 200, map[string]string{"status": "ok"})
 }
 
 func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
-	auth.DestroySession(w, r, h.DB)
+	if err := auth.DestroySession(w, r, h.DB, h.SecureCookie); err != nil {
+		middleware.WriteError(w, 503, "не удалось завершить сессию; повторите выход")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

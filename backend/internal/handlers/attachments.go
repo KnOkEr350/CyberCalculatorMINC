@@ -4,14 +4,15 @@ import (
 	"crypto/rand"
 	"cybercalc/internal/filestore"
 	"cybercalc/internal/middleware"
+	"cybercalc/internal/models"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -36,13 +37,13 @@ func randomHex(n int) (string, error) {
 
 // Optional attachments for plan and fact. One batch is all-or-nothing.
 func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
-	if !requireEntry(w, h.DB, u, entryID) {
+	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(1<<20))
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		if r.MultipartForm != nil {
-			r.MultipartForm.RemoveAll()
+			_ = r.MultipartForm.RemoveAll()
 		}
 		middleware.WriteError(w, 400, "ожидаются файлы multipart/form-data, не более 64 МБ суммарно")
 		return
@@ -55,64 +56,38 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	}
 	var total int64
 	for _, f := range headers {
-		total += f.Size
-		if f.Size <= 0 || len([]rune(f.Filename)) > 255 {
-			middleware.WriteError(w, 400, "пустой файл или слишком длинное имя")
+		if f.Size <= 0 || f.Size > maxAttachmentSize || len([]rune(f.Filename)) > 255 {
+			middleware.WriteError(w, 400, "пустой файл, недопустимый размер или слишком длинное имя")
 			return
 		}
+		total += f.Size
 	}
 	if total > maxAttachmentSize {
 		middleware.WriteError(w, 413, "суммарный размер превышает 64 МБ")
 		return
 	}
-	days := 365
-	var raw string
-	if h.DB.QueryRowContext(r.Context(), "SELECT value FROM settings WHERE key='attachment_retention_days'").Scan(&raw) == nil {
-		if v, e := strconv.Atoi(raw); e == nil && v > 0 && v <= 3650 {
-			days = v
-		}
+	type stagedFile struct {
+		name, path string
+		size       int64
 	}
-	expires := time.Now().AddDate(0, 0, days)
-	dir := filepath.Join(h.UploadDir, entryID)
-	if os.MkdirAll(dir, 0750) != nil {
-		middleware.WriteError(w, 500, "не удалось создать каталог")
-		return
-	}
-	tx, err := h.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка транзакции")
-		return
-	}
-	defer tx.Rollback()
-	// One quota lock across replicas prevents concurrent uploads exceeding quota.
-	if _, err := tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(270006)`); err != nil {
-		middleware.WriteError(w, 503, "загрузка временно недоступна")
-		return
-	}
-	quota := h.QuotaBytes
-	if quota <= 0 {
-		quota = 1 << 30
-	}
-	var used int64
-	if tx.QueryRowContext(r.Context(), `SELECT COALESCE(sum(size_bytes),0) FROM attachments WHERE uploaded_by=$1`, u.ID).Scan(&used) != nil {
-		middleware.WriteError(w, 500, "ошибка проверки квоты")
-		return
-	}
-	if used+total > quota {
-		middleware.WriteError(w, 413, "исчерпана квота хранения пользователя")
-		return
-	}
-	paths := []string{}
-	committed := false
+	staged := make([]stagedFile, 0, len(headers))
+	// Files are unreferenced until the short metadata transaction commits.
+	// Do not hold a database connection or quota lock during scanning.
+	commitAttempted := false
 	defer func() {
-		if !committed {
-			for _, p := range paths {
-				os.Remove(p)
+		if !commitAttempted {
+			for _, f := range staged {
+				if err := filestore.Remove(h.UploadDir, f.path); err != nil && !os.IsNotExist(err) {
+					slog.Error("staged file cleanup failed", "entry_id", entryID)
+				}
 			}
 		}
 	}()
-	out := []map[string]interface{}{}
 	for _, header := range headers {
+		if r.Context().Err() != nil {
+			middleware.WriteError(w, 408, "запрос отменён")
+			return
+		}
 		src, err := header.Open()
 		if err != nil {
 			middleware.WriteError(w, 400, "не удалось прочитать файл")
@@ -124,14 +99,13 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 500, "ошибка создания файла")
 			return
 		}
-		path := filepath.Join(dir, filename)
-		dst, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
+		dst, path, err := filestore.Create(h.UploadDir, entryID, filename)
 		if err != nil {
 			src.Close()
 			middleware.WriteError(w, 500, "не удалось сохранить файл")
 			return
 		}
-		paths = append(paths, path)
+		staged = append(staged, stagedFile{header.Filename, path, header.Size})
 		size, copyErr := io.Copy(dst, io.LimitReader(src, maxAttachmentSize+1))
 		closeErr := dst.Close()
 		src.Close()
@@ -139,32 +113,89 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 500, "ошибка записи файла")
 			return
 		}
-		if err := filestore.Validate(header.Filename, path); err != nil {
+		if err := filestore.Validate(header.Filename, path, h.UploadDir); err != nil {
 			middleware.WriteError(w, 400, err.Error())
 			return
 		}
-		if err := filestore.Scan(r.Context(), h.ScannerAddress, path); err != nil {
+		if err := filestore.Scan(r.Context(), h.ScannerAddress, path, h.UploadDir); err != nil {
 			middleware.WriteError(w, 422, "файл не прошёл проверку или антивирус недоступен")
 			return
 		}
+	}
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка транзакции")
+		return
+	}
+	defer tx.Rollback()
+	// Lock per uploader: unrelated users do not block one another.
+	var active bool
+	var role, entity string
+	var assigned sql.NullString
+	if tx.QueryRowContext(r.Context(), `SELECT is_active,role,COALESCE(entity_type,''),partner_id FROM users WHERE id=$1 FOR NO KEY UPDATE`, u.ID).Scan(&active, &role, &entity, &assigned) != nil || !active {
+		middleware.WriteError(w, 403, "учётная запись недоступна")
+		return
+	}
+	current := middleware.AuthUser{ID: u.ID, Role: models.Role(role), EntityType: models.EntityType(entity)}
+	if assigned.Valid {
+		current.PartnerID = &assigned.String
+	}
+	var partner sql.NullString
+	if tx.QueryRowContext(r.Context(), `SELECT partner_id FROM entries WHERE id::text=$1 FOR SHARE`, entryID).Scan(&partner) != nil {
+		middleware.WriteError(w, 404, "запись не найдена")
+		return
+	}
+	if !requirePartner(w, current, partner.String) {
+		return
+	}
+	quota := h.QuotaBytes
+	if quota <= 0 {
+		quota = 1 << 30
+	}
+	var used int64
+	if tx.QueryRowContext(r.Context(), `SELECT COALESCE(sum(size_bytes),0) FROM attachments WHERE uploaded_by=$1`, u.ID).Scan(&used) != nil {
+		middleware.WriteError(w, 500, "ошибка проверки квоты")
+		return
+	}
+	if used > quota-total {
+		middleware.WriteError(w, 413, "исчерпана квота хранения пользователя")
+		return
+	}
+	days := 365
+	var raw string
+	if err := tx.QueryRowContext(r.Context(), `SELECT value FROM settings WHERE key='attachment_retention_days'`).Scan(&raw); err != nil {
+		middleware.WriteError(w, 500, "ошибка чтения срока хранения")
+		return
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 3650 {
+		days = v
+	} else {
+		middleware.WriteError(w, 500, "некорректный срок хранения")
+		return
+	}
+	expires := time.Now().AddDate(0, 0, days)
+	out := make([]map[string]interface{}, 0, len(staged))
+	for _, f := range staged {
 		var id string
-		err = tx.QueryRowContext(r.Context(), "INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", entryID, header.Filename, path, "application/octet-stream", size, u.ID, expires).Scan(&id)
-		if err != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка метаданных")
 			return
 		}
-		item := map[string]interface{}{"id": id, "file_name": header.Filename, "size_bytes": size, "retention_expires_at": expires}
-		if logAudit(tx, "attachment", id, "upload", u.ID, fmt.Sprintf("файл %s", header.Filename), nil, item) != nil {
+		item := map[string]interface{}{"id": id, "file_name": f.name, "size_bytes": f.size, "retention_expires_at": expires}
+		if logAudit(tx, "attachment", id, "upload", u.ID, fmt.Sprintf("файл %s", f.name), nil, item) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита")
 			return
 		}
 		out = append(out, item)
 	}
-	if tx.Commit() != nil {
-		middleware.WriteError(w, 500, "ошибка сохранения пакета")
+	commitAttempted = true
+	if err := tx.Commit(); err != nil {
+		// A lost connection can make commit outcome uncertain. Retain files:
+		// deleting them here could corrupt an already committed batch.
+		slog.Error("upload commit outcome uncertain", "entry_id", entryID)
+		middleware.WriteError(w, 503, "результат сохранения неизвестен; обновите список вложений перед повторной загрузкой")
 		return
 	}
-	committed = true
 	middleware.WriteJSON(w, 201, map[string]interface{}{"files": out, "id": out[0]["id"], "retention_expires_at": expires})
 }
 
@@ -173,7 +204,7 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if !requireEntry(w, h.DB, u, entryID) {
+	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}
 	rows, err := h.DB.QueryContext(r.Context(), "SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id"+page, entryID)
@@ -212,7 +243,7 @@ func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 500, "ошибка запроса")
 		return
 	}
-	if !requireEntry(w, h.DB, u, entry) {
+	if !requireEntry(w, r, h.DB, u, entry) {
 		return
 	}
 	if !expires.After(time.Now()) {
@@ -228,5 +259,7 @@ func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
-	io.Copy(w, f)
+	if _, err := io.Copy(w, f); err != nil {
+		slog.Warn("download interrupted", "attachment_id", attachmentID)
+	}
 }

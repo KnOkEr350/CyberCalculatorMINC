@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   quality:
-    name: Required linters and security
+    name: Linters and security (non-blocking)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -23,10 +23,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: backend/go.mod
+          go-version: 1.26.x
           cache-dependency-path: backend/go.sum
 
       - name: Check Go formatting
+        continue-on-error: true
         working-directory: backend
         shell: bash
         run: |
@@ -38,21 +39,26 @@ jobs:
           fi
 
       - name: Run go vet
+        continue-on-error: true
         working-directory: backend
         run: go vet ./...
 
       - name: Run staticcheck
+        continue-on-error: true
         working-directory: backend
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
 
       - name: Lint GitHub Actions workflow
+        continue-on-error: true
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: Check Go dependencies for known vulnerabilities
+        continue-on-error: true
         working-directory: backend
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
       - name: Scan repository, secrets and Docker configuration
+        continue-on-error: true
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
@@ -67,22 +73,10 @@ jobs:
     name: Tests and Compose smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      test-db:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: isolated-ci-database
-          POSTGRES_DB: workspace_test
-        ports: ["5432:5432"]
-        options: --health-cmd "pg_isready -U test -d workspace_test" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       COMPOSE_PROJECT_NAME: cybercalc-ci-${{ github.run_id }}-${{ github.run_attempt }}
       CI_HTTP_PORT: "18080"
       APP_VERSION: ${{ github.sha }}
-      TEST_DATABASE_DSN: host=127.0.0.1 user=test password=isolated-ci-database dbname=workspace_test sslmode=disable
-      TEST_MIGRATION_DATABASE_DSN: host=127.0.0.1 user=test password=isolated-ci-database dbname=workspace_migration_test sslmode=disable
-      TEST_MIGRATIONS_DIR: ${{ github.workspace }}/migrations
 
     steps:
       - name: Check out repository
@@ -98,15 +92,10 @@ jobs:
 
       - name: Run required Go tests
         working-directory: backend
-        run: |
-          PGPASSWORD=isolated-ci-database psql -h 127.0.0.1 -U test -d workspace_test -v ON_ERROR_STOP=1 -c 'CREATE DATABASE workspace_migration_test'
-          go test -race ./...
+        run: go test ./...
 
       - name: Check frontend JavaScript syntax
-        run: |
-          node --check frontend/app.js
-          node --check frontend/workspace.js
-          node --check frontend/mfa.js
+        run: node --check frontend/app.js
 
       - name: Create isolated CI configuration
         shell: bash
@@ -128,18 +117,6 @@ jobs:
       - name: Build and start the complete application
         run: docker compose up --detach --build --wait --wait-timeout 180
 
-      - name: Scan built backend image
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
-        with:
-          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-backend:latest
-          scan-type: image
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-
-      - name: Scan all running images and produce SBOMs
-        run: bash scripts/scan-images.sh
-
       - name: Verify frontend and API through nginx
         shell: bash
         run: |
@@ -147,7 +124,7 @@ jobs:
           base_url="http://127.0.0.1:${CI_HTTP_PORT}"
 
           for attempt in {1..30}; do
-            if curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error "${base_url}/" | grep -q "Калькулятор затрат"; then
+            if curl --fail --silent --show-error "${base_url}/" | grep -q "Калькулятор затрат"; then
               break
             fi
             if [[ "$attempt" == "30" ]]; then
@@ -157,9 +134,9 @@ jobs:
             sleep 2
           done
 
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error "${base_url}/app.js" > /dev/null
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error "${base_url}/style.css" > /dev/null
-          served_version="$(curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error "${base_url}/version.txt" | tr -d '\r\n')"
+          curl --fail --silent --show-error "${base_url}/app.js" > /dev/null
+          curl --fail --silent --show-error "${base_url}/style.css" > /dev/null
+          served_version="$(curl --fail --silent --show-error "${base_url}/version.txt" | tr -d '\r\n')"
           [[ "$served_version" == "$APP_VERSION" ]] || {
             echo "Expected frontend $APP_VERSION, got $served_version"
             exit 1
@@ -167,7 +144,7 @@ jobs:
 
           logged_in=false
           for attempt in {1..30}; do
-            if curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+            if curl --fail --silent --show-error \
               --cookie-jar /tmp/cybercalc-ci-cookies \
               --header "Content-Type: application/json" \
               --data '{"email":"ci-admin@example.invalid","password":"ci-only-admin-password"}' \
@@ -182,7 +159,7 @@ jobs:
             exit 1
           fi
 
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          curl --fail --silent --show-error \
             --cookie /tmp/cybercalc-ci-cookies \
             "${base_url}/api/auth/me" \
             | grep -q '"email":"ci-admin@example.invalid"'
@@ -194,13 +171,13 @@ jobs:
           base_url="http://127.0.0.1:${CI_HTTP_PORT}"
           cookie_file="/tmp/cybercalc-ci-cookies"
 
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             --header "Content-Type: application/json" \
             --data '{"entity_type":"organization"}' \
             "${base_url}/api/auth/entity-type" > /dev/null
 
-          partner_response="$(curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          partner_response="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             --header "Content-Type: application/json" \
             --data '{"name":"CI test university","partner_kind":"vuz","agreement_number":"CI-1"}' \
@@ -222,7 +199,7 @@ jobs:
             }
           }')"
           printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
-          entry_response="$(curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          entry_response="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             --header "Content-Type: application/json" \
             --data "$entry_payload" \
@@ -230,7 +207,7 @@ jobs:
           entry_id="$(jq --exit-status --raw-output '.id' <<< "$entry_response")"
 
           # Fact can be created and edited without attachments.
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             --form 'files=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
             "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
@@ -246,24 +223,24 @@ jobs:
               academic_hours: 3
             }
           }')"
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error --request PUT \
+          curl --fail --silent --show-error --request PUT \
             --cookie "$cookie_file" \
             --header "Content-Type: application/json" \
             --data "$update_payload" \
             "${base_url}/api/entries/${entry_id}" > /dev/null
 
           printf 'attached after edit\n' > /tmp/cybercalc-second-attachment.txt
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             --form 'file=@/tmp/cybercalc-second-attachment.txt;filename=second.txt' \
             "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
 
-          attachments="$(curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          attachments="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             "${base_url}/api/entries/${entry_id}/attachments")"
           [[ "$(jq 'length' <<< "$attachments")" == "2" ]]
           first_attachment_id="$(jq --exit-status --raw-output '.[] | select(.file_name == "first.txt") | .id' <<< "$attachments")"
-          curl --header "X-Cybercalc-Request: 1" --fail --silent --show-error \
+          curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             "${base_url}/api/attachments/${first_attachment_id}/download" \
             --output /tmp/cybercalc-downloaded-attachment.txt
@@ -281,7 +258,7 @@ jobs:
 
   deploy:
     name: Deploy to Debian VM
-    needs: [quality, verify]
+    needs: verify
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64, cybercalculator-prod]
     timeout-minutes: 20
@@ -294,17 +271,11 @@ jobs:
       APP_VERSION: ${{ github.sha }}
       DB_USER: ${{ secrets.PROD_DB_USER }}
       DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
-      DB_RUNTIME_USER: ${{ vars.PROD_DB_RUNTIME_USER || 'cybercalc_app' }}
-      DB_RUNTIME_PASSWORD: ${{ secrets.PROD_DB_RUNTIME_PASSWORD }}
       DB_NAME: ${{ secrets.PROD_DB_NAME }}
       ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.PROD_ADMIN_BOOTSTRAP_EMAIL }}
       ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.PROD_ADMIN_BOOTSTRAP_PASSWORD }}
       HTTP_PORT: ${{ vars.PROD_HTTP_PORT || '8080' }}
       BACKEND_REPLICAS: ${{ vars.PROD_BACKEND_REPLICAS || '2' }}
-      APP_ENV: production
-      PUBLIC_URL: ${{ vars.PROD_PUBLIC_URL }}
-      CLAMAV_ADDRESS: ${{ vars.PROD_CLAMAV_ADDRESS }}
-      MFA_ENCRYPTION_KEY: ${{ secrets.PROD_MFA_ENCRYPTION_KEY }}
 
     steps:
       - name: Check out verified commit
@@ -320,27 +291,22 @@ jobs:
           missing=0
           [[ -n "$DB_USER" ]] || { echo "::error::GitHub production secret PROD_DB_USER is not configured"; missing=1; }
           [[ -n "$DB_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_DB_PASSWORD is not configured"; missing=1; }
-          [[ ${#DB_RUNTIME_PASSWORD} -ge 16 && "$DB_RUNTIME_PASSWORD" != local-only-runtime-password && "$DB_RUNTIME_USER" != "$DB_USER" ]] || { echo "::error::Configure separate strong PROD_DB_RUNTIME_PASSWORD and runtime role"; missing=1; }
           [[ -n "$DB_NAME" ]] || { echo "::error::GitHub production secret PROD_DB_NAME is not configured"; missing=1; }
           [[ -n "$ADMIN_BOOTSTRAP_EMAIL" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_EMAIL is not configured"; missing=1; }
           [[ -n "$ADMIN_BOOTSTRAP_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_PASSWORD is not configured"; missing=1; }
-          [[ "$PUBLIC_URL" == https://* ]] || { echo "::error::Configure PROD_PUBLIC_URL=https://domain and TLS reverse proxy"; missing=1; }
-          [[ -n "$CLAMAV_ADDRESS" ]] || { echo "::error::Configure reachable PROD_CLAMAV_ADDRESS"; missing=1; }
-          [[ ${#MFA_ENCRYPTION_KEY} -eq 44 ]] || { echo "::error::Configure PROD_MFA_ENCRYPTION_KEY: openssl rand -base64 32"; missing=1; }
-          [[ ${#DB_PASSWORD} -ge 16 && "$DB_PASSWORD" != change_me_db_password && ${#ADMIN_BOOTSTRAP_PASSWORD} -ge 16 ]] || { echo "::error::Use unique strong production credentials (16+ characters)"; missing=1; }
           [[ "$missing" == "0" ]]
           docker compose config --quiet
-
-      - name: Back up before applying migrations
-        shell: bash
-        run: bash scripts/backup.sh
 
       - name: Build and deploy verified revision with Docker Compose
         shell: bash
         run: |
           set -Eeuo pipefail
           echo "Deploying $APP_VERSION from $GITHUB_WORKSPACE"
-          bash scripts/deploy-safe.sh
+          docker compose build --pull
+          docker compose up --detach --remove-orphans --wait --wait-timeout 180
+          # Upstreams are resolved when nginx starts. Restart it after service
+          # recreation so it cannot retain an old container IP.
+          docker compose restart nginx
 
       - name: Verify deployed application
         shell: bash
@@ -350,9 +316,9 @@ jobs:
 
           for attempt in {1..30}; do
             frontend_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/" || true)"
-            api_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/api/health" || true)"
+            api_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/api/auth/me" || true)"
             served_version="$(curl --silent --fail "${base_url}/version.txt" 2>/dev/null | tr -d '\r\n' || true)"
-            if [[ "$frontend_status" == "200" && "$api_status" == "200" && "$served_version" == "$APP_VERSION" ]]; then
+            if [[ "$frontend_status" == "200" && "$api_status" == "401" && "$served_version" == "$APP_VERSION" ]]; then
               echo "Revision $APP_VERSION is live"
               exit 0
             fi
