@@ -48,7 +48,7 @@ func ProvisionRuntime(db *sql.DB, user, password string) error {
 	if _, err := tx.ExecContext(ctx, "GRANT USAGE ON SCHEMA public TO "+name); err != nil {
 		return err
 	}
-	for _, table := range []string{"users", "partners", "entries", "entry_comments", "mentors", "education_directory", "directory_sync_runs", "regional_authorities", "agreements", "agreement_partners", "agreement_responsible_people", "budget_targets", "organization_budget_targets", "settings", "attachments", "sessions", "auth_rate_limits", "file_deletion_queue", "entry_imports", "mfa_recovery_codes"} {
+	for _, table := range []string{"users", "partners", "entries", "entry_comments", "mentors", "education_directory", "directory_sync_runs", "regional_authorities", "agreements", "agreement_partners", "agreement_responsible_people", "agreement_activity_requirements", "agreement_reports", "agreement_report_history", "budget_targets", "organization_budget_targets", "settings", "attachments", "sessions", "auth_rate_limits", "file_deletion_queue", "entry_imports", "mfa_recovery_codes"} {
 		var present bool
 		if err := tx.QueryRowContext(ctx, `SELECT to_regclass('public.'||$1) IS NOT NULL`, table).Scan(&present); err != nil {
 			return err
