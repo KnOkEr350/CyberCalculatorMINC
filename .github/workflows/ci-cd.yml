@@ -95,7 +95,9 @@ jobs:
         run: go test ./...
 
       - name: Check frontend JavaScript syntax
-        run: node --check frontend/app.js
+        run: |
+          node --check frontend/app.js
+          node --check frontend/workspace.js
 
       - name: Create isolated CI configuration
         shell: bash
@@ -179,17 +181,62 @@ jobs:
             --data '{"entity_type":"organization"}' \
             "${base_url}/api/auth/entity-type" > /dev/null
 
+          # Production forbids arbitrary partner names. Seed a verified registry
+          # row into this disposable CI database, then exercise the public API.
+          directory_id="$(docker compose exec -T db psql \
+            --username cybercalc_ci \
+            --dbname cybercalc_ci \
+            --quiet \
+            --tuples-only \
+            --no-align \
+            --set ON_ERROR_STOP=1 \
+            --command "INSERT INTO education_directory(
+              name,partner_kind,region,source,inn,ogrn,license_number,
+              license_status,institution_status,registry_record_id,source_url,
+              registry_updated_at,verified_at,verification_status
+            ) VALUES (
+              'CI test university','vuz','г. Москва','CI verified fixture',
+              '7707083893','1027700132195','CI-LICENSE-1','active','active',
+              'ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',
+              'https://islod.obrnadzor.gov.ru/rlic/details/ci-fixture',
+              CURRENT_DATE,now(),'verified'
+            ) RETURNING id;")"
+          [[ "$directory_id" =~ ^[0-9a-f-]{36}$ ]]
+
           partner_response="$(curl --fail --silent --show-error \
             --cookie "$cookie_file" \
             --header "X-Cybercalc-Request: 1" \
             --header "Content-Type: application/json" \
-            --data '{"name":"CI test university","partner_kind":"vuz","agreement_number":"CI-1"}' \
+            --data "$(jq --compact-output --null-input --arg directory "$directory_id" '{
+              directory_id: $directory,
+              initial_agreement: {
+                partner_ids: [],
+                agreement_kind: "education_organization",
+                number: "CI-1",
+                status: "active",
+                signed_on: "2026-01-01",
+                valid_from: "2020-01-01",
+                valid_until: "2100-12-31",
+                signature_method: "qualified_electronic",
+                signed_by: "CI Signer",
+                signature_date: "2026-01-01",
+                document_reference: "CI smoke test",
+                responsible_people: [
+                  {party: "cyberprotect", full_name: "CI Administrator"},
+                  {party: "counterparty", full_name: "CI Partner"}
+                ]
+              }
+            }')" \
             "${base_url}/api/partners")"
           partner_id="$(jq --exit-status --raw-output '.id' <<< "$partner_response")"
+          agreement_id="$(jq --exit-status --raw-output '.agreement_id' <<< "$partner_response")"
 
-          entry_payload="$(jq --compact-output --null-input --arg partner "$partner_id" '{
+          entry_payload="$(jq --compact-output --null-input \
+            --arg partner "$partner_id" \
+            --arg agreement "$agreement_id" '{
             category_code: "teachers",
             partner_id: $partner,
+            agreement_id: $agreement,
             period_type: "fact",
             report_year: 2026,
             audience: "vuz",
@@ -217,8 +264,11 @@ jobs:
             --form 'files=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
             "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
 
-          update_payload="$(jq --compact-output --null-input --arg partner "$partner_id" '{
+          update_payload="$(jq --compact-output --null-input \
+            --arg partner "$partner_id" \
+            --arg agreement "$agreement_id" '{
             audience: "vuz",
+            agreement_id: $agreement,
             comment: "CI attachment edit check",
             payload: {
               org_name: $partner,

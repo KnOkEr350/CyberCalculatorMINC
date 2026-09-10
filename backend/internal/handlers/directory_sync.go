@@ -15,6 +15,11 @@ import (
 
 const directoryHeader = "name|partner_kind|region|inn|ogrn|license_number|license_status|institution_status|registry_record_id|source_url|registry_updated_at"
 
+func freshRegistryDate(date, now time.Time) bool {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return !date.After(today) && !date.Before(today.AddDate(0, 0, -35))
+}
+
 func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 	if len(rows) == 0 || strings.Join(rows[0], "|") != directoryHeader {
 		return nil, []string{"используйте заголовки из шаблона справочника"}
@@ -41,7 +46,7 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 		if len(row) != 11 || len([]rune(row[0])) < 2 || len([]rune(row[0])) > 1000 ||
 			(row[1] != "vuz" && row[1] != "kolledj" && row[1] != "school") || len([]rune(row[2])) < 2 || len([]rune(row[2])) > 200 ||
 			!validINN(row[3]) || !validOGRN(row[4]) || row[5] == "" || len([]rune(row[5])) > 100 || !licenseOK || !institutionOK ||
-			row[8] == "" || len([]rune(row[8])) > 200 || !officialRegistryURL(row[9]) || dateErr != nil || date.After(time.Now().Add(24*time.Hour)) {
+			row[8] == "" || len([]rune(row[8])) > 200 || !officialRegistryURL(row[9]) || dateErr != nil || !freshRegistryDate(date, time.Now()) {
 			errors = append(errors, fmt.Sprintf("Строка %d: проверьте название, тип, регион, ИНН/ОГРН, лицензию, статус, идентификатор, официальную ссылку и дату", i+2))
 			continue
 		}

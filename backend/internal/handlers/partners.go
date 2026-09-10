@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
-	"time"
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
@@ -103,11 +102,14 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	defer tx.Rollback()
-	var name, partnerKind, verification, licenseStatus, institutionStatus string
-	var verifiedAt sql.NullTime
-	err = tx.QueryRowContext(r.Context(), `SELECT name,partner_kind,verification_status,license_status,institution_status,verified_at
+	var name, partnerKind string
+	var selectable bool
+	err = tx.QueryRowContext(r.Context(), `SELECT name,partner_kind,
+		(verification_status='verified' AND license_status='active' AND institution_status='active'
+		 AND verified_at>=now()-interval '35 days'
+		 AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE)
 		FROM education_directory WHERE id::text=$1 FOR SHARE`, req.DirectoryID).
-		Scan(&name, &partnerKind, &verification, &licenseStatus, &institutionStatus, &verifiedAt)
+		Scan(&name, &partnerKind, &selectable)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, 400, "организация не найдена в справочнике")
 		return
@@ -116,7 +118,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		middleware.WriteError(w, 500, "ошибка проверки справочника")
 		return
 	}
-	if verification != "verified" || licenseStatus != "active" || institutionStatus != "active" || !verifiedAt.Valid || verifiedAt.Time.Before(time.Now().AddDate(0, 0, -35)) {
+	if !selectable {
 		middleware.WriteError(w, 409, "организация не подтверждена действующей лицензией; обновите официальный справочник")
 		return
 	}

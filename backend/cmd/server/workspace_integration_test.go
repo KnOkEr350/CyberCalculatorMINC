@@ -90,13 +90,17 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if adminDashboard["target_amount_rub"].(float64) != 6000 {
 		t.Fatal("owner-scoped target upsert failed")
 	}
-	var directory1, directory2 string
+	var directory1, directory2, staleDirectory string
 	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
 		VALUES($1,'vuz','Республика Татарстан','https://islod.obrnadzor.gov.ru','1650084264','1021602020384','Л035-ТЕСТ-1','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-1',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовый вуз A "+stamp, "test-a-"+stamp).Scan(&directory1); e != nil {
 		t.Fatal(e)
 	}
 	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
 		VALUES($1,'vuz','г.Москва','https://islod.obrnadzor.gov.ru','7707083893','1027700132195','Л035-ТЕСТ-2','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-2',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовый вуз B "+stamp, "test-b-"+stamp).Scan(&directory2); e != nil {
+		t.Fatal(e)
+	}
+	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
+		VALUES($1,'vuz','г.Москва','https://islod.obrnadzor.gov.ru','7707083893','1027700132195','Л035-УСТАРЕЛА','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/stale',CURRENT_DATE-36,now(),'verified') RETURNING id`, "Устаревшая запись "+stamp, "test-stale-"+stamp).Scan(&staleDirectory); e != nil {
 		t.Fatal(e)
 	}
 	agreement := func(number string) map[string]interface{} {
@@ -109,6 +113,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	created1 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory1, "initial_agreement": agreement("A-" + stamp)}, 201))
 	created2 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("B-" + stamp)}, 201))
+	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": staleDirectory, "initial_agreement": agreement("STALE-" + stamp)}, 409)
 	p1, agreement1 := created1["id"].(string), created1["agreement_id"].(string)
 	p2, agreement2 := created2["id"].(string), created2["agreement_id"].(string)
 	groupAgreement := agreement("GROUP-" + stamp)
@@ -268,7 +273,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatalf("dashboard scope/formulas wrong: %v", dash)
 	}
 	directoryBook := xlsx.New()
-	directoryBook.AddSheet("Данные", []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}, [][]interface{}{{"Колледж для импорта " + stamp, "kolledj", "Тестовый регион", "7736050003", "1027700070518", "Л035-ТЕСТ-3", "active", "active", "test-c-" + stamp, "https://islod.obrnadzor.gov.ru/rlic/details/test-3", "2026-09-09"}})
+	directoryBook.AddSheet("Данные", []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}, [][]interface{}{{"Колледж для импорта " + stamp, "kolledj", "Тестовый регион", "7736050003", "1027700070518", "Л035-ТЕСТ-3", "active", "active", "test-c-" + stamp, "https://islod.obrnadzor.gov.ru/rlic/details/test-3", time.Now().Format("2006-01-02")}})
 	directoryData, _ := directoryBook.Bytes()
 	previewDirectory := object(upload(admin, "/admin/directory-import", map[string][]byte{"directory.xlsx": directoryData}, 200))
 	if previewDirectory["committed"].(bool) {

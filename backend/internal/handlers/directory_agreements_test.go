@@ -3,6 +3,7 @@ package handlers
 import (
 	"cybercalc/internal/models"
 	"testing"
+	"time"
 )
 
 func TestRussianRegistryIdentifiers(t *testing.T) {
@@ -25,6 +26,18 @@ func TestRussianRegistryIdentifiers(t *testing.T) {
 		if officialRegistryURL(value) {
 			t.Fatalf("untrusted registry URL accepted: %s", value)
 		}
+	}
+}
+
+func TestDirectoryRejectsStaleRegistryData(t *testing.T) {
+	header := []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}
+	row := []string{"Тестовый вуз", "vuz", "г. Москва", "7707083893", "1027700132195", "Л035-ТЕСТ", "active", "active", "test-record", "https://islod.obrnadzor.gov.ru/rlic/details/test", time.Now().AddDate(0, 0, -36).Format("2006-01-02")}
+	if _, errors := validateDirectoryRows([][]string{header, row}); len(errors) == 0 {
+		t.Fatal("stale registry data accepted")
+	}
+	row[10] = time.Now().Format("2006-01-02")
+	if valid, errors := validateDirectoryRows([][]string{header, row}); len(errors) != 0 || len(valid) != 1 {
+		t.Fatalf("fresh registry data rejected: %v", errors)
 	}
 }
 

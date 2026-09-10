@@ -61,19 +61,23 @@ function wireAgreementFields(root, prefix, agreement = {}) {
   status.value = agreement.status === "needs_review" ? "draft" : agreement.status || "active";
   signature.value = agreement.signature_method || "paper";
   const sync = () => {
-	const roiv = root.querySelector(`#${prefix}-roiv`);
-	const active = status.value === "active";
+    const roiv = root.querySelector(`#${prefix}-roiv`);
+    const active = status.value === "active";
     root.querySelector(`#${prefix}-roiv-box`).hidden = kind.value !== "roiv";
-	roiv.required = kind.value === "roiv";
-	root.querySelector(`#${prefix}-signed-by`).required = active;
-	root.querySelector(`#${prefix}-signature-date`).required = active;
-	root.querySelector(`#${prefix}-people-cp`).required = active;
-	root.querySelector(`#${prefix}-people-other`).required = active;
-	signature.setCustomValidity(active && signature.value === "unsigned" ? "Для действующего соглашения выберите способ подписания" : "");
+    roiv.required = kind.value === "roiv";
+    root.querySelector(`#${prefix}-signed-by`).required = active;
+    root.querySelector(`#${prefix}-signature-date`).required = active;
+    root.querySelector(`#${prefix}-people-cp`).required = active;
+    root.querySelector(`#${prefix}-people-other`).required = active;
+    signature.setCustomValidity(
+      active && signature.value === "unsigned"
+        ? "Для действующего соглашения выберите способ подписания"
+        : "",
+    );
   };
   kind.onchange = sync;
-	status.onchange = sync;
-	signature.onchange = sync;
+  status.onchange = sync;
+  signature.onchange = sync;
   sync();
 }
 
@@ -203,24 +207,30 @@ async function renderPartnerEntries(root) {
     state.partnerID = partner.id;
   }
   if (partner) state.partnerKind = partner.partner_kind;
-	if (partner && state.agreementPartnerID !== partner.id) {
-	  state.agreements = await api(`/agreements?partner_id=${encodeURIComponent(partner.id)}`);
-	  state.agreementPartnerID = partner.id;
-	  state.agreementID = "";
-	}
-	if (!partner) {
-	  state.agreements = [];
-	  state.agreementPartnerID = "";
-	  state.agreementID = "";
-	}
-	if (!state.agreements.some((agreement) => agreement.id === state.agreementID)) {
-	  state.agreementID =
-	    state.agreements.find((agreement) => agreementIsUsable(agreement))?.id ||
-	    state.agreements[0]?.id ||
-	    "";
-	}
-	const selectedAgreement = state.agreements.find((agreement) => agreement.id === state.agreementID);
-	const writable = agreementIsUsable(selectedAgreement);
+  if (partner && state.agreementPartnerID !== partner.id) {
+    state.agreements = await api(
+      `/agreements?partner_id=${encodeURIComponent(partner.id)}`,
+    );
+    state.agreementPartnerID = partner.id;
+    state.agreementID = "";
+  }
+  if (!partner) {
+    state.agreements = [];
+    state.agreementPartnerID = "";
+    state.agreementID = "";
+  }
+  if (
+    !state.agreements.some((agreement) => agreement.id === state.agreementID)
+  ) {
+    state.agreementID =
+      state.agreements.find((agreement) => agreementIsUsable(agreement))?.id ||
+      state.agreements[0]?.id ||
+      "";
+  }
+  const selectedAgreement = state.agreements.find(
+    (agreement) => agreement.id === state.agreementID,
+  );
+  const writable = agreementIsUsable(selectedAgreement);
   const available = state.categories.filter((c) =>
     c.audience_scope.includes(partner?.partner_kind || state.partnerKind),
   );
@@ -238,7 +248,7 @@ async function renderPartnerEntries(root) {
       .join("")}</select></div>
     <div class="field"><label for="partner-search">Поиск своего партнёра</label><input id="partner-search" placeholder="Часть названия"></div>
     <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>
-	<div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
+    <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
   </div><button class="btn secondary" id="open-directory">Справочник и соглашения</button><p class="muted">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)}. ${writable ? "Можно вносить план/факт за выбранный год." : "Просмотр доступен, но для ввода нужен статус «Действует» и период, охватывающий выбранный год."}` : "Сначала выберите партнёра и соглашение. Нового партнёра добавляет сотрудник Киберпротекта."}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
@@ -273,20 +283,20 @@ async function renderPartnerEntries(root) {
   root.querySelector("#workspace-kind").onchange = (e) => {
     state.partnerKind = e.target.value;
     state.partnerID = "";
-	state.agreementID = "";
-	state.agreementPartnerID = "";
+    state.agreementID = "";
+    state.agreementPartnerID = "";
     renderEntries(root);
   };
   partnerSelect.onchange = (e) => {
     state.partnerID = e.target.value;
-	state.agreementID = "";
-	state.agreementPartnerID = "";
+    state.agreementID = "";
+    state.agreementPartnerID = "";
     renderEntries(root);
   };
-	root.querySelector("#workspace-agreement").onchange = (e) => {
-	  state.agreementID = e.target.value;
-	  renderEntries(root);
-	};
+  root.querySelector("#workspace-agreement").onchange = (e) => {
+    state.agreementID = e.target.value;
+    renderEntries(root);
+  };
   root.querySelector("#open-directory").onclick = () => {
     state.view = "partners";
     render();
@@ -448,9 +458,9 @@ async function openImportDialog(directory) {
       if (result.committed) {
         checkedFile = null;
         showToast("Импорт завершён", "success");
-		const content = document.getElementById("content");
-		if (!directory) renderEntries(content);
-		else if (content) renderPartnerDirectory(content);
+        const content = document.getElementById("content");
+        if (!directory) renderEntries(content);
+        else if (content) renderPartnerDirectory(content);
       }
     } catch (e) {
       checkedFile = null;
@@ -505,11 +515,16 @@ async function renderPartnerDirectory(root) {
             const item = items.find((i) => i.id === b.dataset.directory);
             const form = root.querySelector("#partner-create");
             form.dataset.directoryId = item.id;
-			form.querySelector("#p-selected").innerHTML = `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ОГРН ${escapeHTML(item.ogrn)} · лицензия ${escapeHTML(item.license_number)}`;
-			form.querySelector("[type=submit]").disabled = false;
-			const kind = form.querySelector("#p-a-kind");
-			kind.value = item.partner_kind === "school" ? "roiv" : "education_organization";
-			kind.dispatchEvent(new Event("change"));
+            form.querySelector("#p-selected").innerHTML =
+              `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ` +
+              `ОГРН ${escapeHTML(item.ogrn)} · лицензия ${escapeHTML(item.license_number)}`;
+            form.querySelector("[type=submit]").disabled = false;
+            const kind = form.querySelector("#p-a-kind");
+            kind.value =
+              item.partner_kind === "school"
+                ? "roiv"
+                : "education_organization";
+            kind.dispatchEvent(new Event("change"));
             form.scrollIntoView({ behavior: "smooth" });
           }),
       );
@@ -528,14 +543,16 @@ async function renderPartnerDirectory(root) {
   root
     .querySelector("#d-import")
     ?.addEventListener("click", () => openImportDialog(true));
-	api("/directory/stats").then((stats) => {
-	  const box = root.querySelector("#directory-stats");
-	  if (!box) return;
-	  box.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${stats.total}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">Вузы / СПО / школы</div><div class="value">${stats.universities} / ${stats.colleges} / ${stats.schools}</div></div></div><p class="muted">Последняя проверка: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "официальная выгрузка ещё не загружена"}. ${stats.sync_status ? `Автообновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автообновление включается переменной DIRECTORY_SYNC_URL."}</p>`;
-	}).catch((error) => {
-	  const box = root.querySelector("#directory-stats");
-	  if (box) box.textContent = error.message;
-	});
+  api("/directory/stats")
+    .then((stats) => {
+      const box = root.querySelector("#directory-stats");
+      if (!box) return;
+      box.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${stats.total}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">Вузы / СПО / школы</div><div class="value">${stats.universities} / ${stats.colleges} / ${stats.schools}</div></div></div><p class="muted">Последняя проверка: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "официальная выгрузка ещё не загружена"}. ${stats.sync_status ? `Автообновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автообновление включается переменной DIRECTORY_SYNC_URL."}</p>`;
+    })
+    .catch((error) => {
+      const box = root.querySelector("#directory-stats");
+      if (box) box.textContent = error.message;
+    });
   const refreshPartners = async () => {
     state.partners = await api("/partners");
     root.querySelector("#partner-list").innerHTML =
@@ -551,14 +568,16 @@ async function renderPartnerDirectory(root) {
     root
       .querySelectorAll("[data-mentors]")
       .forEach((b) => (b.onclick = () => openMentors(b.dataset.mentors)));
-	root.querySelectorAll("[data-agreements]").forEach(
-	  (button) => (button.onclick = () => openAgreements(button.dataset.agreements, refreshPartners)),
-	);
+    root.querySelectorAll("[data-agreements]").forEach(
+      (button) =>
+        (button.onclick = () =>
+          openAgreements(button.dataset.agreements, refreshPartners)),
+    );
   };
   if (isStaffUser()) {
     const box = root.querySelector("#partner-create");
     box.innerHTML = `<form class="card" id="p-form"><h2>Новый партнёр и первое соглашение</h2><p id="p-selected" class="notice">Сначала найдите выше подтверждённую организацию и нажмите «Выбрать».</p>${agreementFieldsMarkup("p-a")}<button class="btn" type="submit" disabled>Создать партнёра и соглашение</button><p id="p-error" class="error" role="alert"></p></form>`;
-	wireAgreementFields(box, "p-a");
+    wireAgreementFields(box, "p-a");
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
       const button = box.querySelector("[type=submit]");
@@ -568,11 +587,11 @@ async function renderPartnerDirectory(root) {
           method: "POST",
           body: JSON.stringify({
             directory_id: box.dataset.directoryId || "",
-			initial_agreement: collectAgreement(box, "p-a", []),
+            initial_agreement: collectAgreement(box, "p-a", []),
           }),
         });
-		box.dataset.directoryId = "";
-		await renderPartnerDirectory(root);
+        box.dataset.directoryId = "";
+        await renderPartnerDirectory(root);
         showToast("Партнёр добавлен", "success");
       } catch (error) {
         box.querySelector("#p-error").textContent = error.message;
