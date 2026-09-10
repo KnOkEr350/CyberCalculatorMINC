@@ -35,6 +35,7 @@ type agreementWriteRequest struct {
 	DocumentReference   string                              `json:"document_reference,omitempty"`
 	Notes               string                              `json:"notes,omitempty"`
 	ResponsiblePeople   []models.AgreementResponsiblePerson `json:"responsible_people"`
+	ActivityCodes       []string                            `json:"activity_codes"`
 }
 
 type normalizedAgreement struct {
@@ -141,6 +142,17 @@ func normalizeAgreement(req agreementWriteRequest) (normalizedAgreement, error) 
 		partnerIDs = append(partnerIDs, id)
 	}
 	req.PartnerIDs = partnerIDs
+	seenActivities := make(map[string]bool, len(req.ActivityCodes))
+	activityCodes := make([]string, 0, len(req.ActivityCodes))
+	for _, code := range req.ActivityCodes {
+		code = strings.TrimSpace(code)
+		if code == "" || seenActivities[code] {
+			return normalizedAgreement{}, fmt.Errorf("перечень мероприятий содержит пустое значение или дубль")
+		}
+		seenActivities[code] = true
+		activityCodes = append(activityCodes, code)
+	}
+	req.ActivityCodes = activityCodes
 	if len(req.ResponsiblePeople) > 20 {
 		return normalizedAgreement{}, fmt.Errorf("не более 20 ответственных лиц в одном соглашении")
 	}
@@ -198,6 +210,11 @@ func insertAgreement(ctx context.Context, tx *sql.Tx, agreement normalizedAgreem
 			return "", err
 		}
 	}
+	for _, code := range r.ActivityCodes {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO agreement_activity_requirements(agreement_id,category_code) VALUES($1,$2)`, id, code); err != nil {
+			return "", err
+		}
+	}
 	return id, nil
 }
 
@@ -216,10 +233,43 @@ func prepareAgreementRelations(ctx context.Context, tx *sql.Tx, agreement *norma
 	if err := ensureAgreementPartners(ctx, tx, agreement.Request.PartnerIDs); err != nil {
 		return err
 	}
-	var schools int
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE partner_kind='school')
-		FROM partners WHERE id::text=ANY($1)`, pq.Array(agreement.Request.PartnerIDs)).Scan(&schools); err != nil {
+	var schools, universities int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE partner_kind='school'),count(*) FILTER(WHERE partner_kind='vuz')
+		FROM partners WHERE id::text=ANY($1)`, pq.Array(agreement.Request.PartnerIDs)).Scan(&schools, &universities); err != nil {
 		return err
+	}
+	// Backward-compatible default for older clients: never create an agreement
+	// without a controlled scope; include all activity types applicable to its OOs.
+	if len(agreement.Request.ActivityCodes) == 0 {
+		var defaults pq.StringArray
+		if err := tx.QueryRowContext(ctx, `SELECT array_agg(DISTINCT c.code ORDER BY c.code)
+			FROM activity_categories c JOIN partners p ON p.id::text=ANY($1)
+			WHERE p.partner_kind=ANY(c.audience_scope)`, pq.Array(agreement.Request.PartnerIDs)).Scan(&defaults); err != nil {
+			return err
+		}
+		agreement.Request.ActivityCodes = []string(defaults)
+		if len(agreement.Request.ActivityCodes) == 0 {
+			return fmt.Errorf("для выбранных организаций нет доступных видов мероприятий")
+		}
+	}
+	var allowedCount int
+	if err := tx.QueryRowContext(ctx, `SELECT count(DISTINCT c.code)
+		FROM activity_categories c JOIN partners p ON p.id::text=ANY($1)
+		WHERE c.code=ANY($2) AND p.partner_kind=ANY(c.audience_scope)`,
+		pq.Array(agreement.Request.PartnerIDs), pq.Array(agreement.Request.ActivityCodes)).Scan(&allowedCount); err != nil {
+		return err
+	}
+	if allowedCount != len(agreement.Request.ActivityCodes) {
+		return fmt.Errorf("перечень содержит мероприятие, недоступное выбранным типам образовательных организаций")
+	}
+	if universities > 0 {
+		selected := map[string]bool{}
+		for _, code := range agreement.Request.ActivityCodes {
+			selected[code] = true
+		}
+		if !selected["top_it"] && (!selected["teachers"] || !selected["ood_rpd"]) {
+			return fmt.Errorf("для ВО включите преподавание и ООП/РПД либо ТОП ИТ/ИИ; исключение ТОП будет проверено по другой ОО при готовности отчёта")
+		}
 	}
 	if agreement.Request.AgreementKind == "roiv" {
 		if schools != len(agreement.Request.PartnerIDs) {
@@ -290,6 +340,12 @@ func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 			return
 		}
 		agreement.ResponsiblePeople = people
+		activities, activityErr := h.activityCodes(r.Context(), agreement.ID)
+		if activityErr != nil {
+			middleware.WriteError(w, 500, "ошибка чтения перечня мероприятий")
+			return
+		}
+		agreement.ActivityCodes = activities
 		out = append(out, agreement)
 	}
 	if rows.Err() != nil {
@@ -297,6 +353,23 @@ func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	writePage(w, r, out)
+}
+
+func (h *AgreementHandlers) activityCodes(ctx context.Context, agreementID string) ([]string, error) {
+	rows, err := h.DB.QueryContext(ctx, `SELECT category_code FROM agreement_activity_requirements WHERE agreement_id=$1 ORDER BY category_code`, agreementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var code string
+		if err = rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		out = append(out, code)
+	}
+	return out, rows.Err()
 }
 
 func (h *AgreementHandlers) people(ctx context.Context, agreementID string) ([]models.AgreementResponsiblePerson, error) {
@@ -424,6 +497,25 @@ func (h *AgreementHandlers) Update(w http.ResponseWriter, r *http.Request, u mid
 		if _, err = tx.ExecContext(r.Context(), `INSERT INTO agreement_responsible_people(agreement_id,party,full_name,position,email,phone)
 			VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),NULLIF($6,''))`, agreementID, person.Party, person.FullName, person.Position, person.Email, person.Phone); err != nil {
 			middleware.WriteError(w, 500, "ошибка обновления ответственных лиц")
+			return
+		}
+	}
+	var uncoveredEntries int
+	if err = tx.QueryRowContext(r.Context(), `SELECT count(*) FROM entries WHERE agreement_id=$1 AND NOT(category_code=ANY($2))`, agreementID, pq.Array(rq.ActivityCodes)).Scan(&uncoveredEntries); err != nil {
+		middleware.WriteError(w, 500, "ошибка проверки мероприятий соглашения")
+		return
+	}
+	if uncoveredEntries > 0 {
+		middleware.WriteError(w, 409, "нельзя исключить вид мероприятия: по нему уже есть записи плана/факта")
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `DELETE FROM agreement_activity_requirements WHERE agreement_id=$1`, agreementID); err != nil {
+		middleware.WriteError(w, 500, "ошибка обновления перечня мероприятий")
+		return
+	}
+	for _, code := range rq.ActivityCodes {
+		if _, err = tx.ExecContext(r.Context(), `INSERT INTO agreement_activity_requirements(agreement_id,category_code) VALUES($1,$2)`, agreementID, code); err != nil {
+			middleware.WriteError(w, 500, "ошибка обновления перечня мероприятий")
 			return
 		}
 	}

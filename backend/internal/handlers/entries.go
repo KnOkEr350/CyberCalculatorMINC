@@ -100,7 +100,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	if !requirePartner(w, u, partnerID) {
 		return
 	}
-	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, req.ReportYear); err != nil {
+	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, req.CategoryCode, req.ReportYear); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -311,7 +311,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	if req.AgreementID == "" {
 		req.AgreementID = oldAgreementID
 	}
-	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, reportYear); err != nil {
+	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, categoryCode, reportYear); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -455,7 +455,7 @@ func (h *EntryHandlers) validateEntryContext(r *http.Request, categoryCode, audi
 	return nil
 }
 
-func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, partnerID string, reportYear int) error {
+func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, partnerID, categoryCode string, reportYear int) error {
 	agreementID = strings.TrimSpace(agreementID)
 	if agreementID == "" {
 		return fmt.Errorf("выберите соглашение, к которому относится активность")
@@ -485,6 +485,13 @@ func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, p
 	yearEnd := time.Date(reportYear, 12, 31, 0, 0, 0, 0, time.UTC)
 	if validFrom.After(yearEnd) || validUntil.Before(yearStart) {
 		return fmt.Errorf("соглашение не действует в %d году", reportYear)
+	}
+	var included bool
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM agreement_activity_requirements WHERE agreement_id::text=$1 AND category_code=$2)`, agreementID, categoryCode).Scan(&included); err != nil {
+		return fmt.Errorf("не удалось проверить перечень мероприятий соглашения")
+	}
+	if !included {
+		return fmt.Errorf("выбранный вид мероприятия не включён в перечень соглашения")
 	}
 	return nil
 }

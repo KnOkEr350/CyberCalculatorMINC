@@ -109,6 +109,16 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		middleware.WriteError(w, 500, "ошибка чтения отчёта")
 		return
 	}
+	if len(data) == 0 {
+		middleware.WriteError(w, http.StatusConflict, "нет данных для утверждённого отчёта")
+		return
+	}
+	for _, row := range data {
+		if !row.Eligible {
+			middleware.WriteError(w, http.StatusConflict, "выгрузка заблокирована: сначала переведите каждый затронутый отчёт по соглашению из черновика в состояния «Готово», «Проверено» и «Утверждено»")
+			return
+		}
+	}
 	categoryNames := map[string]string{}
 	categoryRows, err := h.DB.QueryContext(r.Context(), `SELECT code,name FROM activity_categories`)
 	if err != nil {
@@ -133,12 +143,9 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	audiences := map[string]string{"vuz": "Вуз", "kolledj": "СПО", "school": "Школа"}
 
 	wb := xlsx.New()
-	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Проверка обязательностей (не согласование)"}
+	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Статус отчёта"}
 	status := func(d reportEntryRow) string {
-		if d.Eligible {
-			return "Условия заполнены; требуется проверка документов"
-		}
-		return "Не учитывается в проверенной сумме: обязательные активности или условие другой ОО для TOP IT не заполнены"
+		return "Утверждено"
 	}
 
 	// Сводный лист для МЦ — все партнёры вместе.
@@ -157,7 +164,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			return
 		}
 	}
-	consolidated = append(consolidated, []interface{}{"ИТОГО (включая незавершённые записи)", "", "", "", "", "", total, "", "Рабочий расчёт, не согласованный отчёт"})
+	consolidated = append(consolidated, []interface{}{"ИТОГО (только утверждённые данные)", "", "", "", "", "", total, "", "Утверждено"})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	if q.Get("format") == "docx" {
 		docRows := [][]string{}

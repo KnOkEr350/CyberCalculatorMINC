@@ -113,6 +113,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 			"signed_on": "2026-01-01", "valid_from": "2026-01-01", "valid_until": "2026-12-31",
 			"signature_method": "qualified_electronic", "signed_by": "Иванов Иван Иванович", "signature_date": "2026-01-01",
 			"responsible_people": []map[string]string{{"party": "cyberprotect", "full_name": "Петров Пётр Петрович"}, {"party": "counterparty", "full_name": "Сидоров Сидор Сидорович"}},
+			"activity_codes":     []string{"teachers", "ood_rpd", "internship", "top_it"},
 		}
 	}
 	created1 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory1, "initial_agreement": agreement("A-" + stamp)}, 201))
@@ -131,6 +132,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	schoolAgreement := agreement("SCHOOL-" + stamp)
 	schoolAgreement["agreement_kind"] = "roiv"
 	schoolAgreement["regional_authority_id"] = authorityID
+	schoolAgreement["activity_codes"] = []string{"it_clubs"}
 	createdSchool := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": schoolDirectory, "initial_agreement": schoolAgreement}, 201))
 	schoolPartner, schoolAgreementID := createdSchool["id"].(string), createdSchool["agreement_id"].(string)
 	invalidROIVAgreement := agreement("BAD-ROIV-" + stamp)
@@ -205,6 +207,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "GET", "/entries?report_year=oops", nil, 400)
 	internship := map[string]interface{}{"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор", "duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3}
 	trainee := object(create(partnerClient, p1, agreement1, "internship", "fact", internship, 201))
+	traineeID := trainee["id"].(string)
 	if trainee["amount_rub"].(float64) != 30340 {
 		t.Fatal("wrong internship formula")
 	}
@@ -221,8 +224,29 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	create(partnerClient, p1, agreement1, "top_it", "plan", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт 01", "cofinancing_amount_rub": 1000}, 201)
 	status = object(call(partnerClient, "GET", statusPath, nil, 200))
-	if status["required"].(bool) || !status["top_it"].(bool) {
-		t.Fatal("TOP exemption missing")
+	if !status["required"].(bool) || !status["top_it"].(bool) || status["top_it_exception"].(bool) {
+		t.Fatal("TOP exemption was granted without an approved second educational organization")
+	}
+	otherAgreement := agreement("B-" + stamp)
+	otherAgreement["partner_ids"] = []string{p2}
+	otherAgreement["activity_codes"] = []string{"teachers", "ood_rpd", "internship", "minc_decision"}
+	call(admin, "PUT", "/agreements/"+agreement2, otherAgreement, 200)
+	mentor2 := object(call(admin, "POST", "/mentors", map[string]string{"partner_id": p2, "full_name": "Орлов Олег Олегович"}, 201))["id"].(string)
+	create(admin, p2, agreement2, "teachers", "plan", teacher(p2), 201)
+	create(admin, p2, agreement2, "ood_rpd", "plan", map[string]interface{}{"org_name": p2, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Другая программа"}, 201)
+	create(admin, p2, agreement2, "internship", "plan", map[string]interface{}{"org_name": p2, "mentor_id": mentor2, "student_full_name": "Орлов Студент", "duration_months": 1, "student_load_hours_per_month": 2, "mentor_load_hours_per_month": 1}, 201)
+	create(admin, p2, agreement2, "minc_decision", "plan", map[string]interface{}{"org_name": p2, "decision_reference": "Решение МЦ-1", "activity_description": "Тестовое мероприятие", "metric_description": "Одна единица", "calculation_basis": "Фактическая стоимость", "amount_manual": 1000}, 201)
+	otherTransition := "/report-workflow/transition?agreement_id=" + agreement2 + "&report_year=2026&period_type=plan"
+	call(admin, "POST", otherTransition, map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "comment": "Другая ОО комплектна"}, 200)
+	call(admin, "POST", otherTransition, map[string]interface{}{"status": "verified", "comment": "Проверена другая ОО"}, 200)
+	call(admin, "POST", otherTransition, map[string]interface{}{"status": "approved", "comment": "Утверждена другая ОО"}, 200)
+	status = object(call(partnerClient, "GET", statusPath, nil, 200))
+	if status["required"].(bool) || !status["top_it_exception"].(bool) {
+		t.Fatal("verified TOP exception across another educational organization was not applied")
+	}
+	beforeApprovalDashboard := object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
+	if beforeApprovalDashboard["eligible_plan_total_rub"].(float64) != 0 {
+		t.Fatal("individual mandatory rows were counted before their agreement report was approved")
 	}
 	status = object(call(partnerClient, "GET", strings.ReplaceAll(statusPath, "period_type=plan", "period_type=fact"), nil, 200))
 	if !status["required"].(bool) || status["top_it"].(bool) {
@@ -294,6 +318,21 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("partial import happened")
 	}
+	workflowPath := "/report-workflow?agreement_id=" + agreement1 + "&report_year=2026&period_type=fact"
+	workflow := object(call(partnerClient, "GET", workflowPath, nil, 200))
+	if workflow["status"] != "draft" || workflow["can_mark_ready"].(bool) {
+		t.Fatal("incomplete agreement report was considered ready")
+	}
+	transitionPath := "/report-workflow/transition?agreement_id=" + agreement1 + "&report_year=2026&period_type=fact"
+	confirmations := map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "counterparty_confirmed": true, "comment": "Комплект проверен"}
+	call(partnerClient, "POST", transitionPath, confirmations, 422)
+	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
+	create(partnerClient, p1, agreement1, "ood_rpd", "fact", map[string]interface{}{"org_name": p1, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Безопасность"}, 201)
+	create(partnerClient, p1, agreement1, "top_it", "fact", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт факт", "cofinancing_amount_rub": 1000}, 201)
+	call(partnerClient, "POST", transitionPath, confirmations, 200)
+	call(partnerClient, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Попытка самопроверки"}, 409)
+	call(admin, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Проверено сотрудником"}, 200)
+	call(admin, "POST", transitionPath, map[string]interface{}{"status": "approved", "comment": "Утверждено администратором"}, 200)
 	report := call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 200)
 	reportRows, e := xlsx.ReadFirst(report)
 	if e != nil {
@@ -306,8 +345,15 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact&format=docx", nil, 200)
 	dash := object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
-	if dash["fact_total_rub"].(float64) != 42760 {
+	if dash["fact_total_rub"].(float64) != 98760 || dash["eligible_fact_total_rub"].(float64) != 98760 {
 		t.Fatalf("dashboard scope/formulas wrong: %v", dash)
+	}
+	internship["mentor_id"] = mentor
+	call(partnerClient, "PUT", "/entries/"+traineeID, map[string]interface{}{"payload": internship, "comment": "Уточнение данных после утверждения"}, 200)
+	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
+	dash = object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
+	if dash["eligible_fact_total_rub"].(float64) != 0 {
+		t.Fatal("changed approved report was not returned to draft")
 	}
 	directoryBook := xlsx.New()
 	directoryBook.AddSheet("Данные", []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}, [][]interface{}{{"Колледж для импорта " + stamp, "kolledj", "Тестовый регион", "7736050003", "1027700070518", "Л035-ТЕСТ-3", "active", "active", "test-c-" + stamp, "https://islod.obrnadzor.gov.ru/rlic/details/test-3", time.Now().Format("2006-01-02")}})

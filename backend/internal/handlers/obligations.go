@@ -7,15 +7,18 @@ import (
 )
 
 type obligationStatus struct {
-	Teachers bool     `json:"teachers"`
-	Programs bool     `json:"ood_rpd"`
-	TopIT    bool     `json:"top_it"`
-	Required bool     `json:"required"`
-	Missing  []string `json:"missing"`
+	Teachers       bool     `json:"teachers"`
+	Programs       bool     `json:"ood_rpd"`
+	TopIT          bool     `json:"top_it"`
+	Required       bool     `json:"required"`
+	Missing        []string `json:"missing"`
+	Complete       bool     `json:"complete"`
+	ReportStatus   string   `json:"report_status"`
+	TopITException bool     `json:"top_it_exception"`
 }
 
 func obligations(kind string, teachers, programs, top bool) obligationStatus {
-	s := obligationStatus{Teachers: teachers, Programs: programs, TopIT: top, Required: kind == "vuz" && !top, Missing: []string{}}
+	s := obligationStatus{Teachers: teachers, Programs: programs, TopIT: top, Required: kind == "vuz", Missing: []string{}}
 	if s.Required {
 		if !teachers {
 			s.Missing = append(s.Missing, "teachers")
@@ -32,7 +35,7 @@ func (h *EntryHandlers) Obligations(w http.ResponseWriter, r *http.Request, u mi
 	agreement := q.Get("agreement_id")
 	year, err := strconv.Atoi(q.Get("report_year"))
 	period := q.Get("period_type")
-	if err != nil || year < 2000 || year > 2100 || (period != "plan" && period != "fact") || partner == "" {
+	if err != nil || year < 2000 || year > 2100 || (period != "plan" && period != "fact") || partner == "" || agreement == "" {
 		middleware.WriteError(w, 400, "укажите партнёра, год и план/факт")
 		return
 	}
@@ -50,5 +53,21 @@ func (h *EntryHandlers) Obligations(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 500, "ошибка проверки обязательностей")
 		return
 	}
-	middleware.WriteJSON(w, 200, obligations(kind, teacher, program, top))
+	status := obligations(kind, teacher, program, top)
+	workflow, workflowErr := buildWorkflow(r.Context(), h.DB, u, agreement, year, period)
+	if workflowErr != nil {
+		middleware.WriteError(w, 500, "ошибка строгой проверки обязательностей")
+		return
+	}
+	status.Missing = status.Missing[:0]
+	for _, activity := range workflow.Activities {
+		if !activity.Complete && !workflow.TopITException {
+			status.Missing = append(status.Missing, activity.Code)
+		}
+	}
+	status.Required = kind == "vuz" && !workflow.TopITException
+	status.Complete = workflow.Status == "approved" && len(workflow.Missing) == 0
+	status.ReportStatus = workflow.Status
+	status.TopITException = workflow.TopITException
+	middleware.WriteJSON(w, 200, status)
 }

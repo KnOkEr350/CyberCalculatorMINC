@@ -142,6 +142,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	dashH := &handlers.DashboardHandlers{DB: db}
 	adminH := &handlers.AdminHandlers{DB: db}
 	reportH := &handlers.ReportHandlers{DB: db}
+	workflowH := &handlers.ReportWorkflowHandlers{DB: db}
 
 	// --- Аутентификация ---
 	mux.HandleFunc("POST /api/auth/login", authH.Login)
@@ -205,6 +206,8 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 
 	// --- Отчёты xlsx ---
 	mux.HandleFunc("GET /api/reports/export", middleware.RequireAuth(db, reportH.Export))
+	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(db, workflowH.Get))
+	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(db, workflowH.Transition))
 
 	// --- Админка ---
 	mux.HandleFunc("GET /api/admin/users", middleware.RequireAdmin(db, adminH.ListUsers))

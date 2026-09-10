@@ -35,7 +35,7 @@ func TestObligations(t *testing.T) {
 				for _, programs := range []bool{false, true} {
 					s := obligations(kind, teachers, programs, top)
 					want := 0
-					if kind == "vuz" && !top {
+					if kind == "vuz" {
 						if !teachers {
 							want++
 						}

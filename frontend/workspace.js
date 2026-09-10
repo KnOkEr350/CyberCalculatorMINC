@@ -47,6 +47,7 @@ function agreementFieldsMarkup(prefix, agreement = {}, withPartners = false) {
     <div class="field"><label>Ссылка / реквизиты документа</label><input id="${prefix}-document" maxlength="1000" value="${escapeHTML(agreement.document_reference || "")}"></div>
   </div>
   ${withPartners ? `<div class="field"><label>Учебные заведения, охваченные соглашением *</label><select id="${prefix}-partners" multiple size="5" required>${state.partners.map((partner) => `<option value="${partner.id}" data-kind="${partner.partner_kind}" ${(agreement.partner_ids || []).includes(partner.id) ? "selected" : ""}>${escapeHTML(partner.name)} (${escapeHTML(AUDIENCE_LABELS[partner.partner_kind])})</option>`).join("")}</select><div class="field-hint">Соглашение с РОИВ охватывает одну или несколько школ. Для вузов и СПО используется соглашение с образовательной организацией.</div></div>` : ""}
+  <fieldset class="field" id="${prefix}-activities"><legend>Виды мероприятий, включённые в соглашение *</legend><div class="grid cols-2">${state.categories.map((category) => `<label class="check-row"><input type="checkbox" value="${escapeHTML(category.code)}" ${(agreement.activity_codes == null || agreement.activity_codes.includes(category.code)) ? "checked" : ""}> <span>${escapeHTML(category.name)}</span></label>`).join("")}</div><div class="field-hint">Готовность контролируется по каждому выбранному виду. Для нового соглашения выбраны все применимые виды; исключите только те, которые действительно не входят в согласованный перечень.</div></fieldset>
   <div class="grid cols-2">
     <div class="field"><label>Ответственные Киберпротекта</label><textarea id="${prefix}-people-cp" rows="3" placeholder="ФИО | должность | email | телефон">${escapeHTML(peopleToText(agreement, "cyberprotect"))}</textarea></div>
     <div class="field"><label>Ответственные контрагента</label><textarea id="${prefix}-people-other" rows="3" placeholder="ФИО | должность | email | телефон">${escapeHTML(peopleToText(agreement, "counterparty"))}</textarea></div>
@@ -77,6 +78,18 @@ function wireAgreementFields(root, prefix, agreement = {}) {
         if (!allowed) option.selected = false;
       });
     }
+    const selectedKinds = partners
+      ? [...partners.selectedOptions].map((option) => option.dataset.kind)
+      : [kind.value === "roiv" ? "school" : "vuz", kind.value === "roiv" ? "school" : "kolledj"];
+    const activityInputs = [...root.querySelectorAll(`#${prefix}-activities input[type=checkbox]`)];
+    activityInputs.forEach((input) => {
+      const category = state.categories.find((item) => item.code === input.value);
+      const allowed = category && selectedKinds.some((selectedKind) => category.audience_scope.includes(selectedKind));
+      input.disabled = !allowed;
+      if (!allowed) input.checked = false;
+    });
+    const firstActivity = activityInputs.find((input) => !input.disabled);
+    if (firstActivity) firstActivity.setCustomValidity(activityInputs.some((input) => !input.disabled && input.checked) ? "" : "Выберите хотя бы один вид мероприятия");
     root.querySelector(`#${prefix}-signed-by`).required = active;
     root.querySelector(`#${prefix}-signature-date`).required = active;
     root.querySelector(`#${prefix}-people-cp`).required = active;
@@ -90,6 +103,8 @@ function wireAgreementFields(root, prefix, agreement = {}) {
   kind.onchange = sync;
   status.onchange = sync;
   signature.onchange = sync;
+  root.querySelector(`#${prefix}-partners`)?.addEventListener("change", sync);
+  root.querySelectorAll(`#${prefix}-activities input`).forEach((input) => input.addEventListener("change", sync));
   sync();
 }
 
@@ -128,6 +143,7 @@ function collectAgreement(root, prefix, partnerIDs) {
     signature_date: root.querySelector(`#${prefix}-signature-date`).value,
     document_reference: root.querySelector(`#${prefix}-document`).value.trim(),
     notes: root.querySelector(`#${prefix}-notes`).value.trim(),
+    activity_codes: [...root.querySelectorAll(`#${prefix}-activities input:checked:not(:disabled)`)].map((input) => input.value),
     responsible_people: [
       ...parseResponsiblePeople(root.querySelector(`#${prefix}-people-cp`).value, "cyberprotect"),
       ...parseResponsiblePeople(root.querySelector(`#${prefix}-people-other`).value, "counterparty"),
@@ -245,8 +261,10 @@ async function renderPartnerEntries(root) {
     (agreement) => agreement.id === state.agreementID,
   );
   const writable = agreementIsUsable(selectedAgreement);
-  const available = state.categories.filter((c) =>
-    c.audience_scope.includes(partner?.partner_kind || state.partnerKind),
+  const available = state.categories.filter(
+    (category) =>
+      category.audience_scope.includes(partner?.partner_kind || state.partnerKind) &&
+      (!selectedAgreement?.activity_codes || selectedAgreement.activity_codes.includes(category.code)),
   );
   if (!available.some((c) => c.code === state.categoryCode))
     state.categoryCode = available[0]?.code || "";
@@ -350,10 +368,15 @@ async function renderPartnerEntries(root) {
     root.querySelectorAll("a").forEach((a) => a.removeAttribute("href"));
     return;
   }
+  if (!state.agreementID) {
+    root.querySelectorAll("a").forEach((a) => a.removeAttribute("href"));
+    root.querySelector("#entries-table").textContent = "Добавьте и выберите соглашение.";
+    return;
+  }
   const chosen = state.partnerID;
-  const [entries, status] = await Promise.all([
+  const [entries, workflow] = await Promise.all([
     api(`/entries?${query}&offset=${state.entryPageOffset || 0}`),
-    api(`/obligations?${query}`),
+    api(`/report-workflow?${new URLSearchParams({ agreement_id: state.agreementID, report_year: state.year, period_type: state.period })}`),
   ]);
   if (
     chosen !== state.partnerID ||
@@ -363,19 +386,42 @@ async function renderPartnerEntries(root) {
     return;
   state.entries = entries;
   const obligation = root.querySelector("#obligation-box");
-  if (partner.partner_kind === "vuz") {
-    const topSelected = state.categoryCode === "top_it";
-    obligation.innerHTML = `<div class="card"><h2>${status.top_it ? "ТОП ИТ: обязательность снята" : topSelected ? "ТОП ИТ: обязательность будет снята после сохранения" : "Обязательные активности вуза"}</h2>
-    <p>${status.top_it || topSelected ? "Преподавание и ООП/РПД не требуются для этого партнёра в выбранных году и плане/факте." : "Для выбранного года проверяются преподавание и хотя бы одна активность ООП/РПД. Записи можно сохранять поэтапно."}</p>
-    ${!status.top_it && !topSelected ? ["teachers", "ood_rpd"].map((code) => `<button class="btn secondary" data-required="${code}">${status[code] ? "✓" : "＋"} ${escapeHTML(CATEGORY_LABELS[code])}</button>`).join("") : ""}
-    <p class="muted">Это контроль заполнения, не заключение о соответствии приказу. Для льготы ТОП ИТ приказ дополнительно требует другие виды мероприятий хотя бы в одной иной образовательной организации; это условие нужно проверить отдельно.</p></div>`;
-    obligation.querySelectorAll("[data-required]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          state.categoryCode = b.dataset.required;
-          renderEntries(root);
-        }),
-    );
+  const workflowLabels = { draft: "Черновик", ready: "Готово", verified: "Проверено", approved: "Утверждено" };
+  const automaticOK = workflow.automatic_checks.every((check) => check.complete);
+  obligation.innerHTML = `<div class="card"><div class="flex between"><div><h2>Комплектность отчёта по соглашению</h2><p>Статус: <span class="status-badge ${workflow.status === "approved" ? "active" : workflow.status === "draft" ? "inactive" : ""}">${escapeHTML(workflowLabels[workflow.status] || workflow.status)}</span></p></div><small>Контроль ведётся отдельно для ${state.period === "plan" ? "плана" : "факта"} ${state.year} года</small></div>
+    <h3>Автоматические проверки</h3><ul>${workflow.automatic_checks.map((check) => `<li>${check.complete ? "✓" : "✕"} ${escapeHTML(check.label)}</li>`).join("")}</ul>
+    <h3>Виды мероприятий соглашения</h3><div class="grid cols-2">${workflow.activities.map((activity) => `<button class="btn secondary" data-required="${activity.code}">${activity.complete ? "✓" : "＋"} ${escapeHTML(activity.name)}</button>`).join("")}</div>
+    ${workflow.top_it_exception ? '<p class="notice">Применено исключение ТОП ИТ/ИИ: остальные виды подтверждены в другой утверждённой образовательной организации.</p>' : ""}
+    <h3>Юридические подтверждения</h3><label class="check-row"><input id="wf-scope" type="checkbox" ${workflow.scope_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Конкретный перечень, объём, сроки и условия соответствуют соглашению</label>
+    <label class="check-row"><input id="wf-conditions" type="checkbox" ${workflow.conditions_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Выполнены условия реализации каждого вида из приложения № 1 приказа</label>
+    <label class="check-row"><input id="wf-evidence" type="checkbox" ${workflow.evidence_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Подтверждающие документы имеются и позволяют установить факт мероприятия (загрузка в систему необязательна)</label>
+    ${state.period === "fact" ? `<label class="check-row"><input id="wf-counterparty" type="checkbox" ${workflow.counterparty_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Перечень направлен контрагенту и согласован/считается согласованным по сроку приказа</label>` : ""}
+    <div class="field"><label>Комментарий к смене статуса</label><textarea id="wf-comment" maxlength="1000" rows="2" placeholder="Основание проверки или возврата"></textarea></div>
+    <div class="flex"><button class="btn" id="wf-ready" ${workflow.status === "draft" && automaticOK ? "" : "disabled"}>Передать: Готово</button><button class="btn" id="wf-verify" ${workflow.can_verify ? "" : "disabled"}>Проверено</button><button class="btn" id="wf-approve" ${workflow.can_approve ? "" : "disabled"}>Утверждено</button><button class="btn secondary" id="wf-draft" ${workflow.can_return_draft ? "" : "disabled"}>Вернуть в черновик</button></div>
+    ${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : ""}
+    ${workflow.history.length ? `<details><summary>История согласования (${workflow.history.length})</summary><ul>${workflow.history.map((item) => `<li>${new Date(item.changed_at).toLocaleString("ru-RU")} · ${escapeHTML(item.changed_by)}: ${escapeHTML(workflowLabels[item.from_status] || item.from_status)} → ${escapeHTML(workflowLabels[item.to_status] || item.to_status)} — ${escapeHTML(item.comment)}</li>`).join("")}</ul></details>` : ""}<p class="muted">Любое изменение соглашения, перечня или записи автоматически возвращает этот отчёт в черновик. Экспорт разрешён только после утверждения.</p></div>`;
+  obligation.querySelectorAll("[data-required]").forEach((button) => button.onclick = () => { state.categoryCode = button.dataset.required; renderEntries(root); });
+  const transition = async (nextStatus) => {
+    const button = obligation.querySelector(`#wf-${nextStatus === "ready" ? "ready" : nextStatus === "verified" ? "verify" : nextStatus === "approved" ? "approve" : "draft"}`);
+    button.disabled = true;
+    try {
+      await api(`/report-workflow/transition?${new URLSearchParams({ agreement_id: state.agreementID, report_year: state.year, period_type: state.period })}`, { method: "POST", body: JSON.stringify({ status: nextStatus, scope_confirmed: obligation.querySelector("#wf-scope")?.checked || false, conditions_confirmed: obligation.querySelector("#wf-conditions")?.checked || false, evidence_confirmed: obligation.querySelector("#wf-evidence")?.checked || false, counterparty_confirmed: obligation.querySelector("#wf-counterparty")?.checked || false, comment: obligation.querySelector("#wf-comment").value.trim() }) });
+      showToast(`Статус: ${workflowLabels[nextStatus]}`, "success");
+      await renderEntries(root);
+    } catch (error) { showToast(error.message); button.disabled = false; }
+  };
+  obligation.querySelector("#wf-ready").onclick = () => transition("ready");
+  obligation.querySelector("#wf-verify").onclick = () => transition("verified");
+  obligation.querySelector("#wf-approve").onclick = () => transition("approved");
+  obligation.querySelector("#wf-draft").onclick = () => transition("draft");
+  const syncReady = () => {
+    const manualOK = obligation.querySelector("#wf-scope")?.checked && obligation.querySelector("#wf-conditions")?.checked && obligation.querySelector("#wf-evidence")?.checked && (state.period === "plan" || obligation.querySelector("#wf-counterparty")?.checked);
+    obligation.querySelector("#wf-ready").disabled = !(workflow.status === "draft" && automaticOK && manualOK);
+  };
+  obligation.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", syncReady));
+  syncReady();
+  if (workflow.status !== "approved") {
+    ["#export-link", "#export-all-link", "#export-word"].forEach((selector) => { const link = root.querySelector(selector); link.removeAttribute("href"); link.classList.add("disabled"); link.title = "Экспорт откроется после утверждения отчёта"; });
   }
   const paint = () => {
     const term = root
@@ -692,7 +738,7 @@ async function openAgreements(partnerID, onSaved = async () => {}) {
   let editingID = "";
   const renderList = () => {
     modal.querySelector("#agreement-list").innerHTML = agreements.length
-      ? agreements.map((agreement) => `<div class="agreement-card"><div><b>${escapeHTML(agreementLabel(agreement))}</b><br>${escapeHTML(AGREEMENT_KIND_LABELS[agreement.agreement_kind])}${agreement.roiv_name ? `: ${escapeHTML(agreement.roiv_name)}` : ""}<br><small>Подписание: ${escapeHTML(agreement.signature_method)}${agreement.signed_by ? ` · ${escapeHTML(agreement.signed_by)}` : ""}. Организаций: ${agreement.partner_ids.length}. Ответственных: ${agreement.responsible_people.length}.</small></div>${isStaffUser() ? `<button class="btn secondary" data-edit-agreement="${agreement.id}">Изменить</button>` : ""}</div>`).join("")
+      ? agreements.map((agreement) => `<div class="agreement-card"><div><b>${escapeHTML(agreementLabel(agreement))}</b><br>${escapeHTML(AGREEMENT_KIND_LABELS[agreement.agreement_kind])}${agreement.roiv_name ? `: ${escapeHTML(agreement.roiv_name)}` : ""}<br><small>Подписание: ${escapeHTML(agreement.signature_method)}${agreement.signed_by ? ` · ${escapeHTML(agreement.signed_by)}` : ""}. Организаций: ${agreement.partner_ids.length}. Ответственных: ${agreement.responsible_people.length}. Виды мероприятий: ${(agreement.activity_codes || []).length}.</small></div>${isStaffUser() ? `<button class="btn secondary" data-edit-agreement="${agreement.id}">Изменить</button>` : ""}</div>`).join("")
       : "<p>Соглашений нет.</p>";
     modal.querySelectorAll("[data-edit-agreement]").forEach((button) => {
       button.onclick = () => fillForm(agreements.find((item) => item.id === button.dataset.editAgreement));

@@ -496,7 +496,7 @@ async function renderDashboard(root) {
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
-      <div class="card"><h2>Контроль обязательностей</h2><p>План с заполненными условиями: ${fmtMoney(d.eligible_plan_total_rub)}. Факт: ${fmtMoney(d.eligible_fact_total_rub)}.</p><p>Записей с незаполненными условиями: ${Number(d.incomplete_entries || 0)}. Для TOP IT проверяется наличие других мероприятий в другой ОО в том же году и плане/факте. Проверка заполнения не заменяет согласование документов.</p></div>
+      <div class="card"><h2>Утверждённые суммы</h2><p>План: ${fmtMoney(d.eligible_plan_total_rub)}. Факт: ${fmtMoney(d.eligible_fact_total_rub)}.</p><p>Записей в неутверждённых отчётах: ${Number(d.incomplete_entries || 0)}. Отдельные преподавание или ООП/РПД больше не засчитываются сами по себе: учитывается только полностью проверенный и утверждённый комплект по соглашению. Исключение ТОП ИТ/ИИ применяется лишь при наличии утверждённых остальных видов в другой ОО.</p></div>
       <div class="card"><h2>Диаграмма структуры — План</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
       <div class="card"><h2>Диаграмма структуры — Факт</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
     </div>

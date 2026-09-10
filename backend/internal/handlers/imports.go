@@ -113,7 +113,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
-	if err := h.validateAgreementContext(r, agreementID, partner, year); err != nil {
+	if err := h.validateAgreementContext(r, agreementID, partner, category, year); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}

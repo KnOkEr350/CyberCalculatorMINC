@@ -96,6 +96,7 @@ type Agreement struct {
 	DocumentReference   string                       `json:"document_reference,omitempty"`
 	Notes               string                       `json:"notes,omitempty"`
 	ResponsiblePeople   []AgreementResponsiblePerson `json:"responsible_people"`
+	ActivityCodes       []string                     `json:"activity_codes"`
 	CreatedAt           time.Time                    `json:"created_at"`
 	UpdatedAt           time.Time                    `json:"updated_at"`
 }
