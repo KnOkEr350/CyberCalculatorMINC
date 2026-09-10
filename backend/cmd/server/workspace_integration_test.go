@@ -90,13 +90,17 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if adminDashboard["target_amount_rub"].(float64) != 6000 {
 		t.Fatal("owner-scoped target upsert failed")
 	}
-	var directory1, directory2, staleDirectory string
+	var directory1, directory2, schoolDirectory, staleDirectory string
 	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
 		VALUES($1,'vuz','Республика Татарстан','https://islod.obrnadzor.gov.ru','1650084264','1021602020384','Л035-ТЕСТ-1','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-1',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовый вуз A "+stamp, "test-a-"+stamp).Scan(&directory1); e != nil {
 		t.Fatal(e)
 	}
 	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
 		VALUES($1,'vuz','г.Москва','https://islod.obrnadzor.gov.ru','7707083893','1027700132195','Л035-ТЕСТ-2','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-2',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовый вуз B "+stamp, "test-b-"+stamp).Scan(&directory2); e != nil {
+		t.Fatal(e)
+	}
+	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
+		VALUES($1,'school','Тестовый регион','https://islod.obrnadzor.gov.ru','7736050003','1027700070518','Л035-ШКОЛА','active','active',$2,'https://islod.obrnadzor.gov.ru/rlic/details/test-school',CURRENT_DATE,now(),'verified') RETURNING id`, "Тестовая школа "+stamp, "test-school-"+stamp).Scan(&schoolDirectory); e != nil {
 		t.Fatal(e)
 	}
 	if e := db.QueryRow(`INSERT INTO education_directory(name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
@@ -116,6 +120,39 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": staleDirectory, "initial_agreement": agreement("STALE-" + stamp)}, 409)
 	p1, agreement1 := created1["id"].(string), created1["agreement_id"].(string)
 	p2, agreement2 := created2["id"].(string), created2["agreement_id"].(string)
+	badSchoolAgreement := agreement("BAD-SCHOOL-" + stamp)
+	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": schoolDirectory, "initial_agreement": badSchoolAgreement}, 400)
+	authorityBody := map[string]interface{}{
+		"name": "Министерство образования тестового региона " + stamp, "region": "Тестовый регион",
+		"inn": "7707083893", "ogrn": "1027700132195", "status": "active",
+		"source_url": "https://education.test.gov.ru/regional-authority",
+	}
+	authorityID := object(call(admin, "POST", "/regional-authorities", authorityBody, 201))["id"].(string)
+	schoolAgreement := agreement("SCHOOL-" + stamp)
+	schoolAgreement["agreement_kind"] = "roiv"
+	schoolAgreement["regional_authority_id"] = authorityID
+	createdSchool := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": schoolDirectory, "initial_agreement": schoolAgreement}, 201))
+	schoolPartner, schoolAgreementID := createdSchool["id"].(string), createdSchool["agreement_id"].(string)
+	invalidROIVAgreement := agreement("BAD-ROIV-" + stamp)
+	invalidROIVAgreement["agreement_kind"] = "roiv"
+	invalidROIVAgreement["regional_authority_id"] = authorityID
+	invalidROIVAgreement["partner_ids"] = []string{p1}
+	call(admin, "POST", "/agreements", invalidROIVAgreement, 400)
+	schoolEntry := map[string]interface{}{
+		"partner_id": schoolPartner, "agreement_id": schoolAgreementID, "category_code": "it_clubs",
+		"period_type": "plan", "report_year": 2026, "audience": "school",
+		"payload": map[string]interface{}{"org_name": schoolPartner, "program_name": "Кружок ИТ", "academic_hours": 1, "developed_programs_count": 1, "students_count": 10},
+	}
+	call(admin, "POST", "/entries", schoolEntry, 201)
+	authorities := call(admin, "GET", "/regional-authorities", nil, 200)
+	if !bytes.Contains(authorities, []byte(authorityID)) || !bytes.Contains(authorities, []byte(`"schools_count":1`)) || !bytes.Contains(authorities, []byte(`"activities_count":1`)) {
+		t.Fatal("ROIV to school to activity relation is not visible")
+	}
+	authorityBody["status"] = "inactive"
+	call(admin, "PUT", "/regional-authorities/"+authorityID, authorityBody, 200)
+	call(admin, "POST", "/entries", schoolEntry, 400)
+	authorityBody["status"] = "active"
+	call(admin, "PUT", "/regional-authorities/"+authorityID, authorityBody, 200)
 	groupAgreement := agreement("GROUP-" + stamp)
 	groupAgreement["partner_ids"] = []string{p1, p2}
 	groupAgreement["legal_entity_group"] = "Тестовая группа юридических лиц"
@@ -287,7 +324,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if !bytes.Contains(filtered, []byte("Колледж для импорта")) {
 		t.Fatal("directory search failed")
 	}
-	filtered = call(admin, "GET", "/directory?partner_kind=school&q="+stamp, nil, 200)
+	filtered = call(admin, "GET", "/directory?partner_kind=school&q=Колледж+для+импорта+"+stamp, nil, 200)
 	if string(bytes.TrimSpace(filtered)) != "[]" {
 		t.Fatal("directory type filter failed")
 	}

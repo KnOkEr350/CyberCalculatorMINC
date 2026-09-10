@@ -21,16 +21,17 @@ type ReportHandlers struct {
 }
 
 type reportEntryRow struct {
-	Eligible        bool
-	PartnerID       string
-	PartnerName     sql.NullString
-	CategoryCode    string
-	Audience        string
-	AmountRub       money.Amount
-	Payload         []byte
-	AgreementNumber string
-	AgreementKind   string
-	AgreementStatus string
+	Eligible              bool
+	PartnerID             string
+	PartnerName           sql.NullString
+	CategoryCode          string
+	Audience              string
+	AmountRub             money.Amount
+	Payload               []byte
+	AgreementNumber       string
+	AgreementKind         string
+	AgreementStatus       string
+	RegionalAuthorityName string
 }
 
 // «Сформировать годовой план активностей» / «отчёт по реализованным
@@ -53,9 +54,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
 	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.payload,eligibility.eligible,
-		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,'')
+		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,''),COALESCE(ra.name,'')
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id
 		LEFT JOIN agreements a ON a.id=e.agreement_id
+		LEFT JOIN regional_authorities ra ON ra.id=a.regional_authority_id
 		WHERE e.period_type = $1 AND e.report_year = $2`
 	args := []interface{}{periodType, year}
 	if categoryFilter != "" {
@@ -88,7 +90,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	for rows.Next() {
 		var row reportEntryRow
 		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.Payload, &row.Eligible,
-			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus); err != nil {
+			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus, &row.RegionalAuthorityName); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -131,7 +133,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	audiences := map[string]string{"vuz": "Вуз", "kolledj": "СПО", "school": "Школа"}
 
 	wb := xlsx.New()
-	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Проверка обязательностей (не согласование)"}
+	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Проверка обязательностей (не согласование)"}
 	status := func(d reportEntryRow) string {
 		if d.Eligible {
 			return "Условия заполнены; требуется проверка документов"
@@ -147,7 +149,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
-		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 		var sumErr error
 		total, sumErr = money.Add(total, d.AmountRub)
 		if sumErr != nil {
@@ -155,7 +157,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			return
 		}
 	}
-	consolidated = append(consolidated, []interface{}{"ИТОГО (включая незавершённые записи)", "", "", "", "", total, "", "Рабочий расчёт, не согласованный отчёт"})
+	consolidated = append(consolidated, []interface{}{"ИТОГО (включая незавершённые записи)", "", "", "", "", "", total, "", "Рабочий расчёт, не согласованный отчёт"})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	if q.Get("format") == "docx" {
 		docRows := [][]string{}
@@ -183,7 +185,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	if categoryFilter != "" {
 		if calc, e := calculators.Get(categoryFilter); e == nil {
 			fields := []calculators.FieldSpec{}
-			cols := []string{"Учебное заведение", "Соглашение"}
+			cols := []string{"Учебное заведение", "Соглашение", "РОИВ"}
 			for _, f := range calc.Fields() {
 				if f.Key != "org_name" && f.Key != "mentor_id" {
 					fields = append(fields, f)
@@ -195,7 +197,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			for _, d := range data {
 				var payload map[string]interface{}
 				json.Unmarshal(d.Payload, &payload)
-				row := []interface{}{d.PartnerName.String, d.AgreementNumber}
+				row := []interface{}{d.PartnerName.String, d.AgreementNumber, d.RegionalAuthorityName}
 				for _, f := range fields {
 					v, ok := payload[f.Key]
 					if !ok {
@@ -222,7 +224,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if _, ok := byPartner[key]; !ok {
 			order = append(order, key)
 		}
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 	}
 	for _, key := range order {
 		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])

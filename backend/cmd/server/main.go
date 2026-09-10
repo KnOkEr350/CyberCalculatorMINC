@@ -136,6 +136,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	})
 	partnerH := &handlers.PartnerHandlers{DB: db}
 	agreementH := &handlers.AgreementHandlers{DB: db}
+	regionalAuthorityH := &handlers.RegionalAuthorityHandlers{DB: db}
 	entryH := &handlers.EntryHandlers{DB: db}
 	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir, ScannerAddress: cfg.ScannerAddress, QuotaBytes: cfg.UploadQuotaBytes}
 	dashH := &handlers.DashboardHandlers{DB: db}
@@ -160,6 +161,11 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/agreements", middleware.RequireAuth(db, agreementH.Create))
 	mux.HandleFunc("PUT /api/agreements/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		agreementH.Update(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/regional-authorities", middleware.RequireAuth(db, regionalAuthorityH.List))
+	mux.HandleFunc("POST /api/regional-authorities", middleware.RequireAuth(db, regionalAuthorityH.Create))
+	mux.HandleFunc("PUT /api/regional-authorities/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		regionalAuthorityH.Update(w, r, u, r.PathValue("id"))
 	}))
 	mux.HandleFunc("GET /api/mentors", middleware.RequireAuth(db, entryH.Mentors))
 	mux.HandleFunc("POST /api/mentors", middleware.RequireAuth(db, entryH.CreateMentor))

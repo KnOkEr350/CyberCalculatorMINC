@@ -130,6 +130,10 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	agreement.Request.PartnerIDs = []string{partnerID}
+	if err := prepareAgreementRelations(r.Context(), tx, &agreement); err != nil {
+		middleware.WriteError(w, 400, err.Error())
+		return
+	}
 	agreementID, err := insertAgreement(r.Context(), tx, agreement, u.ID)
 	if err != nil {
 		middleware.WriteError(w, 409, "не удалось сохранить первое соглашение")

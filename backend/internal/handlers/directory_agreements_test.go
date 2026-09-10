@@ -76,3 +76,37 @@ func TestNormalizeActiveAgreement(t *testing.T) {
 		t.Fatal("agreement with reversed validity period accepted")
 	}
 }
+
+func TestRegionalAuthorityValidation(t *testing.T) {
+	req := regionalAuthorityWriteRequest{
+		Name:      " Министерство образования тестового региона ",
+		Region:    " Тестовый регион ",
+		INN:       "7707083893",
+		OGRN:      "1027700132195",
+		Status:    "active",
+		SourceURL: "https://education.example.gov.ru/authority",
+	}
+	normalized, err := normalizeRegionalAuthority(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Name != "Министерство образования тестового региона" {
+		t.Fatal("regional authority name was not normalized")
+	}
+	req.SourceURL = "https://example.test/not-official"
+	if _, err = normalizeRegionalAuthority(req); err == nil {
+		t.Fatal("unofficial regional authority source accepted")
+	}
+
+	agreement := agreementWriteRequest{
+		PartnerIDs: []string{"school-id"}, AgreementKind: "roiv", Number: "РОИВ-1", Status: "draft",
+		SignedOn: "2026-01-01", ValidFrom: "2026-01-01", ValidUntil: "2026-12-31", SignatureMethod: "unsigned",
+	}
+	if _, err = normalizeAgreement(agreement); err == nil {
+		t.Fatal("ROIV agreement without regional authority accepted")
+	}
+	agreement.RegionalAuthorityID = "authority-id"
+	if _, err = normalizeAgreement(agreement); err != nil {
+		t.Fatalf("ROIV agreement with authority rejected: %v", err)
+	}
+}

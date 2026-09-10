@@ -14,7 +14,8 @@ function agreementIsUsable(agreement, year = state.year) {
 
 function agreementLabel(agreement) {
   if (!agreement) return "—";
-  return `№ ${agreement.number} · ${AGREEMENT_STATUS_LABELS[agreement.status] || agreement.status} · ${agreement.valid_from}—${agreement.valid_until}`;
+  const authority = agreement.roiv_name ? ` · ${agreement.roiv_name}` : "";
+  return `№ ${agreement.number}${authority} · ${AGREEMENT_STATUS_LABELS[agreement.status] || agreement.status} · ${agreement.valid_from}—${agreement.valid_until}`;
 }
 
 function peopleToText(agreement, party) {
@@ -38,14 +39,14 @@ function agreementFieldsMarkup(prefix, agreement = {}, withPartners = false) {
     <div class="field"><label>Дата соглашения *</label><input type="date" id="${prefix}-signed-on" required value="${escapeHTML(agreement.signed_on || today)}"></div>
     <div class="field"><label>Действует с *</label><input type="date" id="${prefix}-valid-from" required value="${escapeHTML(agreement.valid_from || today)}"></div>
     <div class="field"><label>Действует до *</label><input type="date" id="${prefix}-valid-until" required value="${escapeHTML(agreement.valid_until || yearEnd)}"></div>
-    <div class="field" id="${prefix}-roiv-box"><label>Наименование РОИВ *</label><input id="${prefix}-roiv" maxlength="300" value="${escapeHTML(agreement.roiv_name || "")}"></div>
+    <div class="field" id="${prefix}-roiv-box"><label>Региональный орган управления образованием *</label><select id="${prefix}-roiv-authority"><option value="">— Выберите РОИВ —</option>${state.regionalAuthorities.map((authority) => `<option value="${authority.id}" ${authority.id === agreement.regional_authority_id ? "selected" : ""} ${authority.status === "active" ? "" : "disabled"}>${escapeHTML(authority.region)} — ${escapeHTML(authority.name)}</option>`).join("")}</select><div class="field-hint">РОИВ ведётся отдельно и связывает соглашение со школами и их мероприятиями.</div></div>
     <div class="field"><label>Группа юридических лиц</label><input id="${prefix}-group" maxlength="1000" value="${escapeHTML(agreement.legal_entity_group || "")}" placeholder="Название группы или периметра соглашения"></div>
     <div class="field"><label>Способ подписания *</label><select id="${prefix}-signature"><option value="unsigned">Не подписано</option><option value="paper">Бумажный документ</option><option value="qualified_electronic">УКЭП</option><option value="goskey">Госключ</option></select></div>
     <div class="field"><label>Подписант (обязательно для действующего)</label><input id="${prefix}-signed-by" maxlength="300" value="${escapeHTML(agreement.signed_by || "")}"></div>
     <div class="field"><label>Дата подписания (обязательно для действующего)</label><input type="date" id="${prefix}-signature-date" value="${escapeHTML(agreement.signature_date || "")}"></div>
     <div class="field"><label>Ссылка / реквизиты документа</label><input id="${prefix}-document" maxlength="1000" value="${escapeHTML(agreement.document_reference || "")}"></div>
   </div>
-  ${withPartners ? `<div class="field"><label>Учебные заведения, охваченные соглашением *</label><select id="${prefix}-partners" multiple size="5" required>${state.partners.map((partner) => `<option value="${partner.id}" ${(agreement.partner_ids || []).includes(partner.id) ? "selected" : ""}>${escapeHTML(partner.name)}</option>`).join("")}</select><div class="field-hint">Можно выбрать несколько организаций для соглашения с группой юридических лиц.</div></div>` : ""}
+  ${withPartners ? `<div class="field"><label>Учебные заведения, охваченные соглашением *</label><select id="${prefix}-partners" multiple size="5" required>${state.partners.map((partner) => `<option value="${partner.id}" data-kind="${partner.partner_kind}" ${(agreement.partner_ids || []).includes(partner.id) ? "selected" : ""}>${escapeHTML(partner.name)} (${escapeHTML(AUDIENCE_LABELS[partner.partner_kind])})</option>`).join("")}</select><div class="field-hint">Соглашение с РОИВ охватывает одну или несколько школ. Для вузов и СПО используется соглашение с образовательной организацией.</div></div>` : ""}
   <div class="grid cols-2">
     <div class="field"><label>Ответственные Киберпротекта</label><textarea id="${prefix}-people-cp" rows="3" placeholder="ФИО | должность | email | телефон">${escapeHTML(peopleToText(agreement, "cyberprotect"))}</textarea></div>
     <div class="field"><label>Ответственные контрагента</label><textarea id="${prefix}-people-other" rows="3" placeholder="ФИО | должность | email | телефон">${escapeHTML(peopleToText(agreement, "counterparty"))}</textarea></div>
@@ -61,10 +62,21 @@ function wireAgreementFields(root, prefix, agreement = {}) {
   status.value = agreement.status === "needs_review" ? "draft" : agreement.status || "active";
   signature.value = agreement.signature_method || "paper";
   const sync = () => {
-    const roiv = root.querySelector(`#${prefix}-roiv`);
+    const roiv = root.querySelector(`#${prefix}-roiv-authority`);
     const active = status.value === "active";
     root.querySelector(`#${prefix}-roiv-box`).hidden = kind.value !== "roiv";
     roiv.required = kind.value === "roiv";
+    const partners = root.querySelector(`#${prefix}-partners`);
+    if (partners) {
+      [...partners.options].forEach((option) => {
+        const allowed =
+          kind.value === "roiv"
+            ? option.dataset.kind === "school"
+            : option.dataset.kind !== "school";
+        option.disabled = !allowed;
+        if (!allowed) option.selected = false;
+      });
+    }
     root.querySelector(`#${prefix}-signed-by`).required = active;
     root.querySelector(`#${prefix}-signature-date`).required = active;
     root.querySelector(`#${prefix}-people-cp`).required = active;
@@ -107,7 +119,9 @@ function collectAgreement(root, prefix, partnerIDs) {
     signed_on: root.querySelector(`#${prefix}-signed-on`).value,
     valid_from: root.querySelector(`#${prefix}-valid-from`).value,
     valid_until: root.querySelector(`#${prefix}-valid-until`).value,
-    roiv_name: root.querySelector(`#${prefix}-roiv`).value.trim(),
+    regional_authority_id: root.querySelector(
+      `#${prefix}-roiv-authority`,
+    ).value,
     legal_entity_group: root.querySelector(`#${prefix}-group`).value.trim(),
     signature_method: root.querySelector(`#${prefix}-signature`).value,
     signed_by: root.querySelector(`#${prefix}-signed-by`).value.trim(),
@@ -478,7 +492,57 @@ async function openImportDialog(directory) {
   document.body.appendChild(modal);
 }
 
+function openRegionalAuthority(authority, onSaved) {
+  const editing = Boolean(authority?.id);
+  const modal = el(
+    `<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>${editing ? "Изменить РОИВ" : "Добавить РОИВ"}</h2>
+      <div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="300" value="${escapeHTML(authority?.name || "")}"></div>
+      <div class="field"><label>Субъект Российской Федерации *</label><input name="region" required minlength="2" maxlength="200" value="${escapeHTML(authority?.region || "")}"></div>
+      <div class="grid cols-2"><div class="field"><label>ИНН *</label><input name="inn" required inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}" value="${escapeHTML(authority?.inn || "")}"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="ogrn" required inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}" value="${escapeHTML(authority?.ogrn || "")}"></div></div>
+      <div class="field"><label>Статус *</label><select name="status"><option value="active">Действует</option><option value="inactive">Не действует</option></select></div>
+      <div class="field"><label>Официальный источник *</label><input name="source_url" type="url" required placeholder="https://...gov.ru" value="${escapeHTML(authority?.source_url || "")}"></div>
+      <p class="field-hint">ИНН и ОГРН проверяются по контрольным суммам. Разрешены только HTTPS-ссылки официальных доменов.</p>
+      <p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Сохранить</button><button class="btn secondary" type="button">Отмена</button></div>
+    </form></div>`,
+  );
+  const form = modal.querySelector("form");
+  form.elements.status.value = authority?.status || "active";
+  form.querySelector("[type=button]").onclick = () => modal.remove();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const button = form.querySelector("[type=submit]");
+    const error = form.querySelector(".error");
+    button.disabled = true;
+    error.textContent = "";
+    try {
+      await api(
+        editing ? `/regional-authorities/${authority.id}` : "/regional-authorities",
+        {
+          method: editing ? "PUT" : "POST",
+          body: JSON.stringify({
+            name: form.elements.name.value.trim(),
+            region: form.elements.region.value.trim(),
+            inn: form.elements.inn.value.trim(),
+            ogrn: form.elements.ogrn.value.trim(),
+            status: form.elements.status.value,
+            source_url: form.elements.source_url.value.trim(),
+          }),
+        },
+      );
+      modal.remove();
+      await onSaved();
+      showToast("РОИВ сохранён", "success");
+    } catch (err) {
+      error.textContent = err.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+  document.body.appendChild(modal);
+}
+
 async function renderPartnerDirectory(root) {
+  state.regionalAuthorities = await api("/regional-authorities");
   root.innerHTML = `<section class="page-heading"><div><span class="eyebrow">Справочники</span><h1>Учебные заведения и соглашения</h1><p>Новые партнёры создаются только из записей, подтверждённых официальным реестром лицензий.</p></div></section>
   <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><p class="muted">Старый набор мониторинга сохранён для истории, но не считается лицензированным реестром и не доступен для создания нового партнёра. ИНН и ОГРН проверяются по контрольным суммам; запись должна иметь действующие статусы организации и лицензии.</p></div>
   <div class="card"><h2>Поиск в официальном справочнике</h2><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
@@ -491,6 +555,7 @@ async function renderPartnerDirectory(root) {
     .join(
       "",
     )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${state.me.role === "admin" ? '<button class="btn secondary" id="d-import">Обновить из выгрузки реестра</button>' : ""}</div>
+  <div class="card"><div class="flex between"><div><h2>Региональные органы управления образованием</h2><p class="muted">Цепочка школьного мероприятия: РОИВ → соглашение → школа → план/факт.</p></div>${isStaffUser() ? '<button class="btn secondary" id="roiv-add">+ Добавить РОИВ</button>' : ""}</div><div id="roiv-list">${state.regionalAuthorities.length ? `<div class="table-wrap"><table><thead><tr><th>Регион и РОИВ</th><th>Реквизиты</th><th>Связи</th><th></th></tr></thead><tbody>${state.regionalAuthorities.map((authority) => `<tr><td>${escapeHTML(authority.region)}<br><b>${escapeHTML(authority.name)}</b></td><td>ИНН ${escapeHTML(authority.inn)}<br>ОГРН ${escapeHTML(authority.ogrn)}<br><a href="${escapeHTML(authority.source_url)}" target="_blank" rel="noopener noreferrer">Официальный источник</a></td><td><span class="status-badge ${authority.status === "active" ? "active" : "inactive"}">${authority.status === "active" ? "Действует" : "Не действует"}</span><br>Школ: ${authority.schools_count}<br>Мероприятий: ${authority.activities_count}</td><td>${isStaffUser() ? `<button class="btn secondary" data-edit-roiv="${authority.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>РОИВ ещё не добавлены. Для создания школьного партнёра сначала заполните этот справочник.</p>"}</div></div>
   <div class="card"><h2>Наши партнёры</h2><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
   let generation = 0;
   const search = async () => {
@@ -543,6 +608,20 @@ async function renderPartnerDirectory(root) {
   root
     .querySelector("#d-import")
     ?.addEventListener("click", () => openImportDialog(true));
+  root
+    .querySelector("#roiv-add")
+    ?.addEventListener("click", () =>
+      openRegionalAuthority(null, () => renderPartnerDirectory(root)),
+    );
+  root.querySelectorAll("[data-edit-roiv]").forEach((button) => {
+    button.onclick = () =>
+      openRegionalAuthority(
+        state.regionalAuthorities.find(
+          (item) => item.id === button.dataset.editRoiv,
+        ),
+        () => renderPartnerDirectory(root),
+      );
+  });
   api("/directory/stats")
     .then((stats) => {
       const box = root.querySelector("#directory-stats");
@@ -604,6 +683,7 @@ async function renderPartnerDirectory(root) {
 }
 
 async function openAgreements(partnerID, onSaved = async () => {}) {
+  state.regionalAuthorities = await api("/regional-authorities");
   const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Соглашения: ${escapeHTML(partnerName(partnerID))}</h2><button class="btn secondary" id="agreement-close">Закрыть</button></div><div id="agreement-list">Загрузка…</div>${isStaffUser() ? `<form id="agreement-form"><h2 id="agreement-form-title">Добавить соглашение</h2>${agreementFieldsMarkup("agreement", {partner_ids: [partnerID]}, true)}<div class="flex"><button class="btn" type="submit">Сохранить соглашение</button><button class="btn secondary" type="button" id="agreement-reset">Новое</button></div><p class="error" role="alert"></p></form>` : ""}</div></div>`);
   document.body.appendChild(modal);
   modal.querySelector("#agreement-close").onclick = () => modal.remove();

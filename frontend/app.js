@@ -6,6 +6,7 @@ const state = {
   categories: [],
   partners: [],
   agreements: [],
+  regionalAuthorities: [],
   view: "dashboard",
   period: "plan",
   year: new Date().getFullYear(),

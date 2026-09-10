@@ -79,24 +79,39 @@ type AgreementResponsiblePerson struct {
 }
 
 type Agreement struct {
-	ID                string                       `json:"id"`
-	PartnerIDs        []string                     `json:"partner_ids"`
-	AgreementKind     string                       `json:"agreement_kind"`
-	Number            string                       `json:"number"`
-	Status            string                       `json:"status"`
-	SignedOn          string                       `json:"signed_on"`
-	ValidFrom         string                       `json:"valid_from"`
-	ValidUntil        string                       `json:"valid_until"`
-	ROIVName          string                       `json:"roiv_name,omitempty"`
-	LegalEntityGroup  string                       `json:"legal_entity_group,omitempty"`
-	SignatureMethod   string                       `json:"signature_method"`
-	SignedBy          string                       `json:"signed_by,omitempty"`
-	SignatureDate     string                       `json:"signature_date,omitempty"`
-	DocumentReference string                       `json:"document_reference,omitempty"`
-	Notes             string                       `json:"notes,omitempty"`
-	ResponsiblePeople []AgreementResponsiblePerson `json:"responsible_people"`
-	CreatedAt         time.Time                    `json:"created_at"`
-	UpdatedAt         time.Time                    `json:"updated_at"`
+	ID                  string                       `json:"id"`
+	PartnerIDs          []string                     `json:"partner_ids"`
+	AgreementKind       string                       `json:"agreement_kind"`
+	Number              string                       `json:"number"`
+	Status              string                       `json:"status"`
+	SignedOn            string                       `json:"signed_on"`
+	ValidFrom           string                       `json:"valid_from"`
+	ValidUntil          string                       `json:"valid_until"`
+	ROIVName            string                       `json:"roiv_name,omitempty"`
+	RegionalAuthorityID string                       `json:"regional_authority_id,omitempty"`
+	LegalEntityGroup    string                       `json:"legal_entity_group,omitempty"`
+	SignatureMethod     string                       `json:"signature_method"`
+	SignedBy            string                       `json:"signed_by,omitempty"`
+	SignatureDate       string                       `json:"signature_date,omitempty"`
+	DocumentReference   string                       `json:"document_reference,omitempty"`
+	Notes               string                       `json:"notes,omitempty"`
+	ResponsiblePeople   []AgreementResponsiblePerson `json:"responsible_people"`
+	CreatedAt           time.Time                    `json:"created_at"`
+	UpdatedAt           time.Time                    `json:"updated_at"`
+}
+
+type RegionalAuthority struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Region          string    `json:"region"`
+	INN             string    `json:"inn"`
+	OGRN            string    `json:"ogrn"`
+	Status          string    `json:"status"`
+	SourceURL       string    `json:"source_url"`
+	SchoolsCount    int       `json:"schools_count"`
+	ActivitiesCount int       `json:"activities_count"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type ActivityCategory struct {

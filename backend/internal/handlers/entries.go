@@ -460,11 +460,15 @@ func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, p
 	if agreementID == "" {
 		return fmt.Errorf("выберите соглашение, к которому относится активность")
 	}
-	var status string
+	var status, agreementKind, regionalAuthorityID, regionalAuthorityStatus, partnerKind string
 	var validFrom, validUntil time.Time
-	err := h.DB.QueryRowContext(r.Context(), `SELECT a.status,a.valid_from,a.valid_until
+	err := h.DB.QueryRowContext(r.Context(), `SELECT a.status,a.valid_from,a.valid_until,a.agreement_kind,
+		COALESCE(a.regional_authority_id::text,''),COALESCE(ra.status,''),p.partner_kind
 		FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id
-		WHERE a.id::text=$1 AND ap.partner_id::text=$2`, agreementID, partnerID).Scan(&status, &validFrom, &validUntil)
+		JOIN partners p ON p.id=ap.partner_id
+		LEFT JOIN regional_authorities ra ON ra.id=a.regional_authority_id
+		WHERE a.id::text=$1 AND ap.partner_id::text=$2`, agreementID, partnerID).
+		Scan(&status, &validFrom, &validUntil, &agreementKind, &regionalAuthorityID, &regionalAuthorityStatus, &partnerKind)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("соглашение не найдено или не относится к выбранной организации")
 	}
@@ -473,6 +477,9 @@ func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, p
 	}
 	if status != "active" {
 		return fmt.Errorf("для план/факта требуется действующее соглашение; текущий статус: %s", status)
+	}
+	if partnerKind == "school" && (agreementKind != "roiv" || regionalAuthorityID == "" || regionalAuthorityStatus != "active") {
+		return fmt.Errorf("школьная активность должна относиться к соглашению с выбранным РОИВ")
 	}
 	yearStart := time.Date(reportYear, 1, 1, 0, 0, 0, 0, time.UTC)
 	yearEnd := time.Date(reportYear, 12, 31, 0, 0, 0, 0, time.UTC)

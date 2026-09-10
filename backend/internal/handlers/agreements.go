@@ -19,21 +19,22 @@ type AgreementHandlers struct {
 }
 
 type agreementWriteRequest struct {
-	PartnerIDs        []string                            `json:"partner_ids"`
-	AgreementKind     string                              `json:"agreement_kind"`
-	Number            string                              `json:"number"`
-	Status            string                              `json:"status"`
-	SignedOn          string                              `json:"signed_on"`
-	ValidFrom         string                              `json:"valid_from"`
-	ValidUntil        string                              `json:"valid_until"`
-	ROIVName          string                              `json:"roiv_name,omitempty"`
-	LegalEntityGroup  string                              `json:"legal_entity_group,omitempty"`
-	SignatureMethod   string                              `json:"signature_method"`
-	SignedBy          string                              `json:"signed_by,omitempty"`
-	SignatureDate     string                              `json:"signature_date,omitempty"`
-	DocumentReference string                              `json:"document_reference,omitempty"`
-	Notes             string                              `json:"notes,omitempty"`
-	ResponsiblePeople []models.AgreementResponsiblePerson `json:"responsible_people"`
+	PartnerIDs          []string                            `json:"partner_ids"`
+	AgreementKind       string                              `json:"agreement_kind"`
+	Number              string                              `json:"number"`
+	Status              string                              `json:"status"`
+	SignedOn            string                              `json:"signed_on"`
+	ValidFrom           string                              `json:"valid_from"`
+	ValidUntil          string                              `json:"valid_until"`
+	RegionalAuthorityID string                              `json:"regional_authority_id,omitempty"`
+	ROIVName            string                              `json:"roiv_name,omitempty"`
+	LegalEntityGroup    string                              `json:"legal_entity_group,omitempty"`
+	SignatureMethod     string                              `json:"signature_method"`
+	SignedBy            string                              `json:"signed_by,omitempty"`
+	SignatureDate       string                              `json:"signature_date,omitempty"`
+	DocumentReference   string                              `json:"document_reference,omitempty"`
+	Notes               string                              `json:"notes,omitempty"`
+	ResponsiblePeople   []models.AgreementResponsiblePerson `json:"responsible_people"`
 }
 
 type normalizedAgreement struct {
@@ -62,6 +63,7 @@ func normalizeAgreement(req agreementWriteRequest) (normalizedAgreement, error) 
 	if req.ROIVName, err = trim(req.ROIVName, 300, "наименование РОИВ"); err != nil {
 		return normalizedAgreement{}, err
 	}
+	req.RegionalAuthorityID = strings.TrimSpace(req.RegionalAuthorityID)
 	if req.LegalEntityGroup, err = trim(req.LegalEntityGroup, 1000, "группа юридических лиц"); err != nil {
 		return normalizedAgreement{}, err
 	}
@@ -78,8 +80,11 @@ func normalizeAgreement(req agreementWriteRequest) (normalizedAgreement, error) 
 	if req.AgreementKind != "education_organization" && req.AgreementKind != "roiv" {
 		return normalizedAgreement{}, fmt.Errorf("тип соглашения должен быть education_organization или roiv")
 	}
-	if req.AgreementKind == "roiv" && req.ROIVName == "" {
-		return normalizedAgreement{}, fmt.Errorf("для соглашения с РОИВ укажите орган исполнительной власти")
+	if req.AgreementKind == "roiv" && req.RegionalAuthorityID == "" {
+		return normalizedAgreement{}, fmt.Errorf("для соглашения с РОИВ выберите региональный орган управления образованием")
+	}
+	if req.AgreementKind == "education_organization" && req.RegionalAuthorityID != "" {
+		return normalizedAgreement{}, fmt.Errorf("РОИВ можно выбрать только для соглашения с региональным органом")
 	}
 	validStatuses := map[string]bool{"draft": true, "active": true, "suspended": true, "expired": true, "terminated": true}
 	if !validStatuses[req.Status] {
@@ -173,12 +178,12 @@ func insertAgreement(ctx context.Context, tx *sql.Tx, agreement normalizedAgreem
 	r := agreement.Request
 	var id string
 	err := tx.QueryRowContext(ctx, `INSERT INTO agreements(
-		agreement_kind,number,status,signed_on,valid_from,valid_until,roiv_name,legal_entity_group,
+		agreement_kind,number,status,signed_on,valid_from,valid_until,regional_authority_id,roiv_name,legal_entity_group,
 		signature_method,signed_by,signature_date,document_reference,notes,created_by,updated_by)
-		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''),$9,NULLIF($10,''),$11,NULLIF($12,''),NULLIF($13,''),$14,$14)
+		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),$12,NULLIF($13,''),NULLIF($14,''),$15,$15)
 		RETURNING id`, r.AgreementKind, r.Number, r.Status, agreement.SignedOn, agreement.ValidFrom,
-		agreement.ValidUntil, r.ROIVName, r.LegalEntityGroup, r.SignatureMethod, r.SignedBy,
-		agreement.SignatureDate, r.DocumentReference, r.Notes, userID).Scan(&id)
+		agreement.ValidUntil, r.RegionalAuthorityID, r.ROIVName, r.LegalEntityGroup, r.SignatureMethod,
+		r.SignedBy, agreement.SignatureDate, r.DocumentReference, r.Notes, userID).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -207,6 +212,38 @@ func ensureAgreementPartners(ctx context.Context, tx *sql.Tx, partnerIDs []strin
 	return nil
 }
 
+func prepareAgreementRelations(ctx context.Context, tx *sql.Tx, agreement *normalizedAgreement) error {
+	if err := ensureAgreementPartners(ctx, tx, agreement.Request.PartnerIDs); err != nil {
+		return err
+	}
+	var schools int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE partner_kind='school')
+		FROM partners WHERE id::text=ANY($1)`, pq.Array(agreement.Request.PartnerIDs)).Scan(&schools); err != nil {
+		return err
+	}
+	if agreement.Request.AgreementKind == "roiv" {
+		if schools != len(agreement.Request.PartnerIDs) {
+			return fmt.Errorf("соглашение с РОИВ может охватывать только школы")
+		}
+		var name, status string
+		if err := tx.QueryRowContext(ctx, `SELECT name,status FROM regional_authorities WHERE id::text=$1`, agreement.Request.RegionalAuthorityID).Scan(&name, &status); err == sql.ErrNoRows {
+			return fmt.Errorf("выбранный РОИВ отсутствует в справочнике")
+		} else if err != nil {
+			return err
+		}
+		if status != "active" {
+			return fmt.Errorf("выбранный РОИВ не действует")
+		}
+		agreement.Request.ROIVName = name
+		return nil
+	}
+	if schools > 0 {
+		return fmt.Errorf("для школы требуется соглашение с РОИВ")
+	}
+	agreement.Request.ROIVName = ""
+	return nil
+}
+
 func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	page, ok := pageClause(w, r)
 	if !ok {
@@ -218,13 +255,14 @@ func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 	}
 	scope := partnerScope(u, requestedPartner)
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT a.id,a.agreement_kind,a.number,a.status,a.signed_on,a.valid_from,a.valid_until,
-		COALESCE(a.roiv_name,''),COALESCE(a.legal_entity_group,''),a.signature_method,COALESCE(a.signed_by,''),
+		COALESCE(a.regional_authority_id::text,''),COALESCE(ra.name,a.roiv_name,''),COALESCE(a.legal_entity_group,''),a.signature_method,COALESCE(a.signed_by,''),
 		COALESCE(a.signature_date::text,''),COALESCE(a.document_reference,''),COALESCE(a.notes,''),
 		a.created_at,a.updated_at,array_agg(ap.partner_id::text ORDER BY ap.is_primary DESC,ap.partner_id)
 		FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id
+		LEFT JOIN regional_authorities ra ON ra.id=a.regional_authority_id
 		WHERE ($1='' OR EXISTS(SELECT 1 FROM agreement_partners access
 		 WHERE access.agreement_id=a.id AND access.partner_id::text=$1))
-		GROUP BY a.id ORDER BY a.valid_from DESC,a.number,a.id`+page, scope)
+		GROUP BY a.id,ra.name ORDER BY a.valid_from DESC,a.number,a.id`+page, scope)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка запроса соглашений")
 		return
@@ -236,7 +274,7 @@ func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 		var signedOn, validFrom, validUntil time.Time
 		var partnerIDs pq.StringArray
 		if err = rows.Scan(&agreement.ID, &agreement.AgreementKind, &agreement.Number, &agreement.Status,
-			&signedOn, &validFrom, &validUntil, &agreement.ROIVName, &agreement.LegalEntityGroup,
+			&signedOn, &validFrom, &validUntil, &agreement.RegionalAuthorityID, &agreement.ROIVName, &agreement.LegalEntityGroup,
 			&agreement.SignatureMethod, &agreement.SignedBy, &agreement.SignatureDate,
 			&agreement.DocumentReference, &agreement.Notes, &agreement.CreatedAt, &agreement.UpdatedAt, &partnerIDs); err != nil {
 			middleware.WriteError(w, 500, "ошибка чтения соглашений")
@@ -300,7 +338,7 @@ func (h *AgreementHandlers) Create(w http.ResponseWriter, r *http.Request, u mid
 		return
 	}
 	defer tx.Rollback()
-	if err = ensureAgreementPartners(r.Context(), tx, agreement.Request.PartnerIDs); err != nil {
+	if err = prepareAgreementRelations(r.Context(), tx, &agreement); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
@@ -345,17 +383,18 @@ func (h *AgreementHandlers) Update(w http.ResponseWriter, r *http.Request, u mid
 		middleware.WriteError(w, 500, "ошибка запроса")
 		return
 	}
-	if err = ensureAgreementPartners(r.Context(), tx, agreement.Request.PartnerIDs); err != nil {
+	if err = prepareAgreementRelations(r.Context(), tx, &agreement); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
 	rq := agreement.Request
 	_, err = tx.ExecContext(r.Context(), `UPDATE agreements SET agreement_kind=$1,number=$2,status=$3,signed_on=$4,
-		valid_from=$5,valid_until=$6,roiv_name=NULLIF($7,''),legal_entity_group=NULLIF($8,''),signature_method=$9,
-		signed_by=NULLIF($10,''),signature_date=$11,document_reference=NULLIF($12,''),notes=NULLIF($13,''),updated_by=$14,updated_at=now()
-		WHERE id::text=$15`, rq.AgreementKind, rq.Number, rq.Status, agreement.SignedOn, agreement.ValidFrom,
-		agreement.ValidUntil, rq.ROIVName, rq.LegalEntityGroup, rq.SignatureMethod, rq.SignedBy,
-		agreement.SignatureDate, rq.DocumentReference, rq.Notes, u.ID, agreementID)
+		valid_from=$5,valid_until=$6,regional_authority_id=NULLIF($7,'')::uuid,roiv_name=NULLIF($8,''),
+		legal_entity_group=NULLIF($9,''),signature_method=$10,signed_by=NULLIF($11,''),signature_date=$12,
+		document_reference=NULLIF($13,''),notes=NULLIF($14,''),updated_by=$15,updated_at=now()
+		WHERE id::text=$16`, rq.AgreementKind, rq.Number, rq.Status, agreement.SignedOn, agreement.ValidFrom,
+		agreement.ValidUntil, rq.RegionalAuthorityID, rq.ROIVName, rq.LegalEntityGroup, rq.SignatureMethod,
+		rq.SignedBy, agreement.SignatureDate, rq.DocumentReference, rq.Notes, u.ID, agreementID)
 	if err != nil {
 		middleware.WriteError(w, 409, "не удалось изменить соглашение")
 		return
