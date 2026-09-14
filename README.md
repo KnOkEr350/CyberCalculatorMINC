@@ -80,24 +80,6 @@ docker-сети. Все backend-реплики используют общие P
 первого входа** (Админ. панель → Пользователи → создать нового администратора → отключить
 bootstrap-аккаунт, либо обновить его пароль напрямую в БД).
 
-## Как это соответствует ТЗ
-
-| Требование ТЗ | Где реализовано |
-|---|---|
-| Выбор БД (postgres/sqlite) | PostgreSQL — обоснование в `DECISIONS.md` |
-| Административная панель, «кто он» (организация/вуз) | `POST /api/auth/entity-type`, назначение профиля администратором |
-| Модератор без системных разделов | `role = 'moderator'`; доступны операционные функции, закрыты пользователи, настройки и аудит |
-| Реестр аккредитованных ИТ-компаний | `GET/POST /api/it-companies`, отдельная вкладка администратора образовательной организации |
-| Расчёт стоимости активностей по Приказу | `backend/internal/calculators/*` — по одному файлу на категорию |
-| Вкладки план/факт | `period_type` в `entries`, переключатель в UI |
-| Внесение суммы в плане | форма записи, `POST /api/entries` |
-| Занесение факта + подтверждающий документ, хранение год (регулируется) | `POST /api/entries/{id}/attachments`, `settings.attachment_retention_days` |
-| Обязательный комментарий при редактировании + видимость админу | `PUT /api/entries/{id}` требует `comment`, пишется в `entry_comments` и `audit_log` |
-| Несколько админов | `role = 'admin'` у произвольного числа пользователей, `POST /api/admin/users` |
-| Логи изменений в интерфейсе, хранение 2 месяца | `GET /api/admin/logs`, `backend/internal/retention` (job раз в час) |
-| Бэк на Go без сторонних библиотек | весь код на stdlib, единственная зависимость — драйвер `lib/pq` (без него `database/sql` не умеет говорить с Postgres) |
-| Всё в compose, Dockerfile multi-stage | `docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, nginx-балансировщик |
-
 ## API (кратко)
 
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
