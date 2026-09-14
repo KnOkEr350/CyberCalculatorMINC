@@ -224,7 +224,7 @@ func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request, u middleware.A
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
-	user.MFARequired = h.RequireMFA && user.Role == models.RoleAdmin && !user.MFAEnabled
+	user.MFARequired = h.RequireMFA && (user.Role == models.RoleAdmin || user.Role == models.RoleModerator) && !user.MFAEnabled
 	user.MFAAvailable = h.MFAKey != ""
 	middleware.WriteJSON(w, http.StatusOK, user)
 }

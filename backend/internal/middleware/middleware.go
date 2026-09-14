@@ -65,7 +65,8 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 			return
 		}
 		u.Role = models.Role(role)
-		if required, _ := r.Context().Value(ctxKey("require_mfa")).(bool); required && role == "admin" && !mfaEnabled {
+		privileged := role == string(models.RoleAdmin) || role == string(models.RoleModerator)
+		if required, _ := r.Context().Value(ctxKey("require_mfa")).(bool); required && privileged && !mfaEnabled {
 			switch r.URL.Path {
 			case "/api/auth/me", "/api/auth/password", "/api/auth/mfa/enroll", "/api/auth/mfa/confirm":
 			default:
@@ -89,6 +90,18 @@ func RequireAdmin(db *sql.DB, next func(http.ResponseWriter, *http.Request, Auth
 	return RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u AuthUser) {
 		if u.Role != models.RoleAdmin {
 			WriteError(w, http.StatusForbidden, "требуются права администратора")
+			return
+		}
+		next(w, r, u)
+	})
+}
+
+// RequireManager разрешает операционные разделы панели администратору и
+// модератору. Пользователи, настройки и аудит намеренно остаются за admin.
+func RequireManager(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthUser)) http.HandlerFunc {
+	return RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u AuthUser) {
+		if u.Role != models.RoleAdmin && u.Role != models.RoleModerator {
+			WriteError(w, http.StatusForbidden, "требуются права администратора или модератора")
 			return
 		}
 		next(w, r, u)

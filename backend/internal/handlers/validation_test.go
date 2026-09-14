@@ -20,6 +20,13 @@ func TestValidateAndNormalizeNewUser(t *testing.T) {
 	}
 }
 
+func TestValidateAndNormalizeModerator(t *testing.T) {
+	req := createUserRequest{Email: "moderator@example.com", Password: "StrongPass1!", FullName: "Иван Иванов", Role: "moderator", EntityType: "organization"}
+	if err := validateAndNormalizeNewUser(&req); err != nil {
+		t.Fatalf("valid moderator rejected: %v", err)
+	}
+}
+
 func TestValidateAndNormalizeNewUserRejectsInvalidData(t *testing.T) {
 	tests := []struct {
 		name string

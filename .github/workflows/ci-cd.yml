@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   quality:
-    name: Linters and security (non-blocking)
+    name: Linters and security
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -23,11 +23,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: 1.26.x
+          go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
       - name: Check Go formatting
-        continue-on-error: true
         working-directory: backend
         shell: bash
         run: |
@@ -39,26 +38,21 @@ jobs:
           fi
 
       - name: Run go vet
-        continue-on-error: true
         working-directory: backend
         run: go vet ./...
 
       - name: Run staticcheck
-        continue-on-error: true
         working-directory: backend
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
 
       - name: Lint GitHub Actions workflow
-        continue-on-error: true
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: Check Go dependencies for known vulnerabilities
-        continue-on-error: true
         working-directory: backend
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
       - name: Scan repository, secrets and Docker configuration
-        continue-on-error: true
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
@@ -303,6 +297,51 @@ jobs:
             --output /tmp/cybercalc-downloaded-attachment.txt
           cmp /tmp/cybercalc-first-attachment.txt /tmp/cybercalc-downloaded-attachment.txt
 
+      - name: Verify moderator boundaries and IT-company registry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
+          admin_cookie="/tmp/cybercalc-ci-cookies"
+          moderator_cookie="/tmp/cybercalc-ci-moderator-cookies"
+
+          curl --fail --silent --show-error \
+            --cookie "$admin_cookie" \
+            --header "X-Cybercalc-Request: 1" \
+            --header "Content-Type: application/json" \
+            --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!","full_name":"CI Moderator","role":"moderator","entity_type":"organization"}' \
+            "${base_url}/api/admin/users" > /dev/null
+
+          curl --fail --silent --show-error \
+            --cookie-jar "$moderator_cookie" \
+            --header "X-Cybercalc-Request: 1" \
+            --header "Content-Type: application/json" \
+            --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!"}' \
+            "${base_url}/api/auth/login" > /dev/null
+
+          for path in admin/users admin/settings admin/logs; do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cookie "$moderator_cookie" "${base_url}/api/${path}")"
+            [[ "$status" == "403" ]]
+          done
+
+          curl --fail --silent --show-error \
+            --cookie "$moderator_cookie" \
+            "${base_url}/api/admin/directory-template" \
+            --output /tmp/cybercalc-directory-template.xlsx
+
+          registry_date="$(date -u +%F)"
+          curl --fail --silent --show-error \
+            --cookie "$moderator_cookie" \
+            --header "X-Cybercalc-Request: 1" \
+            --header "Content-Type: application/json" \
+            --data "$(jq --compact-output --null-input --arg date "$registry_date" '{name:"CI accredited IT company",inn:"7707083893",ogrn:"1027700132195",accreditation_number:"CI-ACCREDITATION-1",registry_record_id:"ci-it-company-1",registry_updated_at:$date,source_url:"https://digital.gov.ru/ru/activity/govservices/1/"}')" \
+            "${base_url}/api/it-companies" > /dev/null
+
+          curl --fail --silent --show-error \
+            --cookie "$moderator_cookie" \
+            "${base_url}/api/it-companies?q=CI%20accredited" \
+            | jq --exit-status 'length == 1 and .[0].accreditation_status == "active"' > /dev/null
+
       - name: Print Compose diagnostics on failure
         if: failure()
         run: |
@@ -315,7 +354,7 @@ jobs:
 
   deploy:
     name: Deploy to Debian VM
-    needs: verify
+    needs: [quality, verify]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64, cybercalculator-prod]
     timeout-minutes: 20
@@ -329,8 +368,14 @@ jobs:
       DB_USER: ${{ secrets.PROD_DB_USER }}
       DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
       DB_NAME: ${{ secrets.PROD_DB_NAME }}
+      DB_RUNTIME_USER: ${{ vars.PROD_DB_RUNTIME_USER || 'cybercalc_app' }}
+      DB_RUNTIME_PASSWORD: ${{ secrets.PROD_DB_RUNTIME_PASSWORD }}
       ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.PROD_ADMIN_BOOTSTRAP_EMAIL }}
       ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.PROD_ADMIN_BOOTSTRAP_PASSWORD }}
+      APP_ENV: production
+      PUBLIC_URL: ${{ vars.PROD_PUBLIC_URL }}
+      CLAMAV_ADDRESS: ${{ vars.PROD_CLAMAV_ADDRESS }}
+      MFA_ENCRYPTION_KEY: ${{ secrets.PROD_MFA_ENCRYPTION_KEY }}
       HTTP_PORT: ${{ vars.PROD_HTTP_PORT || '8080' }}
       BACKEND_REPLICAS: ${{ vars.PROD_BACKEND_REPLICAS || '2' }}
 
@@ -349,8 +394,12 @@ jobs:
           [[ -n "$DB_USER" ]] || { echo "::error::GitHub production secret PROD_DB_USER is not configured"; missing=1; }
           [[ -n "$DB_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_DB_PASSWORD is not configured"; missing=1; }
           [[ -n "$DB_NAME" ]] || { echo "::error::GitHub production secret PROD_DB_NAME is not configured"; missing=1; }
+          [[ -n "$DB_RUNTIME_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_DB_RUNTIME_PASSWORD is not configured"; missing=1; }
           [[ -n "$ADMIN_BOOTSTRAP_EMAIL" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_EMAIL is not configured"; missing=1; }
           [[ -n "$ADMIN_BOOTSTRAP_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_PASSWORD is not configured"; missing=1; }
+          [[ -n "$MFA_ENCRYPTION_KEY" ]] || { echo "::error::GitHub production secret PROD_MFA_ENCRYPTION_KEY is not configured"; missing=1; }
+          [[ "$PUBLIC_URL" == https://* ]] || { echo "::error::GitHub production variable PROD_PUBLIC_URL must be an HTTPS origin"; missing=1; }
+          [[ -n "$CLAMAV_ADDRESS" ]] || { echo "::error::GitHub production variable PROD_CLAMAV_ADDRESS is not configured"; missing=1; }
           [[ "$missing" == "0" ]]
           docker compose config --quiet
 
@@ -359,11 +408,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           echo "Deploying $APP_VERSION from $GITHUB_WORKSPACE"
-          docker compose build --pull
-          docker compose up --detach --remove-orphans --wait --wait-timeout 180
-          # Upstreams are resolved when nginx starts. Restart it after service
-          # recreation so it cannot retain an old container IP.
-          docker compose restart nginx
+          bash scripts/deploy-safe.sh
 
       - name: Verify deployed application
         shell: bash

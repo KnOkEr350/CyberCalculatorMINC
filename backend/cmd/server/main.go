@@ -135,6 +135,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 		middleware.WriteJSON(w, 200, map[string]string{"status": "ok"})
 	})
 	partnerH := &handlers.PartnerHandlers{DB: db}
+	itCompanyH := &handlers.ITCompanyHandlers{DB: db}
 	agreementH := &handlers.AgreementHandlers{DB: db}
 	regionalAuthorityH := &handlers.RegionalAuthorityHandlers{DB: db}
 	entryH := &handlers.EntryHandlers{DB: db}
@@ -156,6 +157,8 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	// --- Партнёры ---
 	mux.HandleFunc("GET /api/partners", middleware.RequireAuth(db, partnerH.List))
 	mux.HandleFunc("POST /api/partners", middleware.RequireAuth(db, partnerH.Create))
+	mux.HandleFunc("GET /api/it-companies", middleware.RequireAuth(db, itCompanyH.List))
+	mux.HandleFunc("POST /api/it-companies", middleware.RequireAuth(db, itCompanyH.Create))
 	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
 	mux.HandleFunc("GET /api/directory/stats", middleware.RequireAuth(db, partnerH.DirectoryStats))
 	mux.HandleFunc("GET /api/agreements", middleware.RequireAuth(db, agreementH.List))
@@ -173,8 +176,8 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/obligations", middleware.RequireAuth(db, entryH.Obligations))
 	mux.HandleFunc("GET /api/entries/import-template", middleware.RequireAuth(db, entryH.ImportTemplate))
 	mux.HandleFunc("POST /api/entries/import", middleware.RequireAuth(db, entryH.Import))
-	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireAdmin(db, partnerH.DirectoryTemplate))
-	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireAdmin(db, partnerH.ImportDirectory))
+	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireManager(db, partnerH.DirectoryTemplate))
+	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireManager(db, partnerH.ImportDirectory))
 
 	// --- Категории активностей (справочник с полями формы) ---
 	mux.HandleFunc("GET /api/categories", middleware.RequireAuth(db, entryH.Categories))
@@ -209,7 +212,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(db, workflowH.Get))
 	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(db, workflowH.Transition))
 
-	// --- Админка ---
+	// --- Административная панель ---
 	mux.HandleFunc("GET /api/admin/users", middleware.RequireAdmin(db, adminH.ListUsers))
 	mux.HandleFunc("POST /api/admin/users", middleware.RequireAdmin(db, adminH.CreateUser))
 	mux.HandleFunc("PATCH /api/admin/users/{id}", middleware.RequireAdmin(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {

@@ -41,6 +41,62 @@ func TestDirectoryRejectsStaleRegistryData(t *testing.T) {
 	}
 }
 
+func TestDirectoryAcceptsRussianOfficeTemplate(t *testing.T) {
+	header := make([]string, 0, len(directoryColumns))
+	for _, column := range directoryColumns {
+		header = append(header, column.Label)
+	}
+	row := []string{"Тестовый вуз", "Вуз", "г. Москва", "7707083893", "1027700132195", "Л035-ТЕСТ", "Действует", "Действует", "test-record-russian", "https://islod.obrnadzor.gov.ru/rlic/details/test", time.Now().Format("2006-01-02")}
+	valid, errors := validateDirectoryRows([][]string{header, row})
+	if len(errors) != 0 || len(valid) != 1 {
+		t.Fatalf("Russian template rejected: %v", errors)
+	}
+	if valid[0][1] != "vuz" || valid[0][6] != "active" || valid[0][7] != "active" {
+		t.Fatalf("Russian values were not normalized: %v", valid[0])
+	}
+}
+
+func TestDirectoryRejectsCellsPastRussianHeaders(t *testing.T) {
+	header := make([]string, 0, len(directoryColumns))
+	for _, column := range directoryColumns {
+		header = append(header, column.Label)
+	}
+	row := make([]string, len(directoryColumns)+1)
+	row[0], row[len(row)-1] = "Тестовый вуз", "лишнее значение"
+	if _, errors := validateDirectoryRows([][]string{header, row}); len(errors) == 0 {
+		t.Fatal("data past headers accepted")
+	}
+}
+
+func TestITCompanyValidation(t *testing.T) {
+	req := itCompanyWriteRequest{
+		Name: "ООО Ромашка", INN: "7707083893", OGRN: "1027700132195",
+		AccreditationNumber: "АА-1", RegistryRecordID: "registry-1",
+		RegistryUpdatedAt: time.Now().Format("2006-01-02"), SourceURL: "https://digital.gov.ru/ru/activity/govservices/1/",
+	}
+	if _, err := normalizeITCompany(req); err != nil {
+		t.Fatalf("valid IT company rejected: %v", err)
+	}
+	req.SourceURL = "https://digital.gov.ru.evil.test/company"
+	if _, err := normalizeITCompany(req); err == nil {
+		t.Fatal("unofficial IT registry URL accepted")
+	}
+}
+
+func TestOfficeValuesAreRussianAndReversible(t *testing.T) {
+	for canonical, russian := range map[string]string{
+		"rpd": "РПД", "vo": "Высшее образование", "development": "Разработка",
+		"education_organization": "С образовательной организацией", "active": "Действует",
+	} {
+		if actual := officeValue(canonical); actual != russian {
+			t.Fatalf("%s: got %q, want %q", canonical, actual, russian)
+		}
+		if actual := canonicalOfficeValue(russian, []string{canonical}); actual != canonical {
+			t.Fatalf("%q was not mapped back to %q", russian, canonical)
+		}
+	}
+}
+
 func TestNormalizeActiveAgreement(t *testing.T) {
 	req := agreementWriteRequest{
 		PartnerIDs:      []string{"partner-id"},

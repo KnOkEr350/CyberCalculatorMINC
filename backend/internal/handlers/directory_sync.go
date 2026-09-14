@@ -13,7 +13,37 @@ import (
 	"cybercalc/internal/xlsx"
 )
 
-const directoryHeader = "name|partner_kind|region|inn|ogrn|license_number|license_status|institution_status|registry_record_id|source_url|registry_updated_at"
+var directoryColumns = []struct {
+	Key   string
+	Label string
+}{
+	{"name", "Наименование"},
+	{"partner_kind", "Тип учебного заведения"},
+	{"region", "Регион"},
+	{"inn", "ИНН"},
+	{"ogrn", "ОГРН / ОГРНИП"},
+	{"license_number", "Номер лицензии"},
+	{"license_status", "Статус лицензии"},
+	{"institution_status", "Статус организации"},
+	{"registry_record_id", "Идентификатор записи реестра"},
+	{"source_url", "Ссылка на официальный источник"},
+	{"registry_updated_at", "Дата актуальности сведений"},
+}
+
+func normalizeDirectoryValue(column, value string) string {
+	value = strings.TrimSpace(value)
+	mappings := map[string]map[string]string{
+		"partner_kind":       {"Вуз": "vuz", "Колледж": "kolledj", "Школа": "school"},
+		"license_status":     {"Действует": "active", "Приостановлена": "suspended", "Истекла": "expired", "Аннулирована": "revoked"},
+		"institution_status": {"Действует": "active", "Не действует": "inactive", "Реорганизована": "reorganized", "Ликвидирована": "liquidated"},
+	}
+	for label, normalized := range mappings[column] {
+		if strings.EqualFold(value, label) {
+			return normalized
+		}
+	}
+	return value
+}
 
 func freshRegistryDate(date, now time.Time) bool {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -21,8 +51,14 @@ func freshRegistryDate(date, now time.Time) bool {
 }
 
 func validateDirectoryRows(rows [][]string) ([][]string, []string) {
-	if len(rows) == 0 || strings.Join(rows[0], "|") != directoryHeader {
+	if len(rows) == 0 || len(rows[0]) != len(directoryColumns) {
 		return nil, []string{"используйте заголовки из шаблона справочника"}
+	}
+	for index, column := range directoryColumns {
+		header := strings.TrimSpace(rows[0][index])
+		if header != column.Label && header != column.Key {
+			return nil, []string{"используйте заголовки из шаблона справочника"}
+		}
 	}
 	if len(rows) > 10001 {
 		return nil, []string{"не более 10000 организаций за один импорт"}
@@ -34,11 +70,15 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 		if strings.Join(row, "") == "" {
 			continue
 		}
-		for len(row) < 11 {
+		if len(row) > len(directoryColumns) {
+			errors = append(errors, fmt.Sprintf("Строка %d: есть данные за пределами заголовков", i+2))
+			continue
+		}
+		for len(row) < len(directoryColumns) {
 			row = append(row, "")
 		}
 		for j := range row {
-			row[j] = strings.TrimSpace(row[j])
+			row[j] = normalizeDirectoryValue(directoryColumns[j].Key, row[j])
 		}
 		date, dateErr := time.Parse("2006-01-02", row[10])
 		licenseOK := row[6] == "active" || row[6] == "suspended" || row[6] == "expired" || row[6] == "revoked"

@@ -7,9 +7,14 @@ import (
 	"net/http"
 )
 
-// organization denotes Cyberprotect staff, never an external partner company.
+// An organization profile represents the obligated IT organization and works
+// across its educational partners. Admin and moderator are operator roles.
 func isStaff(u middleware.AuthUser) bool {
-	return u.Role == models.RoleAdmin || u.EntityType == models.EntityOrganization
+	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityOrganization
+}
+
+func canManageITCompanies(u middleware.AuthUser) bool {
+	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityOrganization
 }
 func canAccessPartner(u middleware.AuthUser, id string) bool {
 	return isStaff(u) || (u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID == id && id != "")

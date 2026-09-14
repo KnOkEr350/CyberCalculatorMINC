@@ -4,7 +4,7 @@ Workflow `.github/workflows/ci-cd.yml` запускается при каждо�
 request и вручную. Он состоит из трёх jobs:
 
 1. `quality` запускает форматирование, линтеры и проверки безопасности.
-   Найденные проблемы видны в GitHub Actions, но не блокируют остальные jobs.
+   Найденные проблемы блокируют production-деплой.
 2. `verify` на GitHub-hosted Ubuntu runner выполняет Go-тесты, собирает и
    запускает весь Docker Compose, проверяет frontend, nginx, PostgreSQL,
    миграции, вход, создание и редактирование факта, загрузку и скачивание
@@ -16,11 +16,12 @@ request и вручную. Он состоит из трёх jobs:
 
 ## Подготовка Debian VM
 
-На VM должны быть установлены Git, curl, Docker Engine и Docker Compose plugin:
+На VM должны быть установлены Git, curl, jq, Docker Engine и Docker Compose plugin:
 
 ```bash
 git --version
 curl --version
+jq --version
 docker version
 docker compose version
 ```
@@ -73,8 +74,10 @@ workflow production runner используется только после push
 | `PROD_DB_USER` | пользователь PostgreSQL |
 | `PROD_DB_PASSWORD` | пароль PostgreSQL |
 | `PROD_DB_NAME` | имя базы данных |
+| `PROD_DB_RUNTIME_PASSWORD` | отдельный сильный пароль ограниченной роли приложения |
 | `PROD_ADMIN_BOOTSTRAP_EMAIL` | email первого администратора |
 | `PROD_ADMIN_BOOTSTRAP_PASSWORD` | пароль первого администратора |
+| `PROD_MFA_ENCRYPTION_KEY` | постоянный Base64-ключ из 32 случайных байт для MFA |
 
 Дополнительно можно создать environment variables:
 
@@ -82,10 +85,15 @@ workflow production runner используется только после push
 |---|---|
 | `PROD_HTTP_PORT` | `8080` |
 | `PROD_BACKEND_REPLICAS` | `2` |
+| `PROD_DB_RUNTIME_USER` | `cybercalc_app` |
+| `PROD_PUBLIC_URL` | обязательный внешний HTTPS-origin, например `https://calc.example.ru` |
+| `PROD_CLAMAV_ADDRESS` | обязательный адрес ClamAV, доступный backend |
 
 Workflow передаёт секреты Docker Compose через окружение runner и не сохраняет
-production `.env` в репозитории. Убедитесь, что `PROD_HTTP_PORT` свободен на VM
-и разрешён в security group и firewall.
+production `.env` в репозитории. Деплой запускается с `APP_ENV=production` и
+останавливается до изменения сервисов, если не настроены HTTPS, MFA, ClamAV или
+отдельный runtime-пароль БД. Убедитесь, что `PROD_HTTP_PORT` свободен на VM и
+доступен только внешнему TLS-прокси.
 
 Если на VM уже существует volume PostgreSQL, значения `PROD_DB_USER`,
 `PROD_DB_PASSWORD` и `PROD_DB_NAME` должны совпадать с настройками, с которыми

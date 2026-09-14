@@ -63,8 +63,8 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 		return fmt.Errorf("пароль должен содержать строчную и заглавную буквы, цифру и специальный символ")
 	}
 
-	if req.Role != string(models.RoleAdmin) && req.Role != string(models.RoleUser) {
-		return fmt.Errorf("роль должна быть admin или user")
+	if req.Role != string(models.RoleAdmin) && req.Role != string(models.RoleModerator) && req.Role != string(models.RoleUser) {
+		return fmt.Errorf("роль должна быть admin, moderator или user")
 	}
 	if req.EntityType != "" && req.EntityType != string(models.EntityOrganization) && req.EntityType != string(models.EntityEduInst) {
 		return fmt.Errorf("тип пользователя должен быть organization или edu_institution")

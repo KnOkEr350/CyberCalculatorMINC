@@ -15,6 +15,7 @@ func TestPartnerAccess(t *testing.T) {
 		want bool
 	}{
 		{middleware.AuthUser{Role: models.RoleAdmin}, "partner-b", true},
+		{middleware.AuthUser{Role: models.RoleModerator}, "partner-b", true},
 		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, "partner-b", true},
 		{own, p, true}, {own, "partner-b", false}, {middleware.AuthUser{Role: models.RoleUser}, p, false},
 		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, p, false},

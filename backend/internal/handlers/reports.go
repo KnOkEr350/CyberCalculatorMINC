@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -156,7 +157,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
-		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 		var sumErr error
 		total, sumErr = money.Add(total, d.AmountRub)
 		if sumErr != nil {
@@ -181,7 +182,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.docx"`, periodType, year))
+		localizedName := fmt.Sprintf("отчет_%s_%d.docx", map[string]string{"plan": "план", "fact": "факт"}[periodType], year)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.docx"; filename*=UTF-8''%s`, periodType, year, url.PathEscape(localizedName)))
 		w.Write(body)
 		return
 	}
@@ -210,6 +212,9 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 					if !ok {
 						v = ""
 					}
+					if text, ok := v.(string); ok {
+						v = officeValue(text)
+					}
 					row = append(row, v)
 				}
 				row = append(row, d.AmountRub)
@@ -231,7 +236,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if _, ok := byPartner[key]; !ok {
 			order = append(order, key)
 		}
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, d.AgreementKind + " / " + d.AgreementStatus, d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 	}
 	for _, key := range order {
 		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])
@@ -243,9 +248,9 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		return
 	}
 
-	filename := fmt.Sprintf("report_%s_%d.xlsx", periodType, year)
+	filename := fmt.Sprintf("отчет_%s_%d.xlsx", map[string]string{"plan": "план", "fact": "факт"}[periodType], year)
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.xlsx"; filename*=UTF-8''%s`, periodType, year, url.PathEscape(filename)))
 	w.Write(body)
 
 	logAudit(h.DB, "report", "", "export", u.ID, fmt.Sprintf("выгрузка %s", filename), nil, nil)
@@ -285,7 +290,7 @@ func readablePayload(category string, raw []byte) string {
 			continue
 		}
 		if v, ok := payload[f.Key]; ok && v != nil && fmt.Sprint(v) != "" {
-			parts = append(parts, f.Label+": "+fmt.Sprint(v))
+			parts = append(parts, f.Label+": "+officeValue(fmt.Sprint(v)))
 		}
 	}
 	return strings.Join(parts, "; ")

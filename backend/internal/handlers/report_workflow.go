@@ -262,7 +262,7 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	}
 	resp.CanMarkReady = resp.Status == "draft" && automaticComplete && manualComplete
 	resp.CanVerify = resp.Status == "ready" && isStaff(u)
-	resp.CanApprove = resp.Status == "verified" && u.Role == models.RoleAdmin
+	resp.CanApprove = resp.Status == "verified" && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
 	resp.CanReturnDraft = resp.Status != "draft" && (isStaff(u) || resp.Status == "ready")
 	historyRows, historyErr := q.QueryContext(ctx, `SELECT h.from_status,h.to_status,COALESCE(h.comment,''),users.full_name,h.changed_at
 		FROM agreement_report_history h JOIN users ON users.id=h.changed_by
@@ -374,7 +374,7 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 	case "verified":
 		allowed = current == "ready" && isStaff(u)
 	case "approved":
-		allowed = current == "verified" && u.Role == models.RoleAdmin
+		allowed = current == "verified" && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
 	case "draft":
 		allowed = current != "draft" && (isStaff(u) || current == "ready")
 	}

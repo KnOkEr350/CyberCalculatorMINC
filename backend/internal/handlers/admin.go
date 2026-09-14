@@ -21,7 +21,7 @@ type createUserRequest struct {
 	Email      string  `json:"email"`
 	Password   string  `json:"password"`
 	FullName   string  `json:"full_name"`
-	Role       string  `json:"role"` // admin|user
+	Role       string  `json:"role"` // admin|moderator|user
 	EntityType string  `json:"entity_type,omitempty"`
 	PartnerID  *string `json:"partner_id,omitempty"`
 }
@@ -36,7 +36,7 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.Role == "admin" {
+	if req.Role == "admin" || req.Role == "moderator" {
 		req.EntityType = "organization"
 		req.PartnerID = nil
 	}
@@ -138,8 +138,8 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		return
 	}
 	if req.Role != nil {
-		if *req.Role != string(models.RoleAdmin) && *req.Role != string(models.RoleUser) {
-			middleware.WriteError(w, http.StatusBadRequest, "role должен быть admin или user")
+		if *req.Role != string(models.RoleAdmin) && *req.Role != string(models.RoleModerator) && *req.Role != string(models.RoleUser) {
+			middleware.WriteError(w, http.StatusBadRequest, "role должен быть admin, moderator или user")
 			return
 		}
 	}
@@ -176,7 +176,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 	if req.PartnerID != nil {
 		partner = *req.PartnerID
 	}
-	if role == "admin" {
+	if role == "admin" || role == "moderator" {
 		entity = "organization"
 	}
 	if entity != "edu_institution" {

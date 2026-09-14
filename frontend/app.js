@@ -59,6 +59,7 @@ const VALUE_LABELS = {
   update: "Актуализация",
   expertise: "Экспертиза",
   user: "Пользователь",
+  moderator: "Модератор",
   admin: "Администратор",
   organization: "Киберпротект",
   edu_institution: "Образовательная организация",
@@ -280,18 +281,27 @@ function renderLogin() {
 
 function renderLayout() {
   const isAdmin = state.me.role === "admin";
+  const isModerator = state.me.role === "moderator";
+  const isManager = isAdmin || isModerator;
+  const isITOrganization = !isManager && state.me.entity_type === "organization";
+  const allowedViews = new Set(["dashboard", "entries"]);
+  if (isManager) allowedViews.add("admin");
+  else if (isITOrganization) allowedViews.add("it-companies");
+  else allowedViews.add("partners");
+  if (!allowedViews.has(state.view)) state.view = "dashboard";
   const wrap = el(`<div>
     <div class="topbar">
       ${brandMarkup()}
       <nav>
         <button data-view="dashboard">Дашборд</button>
         <button data-view="entries">План / Факт</button>
-        <button data-view="partners">Учебные заведения</button>
-        ${isAdmin ? '<button data-view="admin">Админка</button>' : ""}
+        ${!isManager && !isITOrganization ? '<button data-view="partners">Учебные заведения</button>' : ""}
+        ${isITOrganization ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
+        ${isManager ? '<button data-view="admin">Админ. панель</button>' : ""}
       </nav>
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
-        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${isStaffUser() ? "Киберпротект" : "Учебное заведение"}${isAdmin ? " · Администратор" : ""}</small></span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${isITOrganization ? "ИТ-организация" : isStaffUser() ? "Киберпротект" : "Учебное заведение"}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
         <button id="change-password" title="Изменить пароль">Пароль</button>
         ${state.me.mfa_available && !state.me.mfa_enabled ? '<button id="setup-mfa">Защита входа</button>' : ''}
         <button id="logout" title="Выйти из системы">Выйти</button>
@@ -323,7 +333,13 @@ function renderLayout() {
   else if (state.view === "entries") renderEntries(content);
   else if (state.view === "partners")
     renderPartnerDirectory(content).catch((e) => showToast(e.message));
+  else if (state.view === "it-companies")
+    renderITCompanies(content).catch((e) => showToast(e.message));
   else if (state.view === "admin") renderAdmin(content);
+  else {
+    state.view = "dashboard";
+    renderDashboard(content);
+  }
   return wrap;
 }
 
@@ -464,7 +480,7 @@ async function renderDashboard(root) {
           <input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}" style="width:90px">
           <label for="dash-partner">Партнёр</label><select id="dash-partner"><option value="">Все доступные партнёры</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select>
           ${
-            state.me.role === "admin"
+            isStaffUser()
               ? `<button class="btn secondary" id="set-target">Задать целевую сумму (3%)</button>`
               : ""
           }
@@ -1070,33 +1086,40 @@ async function wireAttachSection(root, entryId) {
 // ----------------------------------------------------------------- ADMIN --
 
 async function renderAdmin(root) {
+  const isAdmin = state.me.role === "admin";
   root.innerHTML = `<section class="page-heading">
-    <div><span class="eyebrow">Управление</span><h1>Администрирование</h1><p>Пользователи, партнёры, сроки хранения и журнал действий.</p></div>
+    <div><span class="eyebrow">Управление системой</span><h1>Административная панель</h1><p>${isAdmin ? "Управляйте справочниками, доступами, системными настройками и историей действий." : "Работайте со справочниками и соглашениями. Системные настройки и управление доступами доступны администратору."}</p></div>
   </section>
-  <div class="tabs admin-tabs">
-    <button data-t="users" class="active">Пользователи</button>
-    <button data-t="partners">Партнёры</button>
-    <button data-t="settings">Настройки</button>
-    <button data-t="logs">Журнал изменений</button>
-  </div><div id="admin-content"></div>`;
+  <div class="admin-layout">
+    <nav class="admin-nav" aria-label="Разделы административной панели">
+      <button data-t="partners" class="active"><b>Учебные заведения</b><span>Реестр, партнёры и соглашения</span></button>
+      <button data-t="it-companies"><b>ИТ-компании</b><span>Реестр действующих аккредитаций</span></button>
+      ${isAdmin ? '<button data-t="users"><b>Пользователи</b><span>Роли и доступ к системе</span></button><button data-t="settings"><b>Настройки</b><span>Сроки хранения данных</span></button><button data-t="logs"><b>Журнал изменений</b><span>История действий пользователей</span></button>' : ""}
+    </nav>
+    <div id="admin-content"></div>
+  </div>`;
   const box = root.querySelector("#admin-content");
-  root.querySelectorAll(".tabs button").forEach((b) => {
+  root.querySelectorAll(".admin-nav button").forEach((b) => {
     b.onclick = () => {
       root
-        .querySelectorAll(".tabs button")
+        .querySelectorAll(".admin-nav button")
         .forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
       renderAdminTab(box, b.dataset.t);
     };
   });
-  renderAdminTab(box, "users");
+  renderAdminTab(box, "partners");
 }
 
 async function renderAdminTab(box, tab) {
   box.innerHTML = `<div class="card loading-state"><span class="spinner"></span>Загрузка данных…</div>`;
   try {
+    const adminOnly = new Set(["users", "settings", "logs"]);
+    if (adminOnly.has(tab) && state.me.role !== "admin")
+      throw new Error("Этот раздел доступен только администратору");
     if (tab === "users") return await renderAdminUsers(box);
-    if (tab === "partners") return await renderPartnerDirectory(box);
+    if (tab === "partners") return await renderPartnerDirectory(box, true);
+    if (tab === "it-companies") return await renderITCompanies(box, true);
     if (tab === "settings") return await renderAdminSettings(box);
     if (tab === "logs") return await renderAdminLogs(box);
     throw new Error("Неизвестный раздел администрирования");
@@ -1107,14 +1130,14 @@ async function renderAdminTab(box, tab) {
 }
 
 async function renderAdminUsers(box) {
-  box.innerHTML = `<div class="card"><h2>Новый пользователь (в т.ч. дополнительный админ)</h2>
+  box.innerHTML = `<div class="section-intro"><h2>Пользователи и права доступа</h2><p>Создавайте учётные записи и назначайте минимально необходимую роль.</p></div><div class="card"><h2>Новый пользователь</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
       <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
-      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">Сотрудник Киберпротекта</option><option value="edu_institution">Представитель учебного заведения</option></select></div>
+      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select><div class="field-hint">Модератор видит всё, кроме пользователей, настроек и журнала изменений.</div></div>
+      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">Представитель ИТ-организации</option><option value="edu_institution">Представитель учебного заведения</option></select></div>
       <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(
         state.partners,
       )
@@ -1134,12 +1157,19 @@ async function renderAdminUsers(box) {
   <div class="card"><h2>Пользователи</h2><div id="u-list">Загрузка…</div></div>`;
 
   const entitySelect = box.querySelector("#u-entity");
-  entitySelect.onchange = () => {
+  const roleSelect = box.querySelector("#u-role");
+  const syncUserType = () => {
+    const elevated = ["admin", "moderator"].includes(roleSelect.value);
+    if (elevated) entitySelect.value = "organization";
+    entitySelect.disabled = elevated;
     box.querySelector("#u-partner-field").style.display =
       entitySelect.value === "edu_institution" ? "block" : "none";
     if (entitySelect.value !== "edu_institution")
       box.querySelector("#u-partner").value = "";
   };
+  entitySelect.onchange = syncUserType;
+  roleSelect.onchange = syncUserType;
+  syncUserType();
 
   box.querySelector("#u-form").onsubmit = async (event) => {
     event.preventDefault();

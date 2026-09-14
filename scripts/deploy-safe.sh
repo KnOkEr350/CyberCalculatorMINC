@@ -28,9 +28,9 @@ rollback() {
   echo "Diagnostic state retained at $deploy_state (contains secrets; owner-only access)." >&2
   exit "$result"
 }
-docker compose build --pull
 trap rollback ERR
-docker compose up -d --wait --wait-timeout 180
+docker compose build --pull
+docker compose up -d --remove-orphans --wait --wait-timeout 180
 for attempt in {1..30}; do
   version="$(curl --max-time 5 -fsS "http://127.0.0.1:${HTTP_PORT:-8080}/version.txt" 2>/dev/null || true)"
   if [[ "$version" == "${APP_VERSION:-dev}" ]] && curl --max-time 5 -fsS "http://127.0.0.1:${HTTP_PORT:-8080}/api/health" >/dev/null; then

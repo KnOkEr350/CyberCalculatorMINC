@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -38,13 +39,44 @@ func (h *EntryHandlers) ImportTemplate(w http.ResponseWriter, r *http.Request, u
 	headers := []string{}
 	info := [][]interface{}{}
 	for _, f := range fields {
-		headers = append(headers, f.Key)
-		info = append(info, []interface{}{f.Key, f.Label, f.Required, strings.Join(f.Options, ", ")})
+		headers = append(headers, f.Label)
+		options := make([]string, 0, len(f.Options))
+		for _, option := range f.Options {
+			options = append(options, officeValue(option))
+		}
+		info = append(info, []interface{}{f.Label, map[bool]string{true: "Да", false: "Нет"}[f.Required], strings.Join(options, ", ")})
 	}
 	wb := xlsx.New()
 	wb.AddSheet("Данные", headers, nil)
-	wb.AddSheet("Инструкция", []string{"Поле", "Название", "Обязательно", "Допустимые значения"}, info)
-	writeWorkbook(w, wb, "import_template.xlsx")
+	wb.AddSheet("Инструкция", []string{"Название столбца", "Обязательно", "Допустимые значения"}, info)
+	writeWorkbook(w, wb, "шаблон_импорта.xlsx")
+}
+
+func officeValueLabel(value string) string {
+	return map[string]string{
+		"rpd": "РПД", "oop": "ООП", "vo": "Высшее образование", "spo": "Среднее профессиональное образование",
+		"development": "Разработка", "update": "Актуализация", "expertise": "Экспертиза",
+		"education_organization": "С образовательной организацией", "roiv": "С РОИВ",
+		"needs_review": "Требует проверки", "draft": "Проект", "active": "Действует",
+		"suspended": "Приостановлено", "expired": "Истекло", "terminated": "Расторгнуто",
+	}[value]
+}
+
+func officeValue(value string) string {
+	if label := officeValueLabel(value); label != "" {
+		return label
+	}
+	return value
+}
+
+func canonicalOfficeValue(value string, options []string) string {
+	value = strings.TrimSpace(value)
+	for _, option := range options {
+		if strings.EqualFold(value, option) || strings.EqualFold(value, officeValue(option)) {
+			return option
+		}
+	}
+	return value
 }
 func writeWorkbook(w http.ResponseWriter, wb *xlsx.Workbook, name string) {
 	body, err := wb.Bytes()
@@ -53,7 +85,7 @@ func writeWorkbook(w http.ResponseWriter, wb *xlsx.Workbook, name string) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="download.xlsx"; filename*=UTF-8''%s`, url.PathEscape(name)))
 	w.Write(body)
 }
 func uploadedWorkbook(w http.ResponseWriter, r *http.Request) ([]byte, [][]string, error) {
@@ -149,7 +181,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	for _, f := range fields {
 		if f.Required && !seen[f.Key] {
-			middleware.WriteError(w, 400, "нет обязательного столбца: "+f.Key)
+			middleware.WriteError(w, 400, "нет обязательного столбца: "+f.Label)
 			return
 		}
 	}
@@ -181,7 +213,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 					}
 					row.Payload[key] = json.Number(n)
 				} else {
-					row.Payload[key] = value
+					row.Payload[key] = canonicalOfficeValue(value, f.Options)
 				}
 			}
 			if category == "internship" || category == "employment_practice" {
@@ -272,22 +304,25 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 
 func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	wb := xlsx.New()
-	headers := []string{"name", "partner_kind", "region", "inn", "ogrn", "license_number", "license_status", "institution_status", "registry_record_id", "source_url", "registry_updated_at"}
+	headers := make([]string, 0, len(directoryColumns))
+	for _, column := range directoryColumns {
+		headers = append(headers, column.Label)
+	}
 	wb.AddSheet("Справочник", headers, nil)
-	wb.AddSheet("Инструкция", []string{"Поле", "Описание"}, [][]interface{}{
-		{"name", "Полное наименование из реестра лицензий"},
-		{"partner_kind", "vuz / kolledj / school"},
-		{"region", "Субъект Российской Федерации"},
-		{"inn", "ИНН с корректной контрольной суммой"},
-		{"ogrn", "ОГРН/ОГРНИП с корректной контрольной суммой"},
-		{"license_number", "Регистрационный номер лицензии"},
-		{"license_status", "active / suspended / expired / revoked"},
-		{"institution_status", "active / inactive / reorganized / liquidated"},
-		{"registry_record_id", "Уникальный идентификатор записи официального реестра"},
-		{"source_url", "HTTPS-ссылка на Рособрнадзор или официальный домен *.gov.ru"},
-		{"registry_updated_at", "Дата актуальности сведений, ГГГГ-ММ-ДД"},
+	wb.AddSheet("Инструкция", []string{"Название столбца", "Описание"}, [][]interface{}{
+		{"Наименование", "Полное наименование из реестра лицензий"},
+		{"Тип учебного заведения", "Вуз / Колледж / Школа"},
+		{"Регион", "Субъект Российской Федерации"},
+		{"ИНН", "ИНН с корректной контрольной суммой"},
+		{"ОГРН / ОГРНИП", "ОГРН/ОГРНИП с корректной контрольной суммой"},
+		{"Номер лицензии", "Регистрационный номер лицензии"},
+		{"Статус лицензии", "Действует / Приостановлена / Истекла / Аннулирована"},
+		{"Статус организации", "Действует / Не действует / Реорганизована / Ликвидирована"},
+		{"Идентификатор записи реестра", "Уникальный идентификатор записи официального реестра"},
+		{"Ссылка на официальный источник", "HTTPS-ссылка на Рособрнадзор или официальный домен *.gov.ru"},
+		{"Дата актуальности сведений", "Дата в формате ГГГГ-ММ-ДД"},
 	})
-	writeWorkbook(w, wb, "education_directory.xlsx")
+	writeWorkbook(w, wb, "справочник_учебных_заведений.xlsx")
 }
 func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	_, rows, err := uploadedWorkbook(w, r)

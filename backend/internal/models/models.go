@@ -9,8 +9,9 @@ import (
 type Role string
 
 const (
-	RoleAdmin Role = "admin"
-	RoleUser  Role = "user"
+	RoleAdmin     Role = "admin"
+	RoleModerator Role = "moderator"
+	RoleUser      Role = "user"
 )
 
 // EntityType — тот самый выбор в админке "кто он": организация или вуз.
@@ -48,6 +49,20 @@ type User struct {
 	PartnerID    *string    `json:"partner_id,omitempty"`
 	IsActive     bool       `json:"is_active"`
 	CreatedAt    time.Time  `json:"created_at"`
+}
+
+type ITCompany struct {
+	ID                  string    `json:"id"`
+	Name                string    `json:"name"`
+	INN                 string    `json:"inn"`
+	OGRN                string    `json:"ogrn"`
+	AccreditationNumber string    `json:"accreditation_number"`
+	AccreditationStatus string    `json:"accreditation_status"`
+	RegistryRecordID    string    `json:"registry_record_id"`
+	RegistryUpdatedAt   string    `json:"registry_updated_at"`
+	SourceURL           string    `json:"source_url"`
+	Notes               string    `json:"notes,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 type Partner struct {
