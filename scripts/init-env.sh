@@ -11,7 +11,7 @@ command -v openssl >/dev/null
   echo 'DB_NAME=cybercalc'
   echo 'DB_RUNTIME_USER=cybercalc_app'
   echo "DB_RUNTIME_PASSWORD=$(openssl rand -hex 24)"
-  echo 'HTTP_BIND=127.0.0.1'
+  echo 'HTTP_BIND=0.0.0.0'
   echo 'HTTP_PORT=8080'
   echo 'BACKEND_REPLICAS=2'
   echo 'ADMIN_BOOTSTRAP_EMAIL=admin@minc.local'
