@@ -86,14 +86,14 @@ workflow production runner используется только после push
 | `PROD_HTTP_PORT` | `8080` |
 | `PROD_BACKEND_REPLICAS` | `2` |
 | `PROD_DB_RUNTIME_USER` | `cybercalc_app` |
-| `PROD_PUBLIC_URL` | обязательный внешний HTTPS-origin, например `https://calc.example.ru` |
-| `PROD_CLAMAV_ADDRESS` | обязательный адрес ClamAV, доступный backend |
 
 Workflow передаёт секреты Docker Compose через окружение runner и не сохраняет
-production `.env` в репозитории. Деплой запускается с `APP_ENV=production` и
-останавливается до изменения сервисов, если не настроены HTTPS, MFA, ClamAV или
-отдельный runtime-пароль БД. Убедитесь, что `PROD_HTTP_PORT` свободен на VM и
-доступен только внешнему TLS-прокси.
+deployment `.env` в репозитории. Пока система разрабатывается без домена, CD
+запускает её с `APP_ENV=development` по HTTP и не требует `PUBLIC_URL` или
+`CLAMAV_ADDRESS`. В этом режиме cookie не имеют production-флага `Secure`, а
+загружаемые документы не проходят антивирусную проверку. Перед публичным
+production-запуском необходимо вернуть `APP_ENV=production`, настроить HTTPS и
+доступный ClamAV. Убедитесь, что `PROD_HTTP_PORT` свободен на VM.
 
 Если на VM уже существует volume PostgreSQL, значения `PROD_DB_USER`,
 `PROD_DB_PASSWORD` и `PROD_DB_NAME` должны совпадать с настройками, с которыми

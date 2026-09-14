@@ -372,9 +372,9 @@ jobs:
       DB_RUNTIME_PASSWORD: ${{ secrets.PROD_DB_RUNTIME_PASSWORD }}
       ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.PROD_ADMIN_BOOTSTRAP_EMAIL }}
       ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.PROD_ADMIN_BOOTSTRAP_PASSWORD }}
-      APP_ENV: production
-      PUBLIC_URL: ${{ vars.PROD_PUBLIC_URL }}
-      CLAMAV_ADDRESS: ${{ vars.PROD_CLAMAV_ADDRESS }}
+      # Temporary development deployment over HTTP. Switch back to production
+      # only together with a real HTTPS origin and a reachable ClamAV service.
+      APP_ENV: development
       MFA_ENCRYPTION_KEY: ${{ secrets.PROD_MFA_ENCRYPTION_KEY }}
       HTTP_PORT: ${{ vars.PROD_HTTP_PORT || '8080' }}
       BACKEND_REPLICAS: ${{ vars.PROD_BACKEND_REPLICAS || '2' }}
@@ -386,7 +386,7 @@ jobs:
           persist-credentials: false
           clean: true
 
-      - name: Validate production settings
+      - name: Validate deployment settings
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -398,8 +398,6 @@ jobs:
           [[ -n "$ADMIN_BOOTSTRAP_EMAIL" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_EMAIL is not configured"; missing=1; }
           [[ -n "$ADMIN_BOOTSTRAP_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_PASSWORD is not configured"; missing=1; }
           [[ -n "$MFA_ENCRYPTION_KEY" ]] || { echo "::error::GitHub production secret PROD_MFA_ENCRYPTION_KEY is not configured"; missing=1; }
-          [[ "$PUBLIC_URL" == https://* ]] || { echo "::error::GitHub production variable PROD_PUBLIC_URL must be an HTTPS origin"; missing=1; }
-          [[ -n "$CLAMAV_ADDRESS" ]] || { echo "::error::GitHub production variable PROD_CLAMAV_ADDRESS is not configured"; missing=1; }
           [[ "$missing" == "0" ]]
           docker compose config --quiet
 
