@@ -427,7 +427,7 @@ jobs:
             sleep 2
           done
 
-          echo "Deployment health check failed: expected revision $APP_VERSION, got ${served_version:-nothing}"
+          echo "Deployment health check failed after $attempt attempts: expected revision $APP_VERSION, got ${served_version:-nothing}"
           exit 1
 
       - name: Print deployment diagnostics on failure
