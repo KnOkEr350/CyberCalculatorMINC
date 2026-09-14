@@ -201,6 +201,10 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
 .status-badge, .role-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 99px; font-size: 10px; font-weight: 750; }
 .status-badge.active { background: #e7f7f1; color: var(--good); }
 .status-badge.inactive { background: #fff0f2; color: var(--bad); }
+.status-badge.pending { border: 1px solid #f0ce82; background: #fff6d9; color: var(--warn); }
+.warning-stat { border-color: #f0d99f; background: linear-gradient(145deg, #fff, #fff9e8); }
+.warning-stat::after { background: #e2a72e; }
+.warning-stat .value { color: var(--warn); }
 .role-badge { background: var(--blue-soft); color: var(--accent-2); }
 
 .auth-shell { display: grid; grid-template-columns: minmax(420px, 1.08fr) minmax(420px, .92fr); min-height: 100vh; background: white; }

@@ -171,6 +171,28 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "POST", "/auth/entity-type", map[string]string{"entity_type": "organization"}, 403)
 	call(partnerClient, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("foreign")}, 403)
 	call(partnerClient, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 1000}, 403)
+	reviewBody := map[string]interface{}{
+		"name": "Тестовый вуз B " + stamp, "partner_kind": "vuz", "region": "г. Москва",
+		"inn": "7707083893", "ogrn": "1027700132195", "license_number": "Л035-ТЕСТ-2",
+		"license_status": "active", "institution_status": "active",
+		"source_url":          "https://islod.obrnadzor.gov.ru/rlic/details/test-2",
+		"registry_updated_at": time.Now().Format("2006-01-02"), "confirmation_comment": "Проверено представителем",
+	}
+	call(partnerClient, "PUT", "/directory/"+directory2, reviewBody, 200)
+	var reviewStatus string
+	if e := db.QueryRow(`SELECT verification_status FROM education_directory WHERE id=$1`, directory2).Scan(&reviewStatus); e != nil || reviewStatus != "pending" {
+		t.Fatalf("directory edit must require confirmation: status=%s err=%v", reviewStatus, e)
+	}
+	reviewBody["confirm"] = true
+	call(partnerClient, "PUT", "/directory/"+directory2, reviewBody, 200)
+	var confirmedBy string
+	if e := db.QueryRow(`SELECT verification_status,verified_by::text FROM education_directory WHERE id=$1`, directory2).Scan(&reviewStatus, &confirmedBy); e != nil || reviewStatus != "verified" || confirmedBy == "" {
+		t.Fatalf("directory confirmation was not attributed: status=%s by=%s err=%v", reviewStatus, confirmedBy, e)
+	}
+	audit := call(admin, "GET", "/admin/logs?entity_type=education_directory&limit=20", nil, 200)
+	if !bytes.Contains(audit, []byte(`"action":"directory_confirm"`)) || !bytes.Contains(audit, []byte(partnerEmail)) {
+		t.Fatal("directory confirmation actor/details missing from audit")
+	}
 	partners := call(partnerClient, "GET", "/partners", nil, 200)
 	if !bytes.Contains(partners, []byte(p1)) || bytes.Contains(partners, []byte(p2)) {
 		t.Fatal("partner list leaks data")

@@ -179,6 +179,8 @@ type AuditLogItem struct {
 	EntityID    *string                `json:"entity_id,omitempty"`
 	Action      string                 `json:"action"`
 	UserID      *string                `json:"user_id,omitempty"`
+	UserEmail   *string                `json:"user_email,omitempty"`
+	UserName    *string                `json:"user_name,omitempty"`
 	CommentText *string                `json:"comment_text,omitempty"`
 	OldValue    map[string]interface{} `json:"old_value,omitempty"`
 	NewValue    map[string]interface{} `json:"new_value,omitempty"`

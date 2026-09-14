@@ -29,6 +29,27 @@ func TestPartnerAccess(t *testing.T) {
 		t.Fatal("query must not expand partner scope")
 	}
 }
+
+func TestEducationDirectoryReviewAccess(t *testing.T) {
+	tests := []struct {
+		name string
+		user middleware.AuthUser
+		want bool
+	}{
+		{"admin", middleware.AuthUser{Role: models.RoleAdmin}, true},
+		{"moderator", middleware.AuthUser{Role: models.RoleModerator}, true},
+		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, true},
+		{"IT organization", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, false},
+		{"unassigned", middleware.AuthUser{Role: models.RoleUser}, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := canReviewEducationDirectory(test.user); got != test.want {
+				t.Fatalf("got %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 func TestObligations(t *testing.T) {
 	for _, kind := range []string{"vuz", "kolledj", "school"} {
 		for _, top := range []bool{false, true} {

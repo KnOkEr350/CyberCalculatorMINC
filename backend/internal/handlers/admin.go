@@ -317,10 +317,10 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 		return "$" + strconv.Itoa(len(args))
 	}
 	if v := q.Get("entity_type"); v != "" {
-		conds = append(conds, "entity_type = "+arg(v))
+		conds = append(conds, "a.entity_type = "+arg(v))
 	}
 	if v := q.Get("user_id"); v != "" {
-		conds = append(conds, "user_id = "+arg(v))
+		conds = append(conds, "a.user_id = "+arg(v))
 	}
 	limit := 200
 	if v := q.Get("limit"); v != "" {
@@ -329,8 +329,10 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 		}
 	}
 
-	query := `SELECT id, entity_type, entity_id, action, user_id, comment_text, old_value, new_value, created_at
-		FROM audit_log WHERE ` + joinAnd(conds) + ` ORDER BY created_at DESC LIMIT ` + strconv.Itoa(limit)
+	query := `SELECT a.id, a.entity_type, a.entity_id, a.action, a.user_id,
+		COALESCE(u.email,''),COALESCE(u.full_name,''),a.comment_text,a.old_value,a.new_value,a.created_at
+		FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE ` + joinAnd(conds) +
+		` ORDER BY a.created_at DESC LIMIT ` + strconv.Itoa(limit)
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
@@ -342,8 +344,10 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 	for rows.Next() {
 		var item models.AuditLogItem
 		var entityID, userID, comment sql.NullString
+		var userEmail, userName string
 		var oldRaw, newRaw []byte
-		if err := rows.Scan(&item.ID, &item.EntityType, &entityID, &item.Action, &userID, &comment, &oldRaw, &newRaw, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.EntityType, &entityID, &item.Action, &userID,
+			&userEmail, &userName, &comment, &oldRaw, &newRaw, &item.CreatedAt); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -354,6 +358,12 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 		if userID.Valid {
 			v := userID.String
 			item.UserID = &v
+		}
+		if userEmail != "" {
+			item.UserEmail = &userEmail
+		}
+		if userName != "" {
+			item.UserName = &userName
 		}
 		if comment.Valid {
 			v := comment.String

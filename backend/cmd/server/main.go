@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -47,6 +48,7 @@ func main() {
 	defer db.Close()
 
 	migrationMode := len(os.Args) > 1 && os.Args[1] == "migrate"
+	enrichmentMode := len(os.Args) > 1 && os.Args[1] == "enrich-directory"
 	if migrationMode || os.Getenv("RUN_MIGRATIONS") != "false" {
 		if err := dbx.RunMigrations(db, "/app/migrations"); err != nil {
 			log.Fatalf("ошибка применения миграций: %v", err)
@@ -60,6 +62,29 @@ func main() {
 		if err := dbx.ProvisionRuntime(db, os.Getenv("RUNTIME_DB_USER"), os.Getenv("RUNTIME_DB_PASSWORD")); err != nil {
 			log.Fatal(err)
 		}
+		return
+	}
+	if enrichmentMode {
+		limit, delayMS := 0, 500
+		if raw := os.Getenv("DIRECTORY_ENRICH_LIMIT"); raw != "" {
+			if value, parseErr := strconv.Atoi(raw); parseErr != nil || value < 0 {
+				log.Fatal("DIRECTORY_ENRICH_LIMIT должен быть целым неотрицательным числом")
+			} else {
+				limit = value
+			}
+		}
+		if raw := os.Getenv("DIRECTORY_ENRICH_DELAY_MS"); raw != "" {
+			if value, parseErr := strconv.Atoi(raw); parseErr != nil || value < 0 || value > 60000 {
+				log.Fatal("DIRECTORY_ENRICH_DELAY_MS должен быть числом от 0 до 60000")
+			} else {
+				delayMS = value
+			}
+		}
+		result, enrichErr := handlers.EnrichEducationDirectory(context.Background(), db, limit, time.Duration(delayMS)*time.Millisecond)
+		if enrichErr != nil {
+			log.Fatalf("обогащение справочника остановлено после %d записей: %v", result.Processed, enrichErr)
+		}
+		log.Printf("обогащение завершено: обработано %d, найдено %d, без результата %d", result.Processed, result.Matched, result.Unmatched)
 		return
 	}
 	if err := os.MkdirAll(cfg.UploadDir, 0o750); err != nil {
@@ -161,6 +186,9 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/it-companies", middleware.RequireAuth(db, itCompanyH.Create))
 	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
 	mux.HandleFunc("GET /api/directory/stats", middleware.RequireAuth(db, partnerH.DirectoryStats))
+	mux.HandleFunc("PUT /api/directory/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		partnerH.UpdateDirectory(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/agreements", middleware.RequireAuth(db, agreementH.List))
 	mux.HandleFunc("POST /api/agreements", middleware.RequireAuth(db, agreementH.Create))
 	mux.HandleFunc("PUT /api/agreements/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -176,8 +204,8 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/obligations", middleware.RequireAuth(db, entryH.Obligations))
 	mux.HandleFunc("GET /api/entries/import-template", middleware.RequireAuth(db, entryH.ImportTemplate))
 	mux.HandleFunc("POST /api/entries/import", middleware.RequireAuth(db, entryH.Import))
-	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireManager(db, partnerH.DirectoryTemplate))
-	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireManager(db, partnerH.ImportDirectory))
+	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireAuth(db, partnerH.DirectoryTemplate))
+	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireAuth(db, partnerH.ImportDirectory))
 
 	// --- Категории активностей (справочник с полями формы) ---
 	mux.HandleFunc("GET /api/categories", middleware.RequireAuth(db, entryH.Categories))

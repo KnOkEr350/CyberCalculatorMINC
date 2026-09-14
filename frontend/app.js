@@ -67,11 +67,15 @@ const VALUE_LABELS = {
   attachment: "Документ",
   partner: "Партнёр",
   settings: "Настройки",
+  education_directory: "Учебное заведение",
   create: "Создание",
   upload: "Загрузка файла",
   login: "Вход",
   delete: "Удаление",
   settings_change: "Изменение настроек",
+  directory_enrich: "Автоматический подбор реквизитов",
+  directory_update: "Изменение реквизитов",
+  directory_confirm: "Подтверждение учебного заведения",
 };
 
 function valueLabel(value) {
@@ -1333,20 +1337,46 @@ async function renderAdminSettings(box) {
 }
 
 async function renderAdminLogs(box) {
-  box.innerHTML = `<div class="card"><h2>Журнал изменений (хранится согласно настройке выше)</h2><div id="logs-list">Загрузка…</div></div>`;
+  box.innerHTML = `<div class="section-intro"><h2>Журнал изменений</h2><p>Здесь зафиксировано, кто, что и когда изменил или подтвердил.</p></div><div class="card"><div class="flex between"><h2>Последние действия</h2><div class="tabs"><button class="active" data-log-filter="all">Все</button><button data-log-filter="directory_confirm">Подтверждения справочника</button></div></div><div id="logs-list">Загрузка…</div></div>`;
   const logs = (await api("/admin/logs?limit=200")) || [];
-  box.querySelector("#logs-list").innerHTML =
-    `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Действие</th><th>Комментарий</th></tr></thead>
-    <tbody>${logs
-      .map(
-        (l) => `<tr>
-      <td>${new Date(l.created_at).toLocaleString("ru-RU")}</td>
-      <td>${escapeHTML(valueLabel(l.entity_type))}${l.entity_id ? " #" + escapeHTML(l.entity_id.slice(0, 8)) : ""}</td>
-      <td>${escapeHTML(valueLabel(l.action))}</td>
-      <td>${escapeHTML(l.comment_text || "")}</td>
-    </tr>`,
-      )
-      .join("")}</tbody></table></div>`;
+  const fieldLabels = {
+    name: "Наименование", partner_kind: "Тип", region: "Регион", inn: "ИНН", ogrn: "ОГРН",
+    license_number: "Лицензия", license_status: "Статус лицензии",
+    institution_status: "Статус организации", registry_record_id: "Запись реестра",
+    source_url: "Источник", registry_updated_at: "Дата актуальности",
+    verification_status: "Статус проверки",
+  };
+  const summarize = (log) => {
+    const before = log.old_value || {};
+    const after = log.new_value || {};
+    const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .filter((key) => JSON.stringify(before[key] ?? "") !== JSON.stringify(after[key] ?? ""))
+      .map((key) => `${fieldLabels[key] || key}: «${before[key] || "—"}» → «${after[key] || "—"}»`);
+    const name = after.name || before.name || "";
+    const details = changed.length
+      ? `<details><summary>${changed.length} изменённых полей</summary><ul>${changed.map((line) => `<li>${escapeHTML(line)}</li>`).join("")}</ul></details>`
+      : "";
+    return `${name ? `<b>${escapeHTML(name)}</b><br>` : ""}${escapeHTML(log.comment_text || "")}${details}`;
+  };
+  const paint = (filter = "all") => {
+    const visible = filter === "all" ? logs : logs.filter((log) => log.action === filter);
+    box.querySelector("#logs-list").innerHTML = visible.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Кто</th><th>Объект и действие</th><th>Что изменено</th></tr></thead><tbody>${visible.map((log) => `<tr>
+        <td>${new Date(log.created_at).toLocaleString("ru-RU")}</td>
+        <td>${escapeHTML(log.user_name || (log.user_id ? "Пользователь" : "Автоматический скрипт"))}${log.user_email ? `<br><small>${escapeHTML(log.user_email)}</small>` : ""}</td>
+        <td>${escapeHTML(valueLabel(log.entity_type))}${log.entity_id ? " #" + escapeHTML(log.entity_id.slice(0, 8)) : ""}<br><b>${escapeHTML(valueLabel(log.action))}</b></td>
+        <td>${summarize(log)}</td>
+      </tr>`).join("")}</tbody></table></div>`
+      : '<p class="muted">Действий по выбранному фильтру пока нет.</p>';
+  };
+  box.querySelectorAll("[data-log-filter]").forEach((button) => {
+    button.onclick = () => {
+      box.querySelectorAll("[data-log-filter]").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      paint(button.dataset.logFilter);
+    };
+  });
+  paint();
 }
 
 boot();

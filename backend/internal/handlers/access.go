@@ -16,6 +16,14 @@ func isStaff(u middleware.AuthUser) bool {
 func canManageITCompanies(u middleware.AuthUser) bool {
 	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityOrganization
 }
+
+// canReviewEducationDirectory mirrors the UI visibility rule: administrators,
+// moderators and educational-organization users can inspect and confirm
+// educational registry data. IT-organization users have the IT-company tab
+// instead and cannot mutate this directory through a direct API request.
+func canReviewEducationDirectory(u middleware.AuthUser) bool {
+	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityEduInst
+}
 func canAccessPartner(u middleware.AuthUser, id string) bool {
 	return isStaff(u) || (u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID == id && id != "")
 }

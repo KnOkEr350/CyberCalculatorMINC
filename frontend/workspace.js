@@ -3,6 +3,10 @@ function isStaffUser() {
   return state.me?.role === "admin" || state.me?.role === "moderator" || state.me?.entity_type === "organization";
 }
 
+function canReviewEducationDirectory() {
+  return state.me?.role === "admin" || state.me?.role === "moderator" || state.me?.entity_type === "edu_institution";
+}
+
 function agreementIsUsable(agreement, year = state.year) {
   return Boolean(
     agreement &&
@@ -467,7 +471,7 @@ async function openImportDialog(directory, onCommitted = null) {
     ? "/api/admin/directory-template"
     : `/api/entries/import-template?${query}`;
   const modal = el(
-    `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true"><h2>Импорт ${directory ? "справочника" : "записей"} из Excel</h2><p>Первый лист .xlsx, до 8 МБ и ${directory ? "10000" : "1000"} строк. Сначала скачайте шаблон. Формулы замените значениями. ${directory ? "Для каждой записи обязательны ИНН, ОГРН, лицензия, оба статуса, идентификатор, дата и HTTPS-ссылка официального реестра." : "Наставник должен заранее присутствовать в справочнике выбранного партнёра. Суммы рассчитывает сервер."}</p><a class="btn secondary" href="${template}">Скачать шаблон</a><div class="field"><input type="file" accept=".xlsx" id="import-file" aria-label="Файл Excel"></div><div id="import-result" role="status"></div><div class="flex"><button class="btn" id="preview">Проверить</button><button class="btn" id="commit" disabled>Импортировать</button><button class="btn secondary" id="close-import">Закрыть</button></div></div></div>`,
+    `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true"><h2>Импорт ${directory ? "справочника" : "записей"} из Excel</h2><p>Первый лист .xlsx, до 8 МБ и ${directory ? "10000" : "1000"} строк. Сначала скачайте шаблон. Формулы замените значениями. ${directory ? "Выгрузка содержит текущий справочник. Исправьте нужные строки и укажите «Подтвердить» в столбце «Действие»; пустые строки этого столбца останутся без изменений. Для подтверждения обязательны ИНН, ОГРН, дата и HTTPS-ссылка официального источника." : "Наставник должен заранее присутствовать в справочнике выбранного партнёра. Суммы рассчитывает сервер."}</p><a class="btn secondary" href="${template}">Скачать текущий справочник</a><div class="field"><input type="file" accept=".xlsx" id="import-file" aria-label="Файл Excel"></div><div id="import-result" role="status"></div><div class="flex"><button class="btn" id="preview">Проверить</button><button class="btn" id="commit" disabled>${directory ? "Импортировать и подтвердить" : "Импортировать"}</button><button class="btn secondary" id="close-import">Закрыть</button></div></div></div>`,
   );
   let busy = false,
     checkedFile = null;
@@ -641,10 +645,75 @@ async function renderITCompanies(root, embedded = false) {
   await load();
 }
 
+function directoryStatusLabel(value) {
+  return {
+    active: "Действует",
+    suspended: "Приостановлена",
+    expired: "Истекла",
+    revoked: "Аннулирована",
+    unknown: "Не указан",
+    inactive: "Не действует",
+    reorganized: "Реорганизована",
+    liquidated: "Ликвидирована",
+  }[value] || value || "Не указан";
+}
+
+async function openDirectoryReview(item, onSaved = async () => {}) {
+  if (!item || !canReviewEducationDirectory()) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const option = (value, label, selected) =>
+    `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`;
+  const modal = el(`<div class="modal-backdrop"><form class="modal modal-wide" role="dialog" aria-modal="true">
+    <div class="flex between"><div><span class="eyebrow">Проверка справочника</span><h2>${escapeHTML(item.name)}</h2></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
+    <p class="notice">Автоматически найденные реквизиты могут относиться к одноимённой организации или головному юридическому лицу. Сверьте ИНН и ОГРН с официальным источником.</p>
+    <div class="grid cols-2">
+      <div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="1000" value="${escapeHTML(item.name || "")}"></div>
+      <div class="field"><label>Тип учебного заведения *</label><select name="partner_kind">${option("vuz", "Вуз", item.partner_kind)}${option("kolledj", "Колледж / СПО", item.partner_kind)}${option("school", "Школа", item.partner_kind)}</select></div>
+      <div class="field"><label>Регион *</label><input name="region" required minlength="2" maxlength="200" value="${escapeHTML(item.region || "")}"></div>
+      <div class="field"><label>Дата актуальности *</label><input name="registry_updated_at" type="date" required max="${today}" value="${escapeHTML(item.registry_updated_at || today)}"></div>
+      <div class="field"><label>ИНН *</label><input name="inn" inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}" required value="${escapeHTML(item.inn || "")}"></div>
+      <div class="field"><label>ОГРН / ОГРНИП *</label><input name="ogrn" inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}" required value="${escapeHTML(item.ogrn || "")}"></div>
+      <div class="field"><label>Номер лицензии</label><input name="license_number" maxlength="100" value="${escapeHTML(item.license_number || "")}"></div>
+      <div class="field"><label>Статус лицензии</label><select name="license_status">${option("unknown", "Не указан", item.license_status)}${option("active", "Действует", item.license_status)}${option("suspended", "Приостановлена", item.license_status)}${option("expired", "Истекла", item.license_status)}${option("revoked", "Аннулирована", item.license_status)}</select></div>
+      <div class="field"><label>Статус организации</label><select name="institution_status">${option("unknown", "Не указан", item.institution_status)}${option("active", "Действует", item.institution_status)}${option("inactive", "Не действует", item.institution_status)}${option("reorganized", "Реорганизована", item.institution_status)}${option("liquidated", "Ликвидирована", item.institution_status)}</select></div>
+      <div class="field"><label>Официальный источник *</label><input name="source_url" type="url" required value="${escapeHTML(item.source_url || "https://egrul.nalog.ru/index.html")}"></div>
+    </div>
+    <div class="field"><label>Комментарий к проверке</label><textarea name="confirmation_comment" maxlength="1000" rows="2" placeholder="Что именно проверено или исправлено"></textarea></div>
+    <p class="muted">«Сохранить изменения» оставит жёлтый статус. «Подтвердить» зафиксирует ваши ФИО, email, время и полный состав реквизитов в журнале изменений.</p>
+    <p class="error" role="alert"></p>
+    <div class="flex"><button class="btn secondary" type="submit" data-mode="save">Сохранить изменения</button><button class="btn" type="submit" data-mode="confirm">Подтвердить</button></div>
+  </form></div>`);
+  document.body.appendChild(modal);
+  const form = modal.querySelector("form");
+  modal.querySelector("[data-close]").onclick = () => modal.remove();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const confirm = event.submitter?.dataset.mode === "confirm";
+    const buttons = form.querySelectorAll("button");
+    buttons.forEach((button) => (button.disabled = true));
+    form.querySelector(".error").textContent = "";
+    try {
+      const payload = Object.fromEntries(new FormData(form));
+      payload.confirm = confirm;
+      await api(`/directory/${encodeURIComponent(item.id)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      modal.remove();
+      await onSaved();
+      showToast(confirm ? "Учебное заведение подтверждено" : "Изменения сохранены; требуется подтверждение", "success");
+    } catch (error) {
+      form.querySelector(".error").textContent = error.message;
+      buttons.forEach((button) => (button.disabled = false));
+    }
+  };
+}
+
 async function renderPartnerDirectory(root, embedded = false) {
   state.regionalAuthorities = await api("/regional-authorities");
   root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Учебные заведения и соглашения</h2><p>Проверяйте официальный справочник, добавляйте партнёров и управляйте соглашениями.</p></div>' : '<section class="page-heading"><div><span class="eyebrow">Справочники</span><h1>Учебные заведения и соглашения</h1><p>Новые партнёры создаются только из записей, подтверждённых официальным реестром лицензий.</p></div></section>'}
-  <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><p class="muted">Старый набор мониторинга сохранён для истории, но не считается лицензированным реестром и не доступен для создания нового партнёра. ИНН и ОГРН проверяются по контрольным суммам; запись должна иметь действующие статусы организации и лицензии.</p></div>
+  <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><p class="muted">Данные, найденные автоматически, отмечены жёлтым статусом «Требует проверки». Проверьте ИНН и ОГРН, при необходимости исправьте реквизиты и подтвердите запись. Для создания партнёра дополнительно нужны действующие организация и лицензия.</p></div>
   <div class="card"><h2>Поиск в официальном справочнике</h2><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
     AUDIENCE_LABELS,
   )
@@ -654,7 +723,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     )
     .join(
       "",
-    )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${["admin", "moderator"].includes(state.me.role) ? '<button class="btn secondary" id="d-import">Обновить из выгрузки реестра</button>' : ""}</div>
+    )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${canReviewEducationDirectory() ? '<button class="btn secondary" id="d-import">Редактировать и подтверждать через Excel</button>' : ""}</div>
   <div class="card"><div class="flex between"><div><h2>Региональные органы управления образованием</h2><p class="muted">Цепочка школьного мероприятия: РОИВ → соглашение → школа → план/факт.</p></div>${isStaffUser() ? '<button class="btn secondary" id="roiv-add">+ Добавить РОИВ</button>' : ""}</div><div id="roiv-list">${state.regionalAuthorities.length ? `<div class="table-wrap"><table><thead><tr><th>Регион и РОИВ</th><th>Реквизиты</th><th>Связи</th><th></th></tr></thead><tbody>${state.regionalAuthorities.map((authority) => `<tr><td>${escapeHTML(authority.region)}<br><b>${escapeHTML(authority.name)}</b></td><td>ИНН ${escapeHTML(authority.inn)}<br>ОГРН ${escapeHTML(authority.ogrn)}<br><a href="${escapeHTML(authority.source_url)}" target="_blank" rel="noopener noreferrer">Официальный источник</a></td><td><span class="status-badge ${authority.status === "active" ? "active" : "inactive"}">${authority.status === "active" ? "Действует" : "Не действует"}</span><br>Школ: ${authority.schools_count}<br>Мероприятий: ${authority.activities_count}</td><td>${isStaffUser() ? `<button class="btn secondary" data-edit-roiv="${authority.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>РОИВ ещё не добавлены. Для создания школьного партнёра сначала заполните этот справочник.</p>"}</div></div>
   <div class="card"><h2>Наши партнёры</h2><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
   let generation = 0;
@@ -672,8 +741,21 @@ async function renderPartnerDirectory(root, embedded = false) {
       );
       if (version !== generation) return;
       box.innerHTML = items.length
-        ? `<p class="muted">Показано до 100 результатов. Уточните запрос для поиска остальных.</p><div class="table-wrap"><table><thead><tr><th>Название</th><th>Реквизиты</th><th>Лицензия и актуальность</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(p.region)}</small></td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${p.selectable ? "active" : "inactive"}">${p.selectable ? "Подтверждено" : "Не подтверждено"}</span><br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(p.license_status)}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+        ? `<p class="muted">Показано до 100 результатов. Уточните запрос для поиска остальных.</p><div class="table-wrap"><table><thead><tr><th>Название</th><th>Реквизиты</th><th>Проверка и лицензия</th><th>Действия</th></tr></thead><tbody>${items.map((p) => {
+          const pending = p.verification_status !== "verified";
+          const verificationLabel = pending ? "Требует проверки" : "Подтверждено";
+          const verifier = !pending && (p.verifier_name || p.verifier_email)
+            ? `<br><small>${escapeHTML(p.verifier_name || p.verifier_email)}${p.verified_at ? ` · ${new Date(p.verified_at).toLocaleString("ru-RU")}` : ""}</small>`
+            : "";
+          return `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(p.region)}</small></td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td><button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
+        }).join("")}</tbody></table></div>`
         : "<p>Совпадений нет. Администратор должен обновить справочник официальной выгрузкой — произвольный ручной ввод отключён.</p>";
+	  box.querySelectorAll("[data-review-directory]").forEach((button) => {
+	    button.onclick = () => openDirectoryReview(
+	      items.find((item) => item.id === button.dataset.reviewDirectory),
+	      search,
+	    );
+	  });
       box.querySelectorAll("[data-directory]").forEach(
         (b) =>
           (b.onclick = () => {
@@ -726,7 +808,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     .then((stats) => {
       const box = root.querySelector("#directory-stats");
       if (!box) return;
-      box.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${stats.total}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">Вузы / СПО / школы</div><div class="value">${stats.universities} / ${stats.colleges} / ${stats.schools}</div></div></div><p class="muted">Последняя проверка: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "официальная выгрузка ещё не загружена"}. ${stats.sync_status ? `Автообновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автообновление включается переменной DIRECTORY_SYNC_URL."}</p>`;
+      box.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Всего записей</div><div class="value">${stats.total}</div></div><div class="stat warning-stat"><div class="label">Требуют проверки</div><div class="value">${stats.pending || 0}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">Вузы / СПО / школы</div><div class="value">${stats.universities} / ${stats.colleges} / ${stats.schools}</div></div></div><p class="muted">Последнее подтверждение: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "записей пока нет"}. ${stats.sync_status ? `Обогащение/обновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автоматическое обогащение ещё не запускалось."}</p>`;
     })
     .catch((error) => {
       const box = root.querySelector("#directory-stats");

@@ -34,8 +34,8 @@ func normalizeDirectoryValue(column, value string) string {
 	value = strings.TrimSpace(value)
 	mappings := map[string]map[string]string{
 		"partner_kind":       {"Вуз": "vuz", "Колледж": "kolledj", "Школа": "school"},
-		"license_status":     {"Действует": "active", "Приостановлена": "suspended", "Истекла": "expired", "Аннулирована": "revoked"},
-		"institution_status": {"Действует": "active", "Не действует": "inactive", "Реорганизована": "reorganized", "Ликвидирована": "liquidated"},
+		"license_status":     {"Действует": "active", "Приостановлена": "suspended", "Истекла": "expired", "Аннулирована": "revoked", "Не указан": "unknown"},
+		"institution_status": {"Действует": "active", "Не действует": "inactive", "Реорганизована": "reorganized", "Ликвидирована": "liquidated", "Не указан": "unknown"},
 	}
 	for label, normalized := range mappings[column] {
 		if strings.EqualFold(value, label) {
@@ -51,12 +51,19 @@ func freshRegistryDate(date, now time.Time) bool {
 }
 
 func validateDirectoryRows(rows [][]string) ([][]string, []string) {
-	if len(rows) == 0 || len(rows[0]) != len(directoryColumns) {
+	if len(rows) == 0 || (len(rows[0]) != len(directoryColumns) && len(rows[0]) != len(directoryColumns)+1) {
 		return nil, []string{"используйте заголовки из шаблона справочника"}
 	}
+	hasReviewAction := len(rows[0]) == len(directoryColumns)+1
 	for index, column := range directoryColumns {
 		header := strings.TrimSpace(rows[0][index])
 		if header != column.Label && header != column.Key {
+			return nil, []string{"используйте заголовки из шаблона справочника"}
+		}
+	}
+	if hasReviewAction {
+		header := strings.TrimSpace(rows[0][len(directoryColumns)])
+		if header != "Действие" && header != "review_action" {
 			return nil, []string{"используйте заголовки из шаблона справочника"}
 		}
 	}
@@ -70,22 +77,37 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 		if strings.Join(row, "") == "" {
 			continue
 		}
-		if len(row) > len(directoryColumns) {
+		expectedColumns := len(directoryColumns)
+		if hasReviewAction {
+			expectedColumns++
+		}
+		if len(row) > expectedColumns {
 			errors = append(errors, fmt.Sprintf("Строка %d: есть данные за пределами заголовков", i+2))
 			continue
 		}
-		for len(row) < len(directoryColumns) {
+		for len(row) < expectedColumns {
 			row = append(row, "")
 		}
-		for j := range row {
+		for j := range directoryColumns {
 			row[j] = normalizeDirectoryValue(directoryColumns[j].Key, row[j])
 		}
+		if hasReviewAction {
+			action := strings.TrimSpace(row[len(directoryColumns)])
+			if action == "" || strings.EqualFold(action, "Оставить без подтверждения") || strings.EqualFold(action, "skip") {
+				continue
+			}
+			if !strings.EqualFold(action, "Подтвердить") && !strings.EqualFold(action, "confirm") {
+				errors = append(errors, fmt.Sprintf("Строка %d: в столбце «Действие» укажите «Подтвердить» или оставьте пустым", i+2))
+				continue
+			}
+			row = row[:len(directoryColumns)]
+		}
 		date, dateErr := time.Parse("2006-01-02", row[10])
-		licenseOK := row[6] == "active" || row[6] == "suspended" || row[6] == "expired" || row[6] == "revoked"
-		institutionOK := row[7] == "active" || row[7] == "inactive" || row[7] == "reorganized" || row[7] == "liquidated"
+		licenseOK := row[6] == "active" || row[6] == "suspended" || row[6] == "expired" || row[6] == "revoked" || row[6] == "unknown"
+		institutionOK := row[7] == "active" || row[7] == "inactive" || row[7] == "reorganized" || row[7] == "liquidated" || row[7] == "unknown"
 		if len(row) != 11 || len([]rune(row[0])) < 2 || len([]rune(row[0])) > 1000 ||
 			(row[1] != "vuz" && row[1] != "kolledj" && row[1] != "school") || len([]rune(row[2])) < 2 || len([]rune(row[2])) > 200 ||
-			!validINN(row[3]) || !validOGRN(row[4]) || row[5] == "" || len([]rune(row[5])) > 100 || !licenseOK || !institutionOK ||
+			!validINN(row[3]) || !validOGRN(row[4]) || len([]rune(row[5])) > 100 || !licenseOK || !institutionOK ||
 			row[8] == "" || len([]rune(row[8])) > 200 || !officialRegistryURL(row[9]) || dateErr != nil || !freshRegistryDate(date, time.Now()) {
 			errors = append(errors, fmt.Sprintf("Строка %d: проверьте название, тип, регион, ИНН/ОГРН, лицензию, статус, идентификатор, официальную ссылку и дату", i+2))
 			continue
@@ -103,12 +125,26 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 	return valid, errors
 }
 
-func upsertVerifiedDirectoryRows(ctx context.Context, tx *sql.Tx, rows [][]string) error {
+func upsertDirectoryRows(ctx context.Context, tx *sql.Tx, rows [][]string, verificationStatus, userID string, audit bool) error {
 	for _, row := range rows {
+		var id string
+		var oldName, oldKind, oldRegion, oldINN, oldOGRN, oldLicenseNumber, oldLicenseStatus, oldInstitutionStatus string
+		var oldRecordID, oldSourceURL, oldUpdatedAt, oldVerificationStatus string
+		oldErr := tx.QueryRowContext(ctx, `SELECT id::text,name,partner_kind,region,COALESCE(inn,''),COALESCE(ogrn,''),
+			COALESCE(license_number,''),license_status,institution_status,COALESCE(registry_record_id,''),
+			COALESCE(source_url,''),COALESCE(registry_updated_at::text,''),verification_status
+			FROM education_directory WHERE registry_record_id=$1 OR (name=$2 AND partner_kind=$3 AND region=$4)
+			ORDER BY (registry_record_id=$1) DESC LIMIT 1 FOR UPDATE`, row[8], row[0], row[1], row[2]).
+			Scan(&id, &oldName, &oldKind, &oldRegion, &oldINN, &oldOGRN, &oldLicenseNumber,
+				&oldLicenseStatus, &oldInstitutionStatus, &oldRecordID, &oldSourceURL, &oldUpdatedAt, &oldVerificationStatus)
+		if oldErr != nil && oldErr != sql.ErrNoRows {
+			return oldErr
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE education_directory SET name=$1,partner_kind=$2,region=$3,source=$10,
 			inn=$4,ogrn=$5,license_number=$6,license_status=$7,institution_status=$8,source_url=$10,
-			registry_updated_at=$11::date,verified_at=now(),verification_status='verified',updated_at=now()
-			WHERE registry_record_id=$9`, row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10])
+			registry_updated_at=$11::date,verified_at=CASE WHEN $12='verified' THEN now() ELSE NULL END,
+			verified_by=NULLIF($13,'')::uuid,verification_status=$12,updated_at=now()
+			WHERE registry_record_id=$9`, row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], verificationStatus, userID)
 		if err != nil {
 			return err
 		}
@@ -117,18 +153,40 @@ func upsertVerifiedDirectoryRows(ctx context.Context, tx *sql.Tx, rows [][]strin
 			return err
 		}
 		if updated == 0 {
-			_, err = tx.ExecContext(ctx, `INSERT INTO education_directory(
+			err = tx.QueryRowContext(ctx, `INSERT INTO education_directory(
 				name,partner_kind,region,source,inn,ogrn,license_number,license_status,institution_status,
-				registry_record_id,source_url,registry_updated_at,verified_at,verification_status)
-				VALUES($1,$2,$3,$10,$4,$5,$6,$7,$8,$9,$10,$11::date,now(),'verified')
+				registry_record_id,source_url,registry_updated_at,verified_at,verified_by,verification_status)
+				VALUES($1,$2,$3,$10,$4,$5,$6,$7,$8,$9,$10,$11::date,
+				CASE WHEN $12='verified' THEN now() ELSE NULL END,NULLIF($13,'')::uuid,$12)
 				ON CONFLICT(name,partner_kind,region) DO UPDATE SET source=EXCLUDED.source,inn=EXCLUDED.inn,ogrn=EXCLUDED.ogrn,
 				license_number=EXCLUDED.license_number,license_status=EXCLUDED.license_status,institution_status=EXCLUDED.institution_status,
 				registry_record_id=EXCLUDED.registry_record_id,source_url=EXCLUDED.source_url,
-				registry_updated_at=EXCLUDED.registry_updated_at,verified_at=now(),verification_status='verified',updated_at=now()`,
-				row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10])
+				registry_updated_at=EXCLUDED.registry_updated_at,verified_at=EXCLUDED.verified_at,
+				verified_by=EXCLUDED.verified_by,verification_status=EXCLUDED.verification_status,updated_at=now()
+				RETURNING id::text`,
+				row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], verificationStatus, userID).Scan(&id)
 		}
 		if err != nil {
 			return err
+		}
+		if id == "" {
+			if err := tx.QueryRowContext(ctx, `SELECT id::text FROM education_directory WHERE registry_record_id=$1`, row[8]).Scan(&id); err != nil {
+				return err
+			}
+		}
+		if audit {
+			var oldValue interface{}
+			if oldErr == nil {
+				oldValue = directoryAuditValue(oldName, oldKind, oldRegion, oldINN, oldOGRN,
+					oldLicenseNumber, oldLicenseStatus, oldInstitutionStatus, oldRecordID,
+					oldSourceURL, oldUpdatedAt, oldVerificationStatus)
+			}
+			newValue := directoryAuditValue(row[0], row[1], row[2], row[3], row[4], row[5],
+				row[6], row[7], row[8], row[9], row[10], verificationStatus)
+			if err := logAudit(tx, "education_directory", id, "directory_confirm", userID,
+				"Подтверждено через Excel", oldValue, newValue); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -231,7 +289,7 @@ func syncDirectoryOnce(db *sql.DB, sourceURL string) error {
 		return fail(err)
 	}
 	defer tx.Rollback()
-	if err = upsertVerifiedDirectoryRows(ctx, tx, valid); err != nil {
+	if err = upsertDirectoryRows(ctx, tx, valid, "pending", "", false); err != nil {
 		tx.Rollback()
 		return fail(err)
 	}

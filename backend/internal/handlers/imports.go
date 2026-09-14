@@ -54,6 +54,7 @@ func (h *EntryHandlers) ImportTemplate(w http.ResponseWriter, r *http.Request, u
 
 func officeValueLabel(value string) string {
 	return map[string]string{
+		"vuz": "Вуз", "kolledj": "Колледж", "school": "Школа",
 		"rpd": "РПД", "oop": "ООП", "vo": "Высшее образование", "spo": "Среднее профессиональное образование",
 		"development": "Разработка", "update": "Актуализация", "expertise": "Экспертиза",
 		"education_organization": "С образовательной организацией", "roiv": "С РОИВ",
@@ -303,12 +304,42 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 }
 
 func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	if !canReviewEducationDirectory(u) {
+		middleware.WriteError(w, http.StatusForbidden, "нет доступа к справочнику учебных заведений")
+		return
+	}
 	wb := xlsx.New()
 	headers := make([]string, 0, len(directoryColumns))
 	for _, column := range directoryColumns {
 		headers = append(headers, column.Label)
 	}
-	wb.AddSheet("Справочник", headers, nil)
+	headers = append(headers, "Действие")
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT name,partner_kind,region,COALESCE(inn,''),COALESCE(ogrn,''),
+		COALESCE(license_number,''),license_status,institution_status,COALESCE(registry_record_id,''),
+		COALESCE(source_url,''),COALESCE(registry_updated_at::text,'')
+		FROM education_directory ORDER BY name,id LIMIT 10000`)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка выгрузки справочника")
+		return
+	}
+	defer rows.Close()
+	data := [][]interface{}{}
+	for rows.Next() {
+		var values [11]string
+		if err := rows.Scan(&values[0], &values[1], &values[2], &values[3], &values[4], &values[5],
+			&values[6], &values[7], &values[8], &values[9], &values[10]); err != nil {
+			middleware.WriteError(w, 500, "ошибка чтения справочника")
+			return
+		}
+		data = append(data, []interface{}{values[0], officeValue(values[1]), values[2], values[3], values[4], values[5],
+			directoryOfficeValue("license_status", values[6]), directoryOfficeValue("institution_status", values[7]),
+			values[8], values[9], values[10], ""})
+	}
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения справочника")
+		return
+	}
+	wb.AddSheet("Справочник", headers, data)
 	wb.AddSheet("Инструкция", []string{"Название столбца", "Описание"}, [][]interface{}{
 		{"Наименование", "Полное наименование из реестра лицензий"},
 		{"Тип учебного заведения", "Вуз / Колледж / Школа"},
@@ -321,10 +352,27 @@ func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Reque
 		{"Идентификатор записи реестра", "Уникальный идентификатор записи официального реестра"},
 		{"Ссылка на официальный источник", "HTTPS-ссылка на Рособрнадзор или официальный домен *.gov.ru"},
 		{"Дата актуальности сведений", "Дата в формате ГГГГ-ММ-ДД"},
+		{"Действие", "Для изменённых и проверенных строк укажите «Подтвердить». Пустые строки не импортируются"},
 	})
 	writeWorkbook(w, wb, "справочник_учебных_заведений.xlsx")
 }
+
+func directoryOfficeValue(column, value string) string {
+	labels := map[string]map[string]string{
+		"license_status":     {"active": "Действует", "suspended": "Приостановлена", "expired": "Истекла", "revoked": "Аннулирована", "unknown": "Не указан"},
+		"institution_status": {"active": "Действует", "inactive": "Не действует", "reorganized": "Реорганизована", "liquidated": "Ликвидирована", "unknown": "Не указан"},
+	}
+	if label := labels[column][value]; label != "" {
+		return label
+	}
+	return value
+}
+
 func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	if !canReviewEducationDirectory(u) {
+		middleware.WriteError(w, http.StatusForbidden, "нет доступа к проверке учебных заведений")
+		return
+	}
 	_, rows, err := uploadedWorkbook(w, r)
 	if err != nil {
 		middleware.WriteError(w, 400, err.Error())
@@ -339,7 +387,7 @@ func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request
 			return
 		}
 		defer tx.Rollback()
-		if e := upsertVerifiedDirectoryRows(r.Context(), tx, valid); e != nil {
+		if e := upsertDirectoryRows(r.Context(), tx, valid, "verified", u.ID, true); e != nil {
 			middleware.WriteError(w, 500, "импорт отменён: конфликт записи реестра")
 			return
 		}

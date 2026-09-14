@@ -150,5 +150,7 @@ func officialRegistryURL(value string) bool {
 	host := strings.ToLower(parsed.Hostname())
 	// The federal register is the preferred source. Regional licensing
 	// authorities may publish official extracts on government domains.
-	return host == "obrnadzor.gov.ru" || strings.HasSuffix(host, ".obrnadzor.gov.ru") || strings.HasSuffix(host, ".gov.ru")
+	return host == "obrnadzor.gov.ru" || strings.HasSuffix(host, ".obrnadzor.gov.ru") ||
+		host == "nalog.gov.ru" || host == "egrul.nalog.ru" || strings.HasSuffix(host, ".nalog.gov.ru") ||
+		host == "monitoring.miccedu.ru" || strings.HasSuffix(host, ".gov.ru")
 }

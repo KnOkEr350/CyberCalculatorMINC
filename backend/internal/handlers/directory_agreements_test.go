@@ -22,6 +22,9 @@ func TestRussianRegistryIdentifiers(t *testing.T) {
 	if !officialRegistryURL("https://islod.obrnadzor.gov.ru/rlic/details/example/") {
 		t.Fatal("federal registry URL rejected")
 	}
+	if !officialRegistryURL("https://egrul.nalog.ru/index.html") {
+		t.Fatal("official EGRUL URL rejected")
+	}
 	for _, value := range []string{"http://islod.obrnadzor.gov.ru/file.xlsx", "https://obrnadzor.gov.ru.evil.test/file.xlsx", "https://user@obrnadzor.gov.ru/file.xlsx"} {
 		if officialRegistryURL(value) {
 			t.Fatalf("untrusted registry URL accepted: %s", value)
@@ -53,6 +56,45 @@ func TestDirectoryAcceptsRussianOfficeTemplate(t *testing.T) {
 	}
 	if valid[0][1] != "vuz" || valid[0][6] != "active" || valid[0][7] != "active" {
 		t.Fatalf("Russian values were not normalized: %v", valid[0])
+	}
+}
+
+func TestDirectoryWorkbookOnlyConfirmsMarkedRows(t *testing.T) {
+	header := make([]string, 0, len(directoryColumns)+1)
+	for _, column := range directoryColumns {
+		header = append(header, column.Label)
+	}
+	header = append(header, "Действие")
+	base := []string{"Тестовый вуз", "Вуз", "г. Москва", "7707083893", "1027700132195", "", "Не указан", "Действует", "test-record-action", "https://egrul.nalog.ru/index.html", time.Now().Format("2006-01-02")}
+	skipped := append(append([]string{}, base...), "")
+	confirmed := append(append([]string{}, base...), "Подтвердить")
+	confirmed[0] = "Подтверждаемый вуз"
+	confirmed[8] = "test-record-confirm"
+	valid, errors := validateDirectoryRows([][]string{header, skipped, confirmed})
+	if len(errors) != 0 || len(valid) != 1 {
+		t.Fatalf("action column was not respected: valid=%d errors=%v", len(valid), errors)
+	}
+	if valid[0][0] != "Подтверждаемый вуз" || valid[0][6] != "unknown" {
+		t.Fatalf("wrong confirmed row: %#v", valid[0])
+	}
+}
+
+func TestNormalizeDirectoryReview(t *testing.T) {
+	req := directoryWriteRequest{
+		Name: "  Тестовый   вуз ", PartnerKind: "vuz", Region: " г. Москва ",
+		INN: "7707083893", OGRN: "1027700132195", LicenseStatus: "unknown",
+		InstitutionStatus: "active", SourceURL: "https://egrul.nalog.ru/index.html",
+		RegistryUpdatedAt: time.Now().Format("2006-01-02"), Confirm: true,
+	}
+	if err := normalizeDirectoryWrite(&req); err != nil {
+		t.Fatalf("valid confirmation rejected: %v", err)
+	}
+	if req.Name != "Тестовый вуз" || req.Region != "г. Москва" {
+		t.Fatalf("values not normalized: %#v", req)
+	}
+	req.INN = ""
+	if err := normalizeDirectoryWrite(&req); err == nil {
+		t.Fatal("confirmation without INN accepted")
 	}
 }
 
