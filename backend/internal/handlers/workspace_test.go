@@ -36,7 +36,9 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 		user middleware.AuthUser
 		want bool
 	}{
-		{"admin", middleware.AuthUser{Role: models.RoleAdmin}, true},
+		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, true},
+		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, false},
+		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
 		{"moderator", middleware.AuthUser{Role: models.RoleModerator}, true},
 		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, true},
 		{"IT organization", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, false},
@@ -45,6 +47,28 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if got := canReviewEducationDirectory(test.user); got != test.want {
+				t.Fatalf("got %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestITCompanyDirectoryAccess(t *testing.T) {
+	tests := []struct {
+		name string
+		user middleware.AuthUser
+		want bool
+	}{
+		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, true},
+		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, false},
+		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
+		{"moderator", middleware.AuthUser{Role: models.RoleModerator}, true},
+		{"IT organization user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, true},
+		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := canManageITCompanies(test.user); got != test.want {
 				t.Fatalf("got %v, want %v", got, test.want)
 			}
 		})

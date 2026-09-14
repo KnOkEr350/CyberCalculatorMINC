@@ -66,7 +66,7 @@ func normalizeITCompany(req itCompanyWriteRequest) (itCompanyWriteRequest, error
 
 func (h *ITCompanyHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	if !canManageITCompanies(u) {
-		middleware.WriteError(w, http.StatusForbidden, "реестр доступен представителям ИТ-организаций")
+		middleware.WriteError(w, http.StatusForbidden, "реестр ИТ-компаний недоступен для этого профиля")
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -110,7 +110,7 @@ func (h *ITCompanyHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 
 func (h *ITCompanyHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	if !canManageITCompanies(u) {
-		middleware.WriteError(w, http.StatusForbidden, "добавлять ИТ-компании могут представители ИТ-организаций")
+		middleware.WriteError(w, http.StatusForbidden, "добавлять ИТ-компании нельзя из этого профиля")
 		return
 	}
 	var req itCompanyWriteRequest

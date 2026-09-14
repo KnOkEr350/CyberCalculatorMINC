@@ -61,7 +61,7 @@ const VALUE_LABELS = {
   user: "Пользователь",
   moderator: "Модератор",
   admin: "Администратор",
-  organization: "Киберпротект",
+  organization: "ИТ-организация",
   edu_institution: "Образовательная организация",
   entry: "Запись",
   attachment: "Документ",
@@ -288,6 +288,10 @@ function renderLayout() {
   const isModerator = state.me.role === "moderator";
   const isManager = isAdmin || isModerator;
   const isITOrganization = !isManager && state.me.entity_type === "organization";
+  const profileLabel =
+    state.me.entity_type === "organization"
+      ? "ИТ-организация"
+      : "Учебное заведение";
   const allowedViews = new Set(["dashboard", "entries"]);
   if (isManager) allowedViews.add("admin");
   else if (isITOrganization) allowedViews.add("it-companies");
@@ -305,7 +309,7 @@ function renderLayout() {
       </nav>
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
-        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${isITOrganization ? "ИТ-организация" : isStaffUser() ? "Киберпротект" : "Учебное заведение"}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
         <button id="change-password" title="Изменить пароль">Пароль</button>
         ${state.me.mfa_available && !state.me.mfa_enabled ? '<button id="setup-mfa">Защита входа</button>' : ''}
         <button id="logout" title="Выйти из системы">Выйти</button>
@@ -1091,13 +1095,19 @@ async function wireAttachSection(root, entryId) {
 
 async function renderAdmin(root) {
   const isAdmin = state.me.role === "admin";
+  const isModerator = state.me.role === "moderator";
+  const showEducationDirectory =
+    isModerator || state.me.entity_type === "organization";
+  const showITDirectory =
+    isModerator || state.me.entity_type === "edu_institution";
+  const initialDirectoryTab = showEducationDirectory ? "partners" : "it-companies";
   root.innerHTML = `<section class="page-heading">
     <div><span class="eyebrow">Управление системой</span><h1>Административная панель</h1><p>${isAdmin ? "Управляйте справочниками, доступами, системными настройками и историей действий." : "Работайте со справочниками и соглашениями. Системные настройки и управление доступами доступны администратору."}</p></div>
   </section>
   <div class="admin-layout">
     <nav class="admin-nav" aria-label="Разделы административной панели">
-      <button data-t="partners" class="active"><b>Учебные заведения</b><span>Реестр, партнёры и соглашения</span></button>
-      <button data-t="it-companies"><b>ИТ-компании</b><span>Реестр действующих аккредитаций</span></button>
+      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Образовательные организации</b><span>Реестр, партнёры и соглашения</span></button>` : ""}
+      ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b><span>Реестр действующих аккредитаций</span></button>` : ""}
       ${isAdmin ? '<button data-t="users"><b>Пользователи</b><span>Роли и доступ к системе</span></button><button data-t="settings"><b>Настройки</b><span>Сроки хранения данных</span></button><button data-t="logs"><b>Журнал изменений</b><span>История действий пользователей</span></button>' : ""}
     </nav>
     <div id="admin-content"></div>
@@ -1112,7 +1122,7 @@ async function renderAdmin(root) {
       renderAdminTab(box, b.dataset.t);
     };
   });
-  renderAdminTab(box, "partners");
+  renderAdminTab(box, initialDirectoryTab);
 }
 
 async function renderAdminTab(box, tab) {
@@ -1163,9 +1173,6 @@ async function renderAdminUsers(box) {
   const entitySelect = box.querySelector("#u-entity");
   const roleSelect = box.querySelector("#u-role");
   const syncUserType = () => {
-    const elevated = ["admin", "moderator"].includes(roleSelect.value);
-    if (elevated) entitySelect.value = "organization";
-    entitySelect.disabled = elevated;
     box.querySelector("#u-partner-field").style.display =
       entitySelect.value === "edu_institution" ? "block" : "none";
     if (entitySelect.value !== "edu_institution")

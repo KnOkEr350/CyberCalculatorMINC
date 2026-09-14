@@ -36,10 +36,6 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.Role == "admin" || req.Role == "moderator" {
-		req.EntityType = "organization"
-		req.PartnerID = nil
-	}
 	if req.EntityType == "" || (req.EntityType == "edu_institution" && req.PartnerID == nil) {
 		middleware.WriteError(w, 400, "назначьте тип профиля и учебное заведение для представителя ОО")
 		return
@@ -175,9 +171,6 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 	}
 	if req.PartnerID != nil {
 		partner = *req.PartnerID
-	}
-	if role == "admin" || role == "moderator" {
-		entity = "organization"
 	}
 	if entity != "edu_institution" {
 		partner = ""

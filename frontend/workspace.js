@@ -4,7 +4,10 @@ function isStaffUser() {
 }
 
 function canReviewEducationDirectory() {
-  return state.me?.role === "admin" || state.me?.role === "moderator" || state.me?.entity_type === "edu_institution";
+  if (state.me?.role === "moderator") return true;
+  if (state.me?.role === "admin")
+    return state.me?.entity_type === "organization";
+  return state.me?.entity_type === "edu_institution";
 }
 
 function agreementIsUsable(agreement, year = state.year) {
@@ -164,9 +167,6 @@ function openUserProfile(user, refresh) {
   form.elements.entity.value = user.entity_type || "edu_institution";
   form.elements.partner.value = user.partner_id || "";
   const sync = () => {
-    if (["admin", "moderator"].includes(form.elements.role.value))
-      form.elements.entity.value = "organization";
-    form.elements.entity.disabled = ["admin", "moderator"].includes(form.elements.role.value);
     form.elements.partner.disabled =
       form.elements.entity.value !== "edu_institution";
   };

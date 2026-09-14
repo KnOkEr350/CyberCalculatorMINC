@@ -58,6 +58,9 @@ func main() {
 	if err := ensureBootstrapAdmin(db, cfg); err != nil {
 		log.Fatalf("ошибка создания admin-пользователя по умолчанию: %v", err)
 	}
+	if err := ensureInitialITCompanies(db); err != nil {
+		log.Fatalf("ошибка заполнения реестра ИТ-компаний: %v", err)
+	}
 	if migrationMode {
 		if err := dbx.ProvisionRuntime(db, os.Getenv("RUNTIME_DB_USER"), os.Getenv("RUNTIME_DB_PASSWORD")); err != nil {
 			log.Fatal(err)
@@ -135,15 +138,17 @@ func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 		return err
 	}
 	if count > 0 {
-		return nil
+		_, err := db.Exec(`UPDATE users SET entity_type='organization',updated_at=now()
+			WHERE role='admin' AND entity_type IS NULL`)
+		return err
 	}
 	hash, err := auth.HashPassword(cfg.AdminBootPassword)
 	if err != nil {
 		return err
 	}
 	result, err := db.Exec(
-		`INSERT INTO users (email, password_hash, full_name, role)
-		 VALUES ($1,$2,$3,'admin')
+		`INSERT INTO users (email, password_hash, full_name, role, entity_type)
+		 VALUES ($1,$2,$3,'admin','organization')
 		 ON CONFLICT (email) DO NOTHING`,
 		cfg.AdminBootEmail, hash, "Администратор",
 	)
@@ -154,6 +159,27 @@ func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 		log.Printf("создан администратор по умолчанию: %s (смените пароль после первого входа!)", cfg.AdminBootEmail)
 	}
 	return nil
+}
+
+// The public Gosuslugi page supports point checks rather than a downloadable
+// full registry. Keep a small verified initial directory so a fresh install is
+// useful immediately; further records are added from the same official check.
+func ensureInitialITCompanies(db *sql.DB) error {
+	_, err := db.Exec(`WITH creator AS (
+		SELECT id FROM users WHERE role='admin' ORDER BY created_at,id LIMIT 1
+	), seed(name,inn,ogrn,accreditation_number,registry_record_id) AS (VALUES
+		('Общество с ограниченной ответственностью «Киберпротект»','9715274292','1167746884348','','9715274292'),
+		('Общество с ограниченной ответственностью «Алнисофт»','7704784467','1117746460480','12988','7704784467'),
+		('Общество с ограниченной ответственностью «ДевелопментАксесс»','7840038958','1157847304757','5430','7840038958')
+	)
+	INSERT INTO accredited_it_companies(name,inn,ogrn,accreditation_number,
+		registry_record_id,registry_updated_at,source_url,notes,created_by)
+	SELECT seed.name,seed.inn,seed.ogrn,seed.accreditation_number,
+		seed.registry_record_id,DATE '2026-09-14','https://www.gosuslugi.ru/itorgs',
+		'Начальная запись реестра; перед юридически значимым действием проверьте актуальный статус на Госуслугах',creator.id
+	FROM seed CROSS JOIN creator
+	ON CONFLICT DO NOTHING`)
+	return err
 }
 
 func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {

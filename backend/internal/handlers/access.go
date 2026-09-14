@@ -14,15 +14,28 @@ func isStaff(u middleware.AuthUser) bool {
 }
 
 func canManageITCompanies(u middleware.AuthUser) bool {
-	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityOrganization
+	if u.Role == models.RoleModerator {
+		return true
+	}
+	if u.Role == models.RoleAdmin {
+		return u.EntityType == models.EntityEduInst
+	}
+	return u.EntityType == models.EntityOrganization
 }
 
-// canReviewEducationDirectory mirrors the UI visibility rule: administrators,
-// moderators and educational-organization users can inspect and confirm
-// educational registry data. IT-organization users have the IT-company tab
-// instead and cannot mutate this directory through a direct API request.
+// Administrators work with the counterparty directory: an IT-organization
+// administrator reviews educational organizations, while an educational-
+// organization administrator reviews accredited IT companies. Moderators keep
+// access to both directories for operational support. The user-role branches
+// preserve the existing non-administrative workspaces.
 func canReviewEducationDirectory(u middleware.AuthUser) bool {
-	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityEduInst
+	if u.Role == models.RoleModerator {
+		return true
+	}
+	if u.Role == models.RoleAdmin {
+		return u.EntityType == models.EntityOrganization
+	}
+	return u.EntityType == models.EntityEduInst
 }
 func canAccessPartner(u middleware.AuthUser, id string) bool {
 	return isStaff(u) || (u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID == id && id != "")
