@@ -95,6 +95,16 @@ func main() {
 	defer close(stop)
 	go retention.Run(db, 1*time.Hour, stop, cfg.UploadDir)
 	go handlers.RunDirectorySync(db, cfg.DirectorySyncURL, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
+	if cfg.DirectoryEnrichOnStart {
+		go func() {
+			result, enrichErr := handlers.EnrichEducationDirectory(context.Background(), db, cfg.DirectoryEnrichLimit, time.Duration(cfg.DirectoryEnrichDelayMS)*time.Millisecond)
+			if enrichErr != nil {
+				log.Printf("автозаполнение ИНН/ОГРН остановлено после %d записей: %v", result.Processed, enrichErr)
+				return
+			}
+			log.Printf("автозаполнение ИНН/ОГРН завершено: обработано %d, найдено %d, без результата %d", result.Processed, result.Matched, result.Unmatched)
+		}()
+	}
 
 	mux := buildRoutes(db, cfg)
 

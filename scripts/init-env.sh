@@ -21,5 +21,8 @@ command -v openssl >/dev/null
   echo 'CLAMAV_ADDRESS='
   echo 'SESSION_TTL_HOURS=12'
   echo 'UPLOAD_QUOTA_BYTES=1073741824'
+  echo 'DIRECTORY_ENRICH_ON_START=true'
+  echo 'DIRECTORY_ENRICH_LIMIT=0'
+  echo 'DIRECTORY_ENRICH_DELAY_MS=3000'
 } > .env
 echo '.env created with unique credentials and owner-only permissions. Read the bootstrap password locally from .env; do not commit it.'

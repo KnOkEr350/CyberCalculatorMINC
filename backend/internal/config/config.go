@@ -20,19 +20,22 @@ type Config struct {
 	DBName     string
 	DBSSLMode  string
 
-	HTTPAddr           string
-	UploadDir          string
-	SessionTTLh        int
-	AdminBootEmail     string
-	AdminBootPassword  string
-	PublicURL          string
-	Environment        string
-	CookieSecure       bool
-	ScannerAddress     string
-	UploadQuotaBytes   int64
-	MFAKey             string
-	DirectorySyncURL   string
-	DirectorySyncHours int
+	HTTPAddr               string
+	UploadDir              string
+	SessionTTLh            int
+	AdminBootEmail         string
+	AdminBootPassword      string
+	PublicURL              string
+	Environment            string
+	CookieSecure           bool
+	ScannerAddress         string
+	UploadQuotaBytes       int64
+	MFAKey                 string
+	DirectorySyncURL       string
+	DirectorySyncHours     int
+	DirectoryEnrichOnStart bool
+	DirectoryEnrichLimit   int
+	DirectoryEnrichDelayMS int
 }
 
 func getenv(key, def string) string {
@@ -72,6 +75,15 @@ func Load() Config {
 	if raw := os.Getenv("DIRECTORY_SYNC_INTERVAL_HOURS"); raw != "" {
 		c.DirectorySyncHours, _ = strconv.Atoi(raw)
 	}
+	c.DirectoryEnrichOnStart = !strings.EqualFold(strings.TrimSpace(getenv("DIRECTORY_ENRICH_ON_START", "true")), "false")
+	c.DirectoryEnrichLimit = 0
+	if raw := os.Getenv("DIRECTORY_ENRICH_LIMIT"); raw != "" {
+		c.DirectoryEnrichLimit, _ = strconv.Atoi(raw)
+	}
+	c.DirectoryEnrichDelayMS = 3000
+	if raw := os.Getenv("DIRECTORY_ENRICH_DELAY_MS"); raw != "" {
+		c.DirectoryEnrichDelayMS, _ = strconv.Atoi(raw)
+	}
 	c.UploadQuotaBytes = 1 << 30
 	if raw := os.Getenv("UPLOAD_QUOTA_BYTES"); raw != "" {
 		c.UploadQuotaBytes, _ = strconv.ParseInt(raw, 10, 64)
@@ -100,6 +112,12 @@ func (c Config) Validate() error {
 	}
 	if c.DirectorySyncHours < 1 || c.DirectorySyncHours > 168 {
 		return fmt.Errorf("DIRECTORY_SYNC_INTERVAL_HOURS должен быть от 1 до 168")
+	}
+	if c.DirectoryEnrichLimit < 0 {
+		return fmt.Errorf("DIRECTORY_ENRICH_LIMIT должен быть неотрицательным числом")
+	}
+	if c.DirectoryEnrichDelayMS < 0 || c.DirectoryEnrichDelayMS > 60000 {
+		return fmt.Errorf("DIRECTORY_ENRICH_DELAY_MS должен быть от 0 до 60000")
 	}
 	if c.DirectorySyncURL != "" {
 		u, err := url.Parse(c.DirectorySyncURL)

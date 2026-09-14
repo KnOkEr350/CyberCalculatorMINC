@@ -6,5 +6,5 @@ set -Eeuo pipefail
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-cybercalculatorminc}" \
   docker compose run --rm \
     -e "DIRECTORY_ENRICH_LIMIT=${DIRECTORY_ENRICH_LIMIT:-0}" \
-    -e "DIRECTORY_ENRICH_DELAY_MS=${DIRECTORY_ENRICH_DELAY_MS:-500}" \
+    -e "DIRECTORY_ENRICH_DELAY_MS=${DIRECTORY_ENRICH_DELAY_MS:-3000}" \
     backend enrich-directory
