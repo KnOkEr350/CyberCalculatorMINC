@@ -313,10 +313,10 @@ func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Reque
 	for _, column := range directoryColumns {
 		headers = append(headers, column.Label)
 	}
-	headers = append(headers, "Действие")
+	headers = append(headers, "Коды направлений", "Источник направлений", "Действие")
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT name,partner_kind,region,COALESCE(inn,''),COALESCE(ogrn,''),
 		COALESCE(license_number,''),license_status,institution_status,COALESCE(registry_record_id,''),
-		COALESCE(source_url,''),COALESCE(registry_updated_at::text,'')
+		COALESCE(source_url,''),COALESCE(registry_updated_at::text,''),array_to_string(program_codes,','),programs_source_url
 		FROM education_directory ORDER BY name,id LIMIT 10000`)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка выгрузки справочника")
@@ -325,15 +325,15 @@ func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Reque
 	defer rows.Close()
 	data := [][]interface{}{}
 	for rows.Next() {
-		var values [11]string
+		var values [13]string
 		if err := rows.Scan(&values[0], &values[1], &values[2], &values[3], &values[4], &values[5],
-			&values[6], &values[7], &values[8], &values[9], &values[10]); err != nil {
+			&values[6], &values[7], &values[8], &values[9], &values[10], &values[11], &values[12]); err != nil {
 			middleware.WriteError(w, 500, "ошибка чтения справочника")
 			return
 		}
 		data = append(data, []interface{}{values[0], officeValue(values[1]), values[2], values[3], values[4], values[5],
 			directoryOfficeValue("license_status", values[6]), directoryOfficeValue("institution_status", values[7]),
-			values[8], values[9], values[10], ""})
+			values[8], values[9], values[10], values[11], values[12], ""})
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения справочника")
@@ -352,6 +352,8 @@ func (h *PartnerHandlers) DirectoryTemplate(w http.ResponseWriter, r *http.Reque
 		{"Идентификатор записи реестра", "Уникальный идентификатор записи официального реестра"},
 		{"Ссылка на официальный источник", "HTTPS-ссылка на Рособрнадзор или официальный домен *.gov.ru"},
 		{"Дата актуальности сведений", "Дата в формате ГГГГ-ММ-ДД"},
+		{"Коды направлений", "Точные коды через запятую, например 09.03.01,38.03.05. Вузы показываются при совпадении хотя бы одного кода с приказом № 27"},
+		{"Источник направлений", "HTTPS-ссылка на сведения об образовательных программах вуза или реестра"},
 		{"Действие", "Для изменённых и проверенных строк укажите «Подтвердить». Пустые строки не импортируются"},
 	})
 	writeWorkbook(w, wb, "справочник_учебных_заведений.xlsx")

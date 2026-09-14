@@ -9,21 +9,24 @@ import (
 	"unicode/utf8"
 
 	"cybercalc/internal/middleware"
+	"github.com/lib/pq"
 )
 
 type directoryWriteRequest struct {
-	Name                string `json:"name"`
-	PartnerKind         string `json:"partner_kind"`
-	Region              string `json:"region"`
-	INN                 string `json:"inn"`
-	OGRN                string `json:"ogrn"`
-	LicenseNumber       string `json:"license_number"`
-	LicenseStatus       string `json:"license_status"`
-	InstitutionStatus   string `json:"institution_status"`
-	SourceURL           string `json:"source_url"`
-	RegistryUpdatedAt   string `json:"registry_updated_at"`
-	Confirm             bool   `json:"confirm"`
-	ConfirmationComment string `json:"confirmation_comment"`
+	Name                string    `json:"name"`
+	PartnerKind         string    `json:"partner_kind"`
+	Region              string    `json:"region"`
+	INN                 string    `json:"inn"`
+	OGRN                string    `json:"ogrn"`
+	LicenseNumber       string    `json:"license_number"`
+	LicenseStatus       string    `json:"license_status"`
+	InstitutionStatus   string    `json:"institution_status"`
+	SourceURL           string    `json:"source_url"`
+	RegistryUpdatedAt   string    `json:"registry_updated_at"`
+	Confirm             bool      `json:"confirm"`
+	ConfirmationComment string    `json:"confirmation_comment"`
+	ProgramCodes        *[]string `json:"program_codes"`
+	ProgramsSourceURL   string    `json:"programs_source_url"`
 }
 
 func normalizeDirectoryWrite(req *directoryWriteRequest) error {
@@ -38,6 +41,17 @@ func normalizeDirectoryWrite(req *directoryWriteRequest) error {
 	req.SourceURL = strings.TrimSpace(req.SourceURL)
 	req.RegistryUpdatedAt = strings.TrimSpace(req.RegistryUpdatedAt)
 	req.ConfirmationComment = strings.TrimSpace(req.ConfirmationComment)
+	if req.ProgramCodes != nil {
+		codes, err := normalizeProgramCodes(*req.ProgramCodes)
+		if err != nil {
+			return err
+		}
+		req.ProgramCodes = &codes
+		req.ProgramsSourceURL = strings.TrimSpace(req.ProgramsSourceURL)
+		if len(codes) > 0 && !publicProgramURL(req.ProgramsSourceURL) {
+			return fmt.Errorf("укажите HTTPS-ссылку на страницу образовательных программ вуза или реестра")
+		}
+	}
 
 	if utf8.RuneCountInString(req.Name) < 2 || utf8.RuneCountInString(req.Name) > 1000 {
 		return fmt.Errorf("наименование должно содержать от 2 до 1000 символов")
@@ -154,6 +168,13 @@ func (h *PartnerHandlers) UpdateDirectory(w http.ResponseWriter, r *http.Request
 	}
 	oldValue := directoryAuditValue(name, kind, region, inn, ogrn, licenseNumber, licenseStatus,
 		institutionStatus, recordID, sourceURL, updatedAt, verificationStatus)
+	var oldCodes pq.StringArray
+	var oldProgramsSource string
+	if err = tx.QueryRowContext(r.Context(), `SELECT program_codes,programs_source_url FROM education_directory WHERE id::text=$1`, id).Scan(&oldCodes, &oldProgramsSource); err != nil {
+		middleware.WriteError(w, 500, "ошибка чтения направлений")
+		return
+	}
+	oldValue["program_codes"], oldValue["programs_source_url"] = strings.Join(oldCodes, ","), oldProgramsSource
 
 	status := "pending"
 	var verifier interface{}
@@ -173,6 +194,12 @@ func (h *PartnerHandlers) UpdateDirectory(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, http.StatusConflict, "не удалось сохранить: проверьте уникальность записи")
 		return
 	}
+	if req.ProgramCodes != nil {
+		if _, err = tx.ExecContext(r.Context(), `UPDATE education_directory SET program_codes=$2,programs_source_url=$3,programs_checked_at=now() WHERE id::text=$1`, id, pq.Array(*req.ProgramCodes), req.ProgramsSourceURL); err != nil {
+			middleware.WriteError(w, 500, "не удалось сохранить направления")
+			return
+		}
+	}
 	if _, err = tx.ExecContext(r.Context(), `UPDATE partners SET name=$1,partner_kind=$2 WHERE directory_id::text=$3`, req.Name, req.PartnerKind, id); err != nil {
 		middleware.WriteError(w, 500, "не удалось обновить связанного партнёра")
 		return
@@ -180,6 +207,10 @@ func (h *PartnerHandlers) UpdateDirectory(w http.ResponseWriter, r *http.Request
 	newValue := directoryAuditValue(req.Name, req.PartnerKind, req.Region, req.INN, req.OGRN,
 		req.LicenseNumber, req.LicenseStatus, req.InstitutionStatus, recordID, req.SourceURL,
 		req.RegistryUpdatedAt, status)
+	newValue["program_codes"], newValue["programs_source_url"] = strings.Join(oldCodes, ","), oldProgramsSource
+	if req.ProgramCodes != nil {
+		newValue["program_codes"], newValue["programs_source_url"] = strings.Join(*req.ProgramCodes, ","), req.ProgramsSourceURL
+	}
 	action := "directory_update"
 	comment := "Реквизиты изменены; требуется подтверждение"
 	if req.Confirm {

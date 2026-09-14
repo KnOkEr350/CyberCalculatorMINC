@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/lib/pq"
 )
 
 func (h *EntryHandlers) validateMentor(r *http.Request, category, partner string, payload map[string]interface{}) error {
@@ -134,6 +136,9 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		return
 	}
 	verifiedOnly := q.Get("verified_only")
+	// The review queue remains reachable explicitly; normal lists contain only
+	// universities with at least one exact program code from Order 27.
+	reviewAll := q.Get("review_all") == "1"
 	if verifiedOnly != "" && verifiedOnly != "0" && verifiedOnly != "1" {
 		middleware.WriteError(w, 400, "verified_only должен быть 0 или 1")
 		return
@@ -142,16 +147,20 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		COALESCE(d.inn,''),COALESCE(d.ogrn,''),COALESCE(d.license_number,''),d.license_status,d.institution_status,
 		COALESCE(d.registry_record_id,''),COALESCE(d.source_url,''),COALESCE(d.registry_updated_at::text,''),
 		COALESCE(d.verified_at::text,''),d.verification_status,COALESCE(d.verified_by::text,''),
-		COALESCE(verifier.full_name,''),COALESCE(verifier.email,''),
+		COALESCE(verifier.full_name,''),COALESCE(verifier.email,''),d.program_codes,d.programs_source_url,
+		education_matches_order(d.partner_kind,d.program_codes),
 		(d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
+		 AND education_matches_order(d.partner_kind,d.program_codes)
 		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE)
 		FROM education_directory d LEFT JOIN users verifier ON verifier.id=d.verified_by
 		WHERE ($1='' OR d.partner_kind=$1)
+		AND ($4 OR education_matches_order(d.partner_kind,d.program_codes))
 		AND ($2='' OR d.name ILIKE '%'||$2||'%' OR d.region ILIKE '%'||$2||'%' OR d.inn=$2 OR d.ogrn=$2 OR d.license_number ILIKE '%'||$2||'%')
 		AND ($3<>'1' OR (d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
+		 AND education_matches_order(d.partner_kind,d.program_codes)
 		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE))
 		ORDER BY (d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
-		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE) DESC,d.name LIMIT 100`, q.Get("partner_kind"), strings.TrimSpace(q.Get("q")), verifiedOnly)
+		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE) DESC,d.name LIMIT 100`, q.Get("partner_kind"), strings.TrimSpace(q.Get("q")), verifiedOnly, reviewAll)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка справочника")
 		return
@@ -162,10 +171,13 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		var id, name, kind, region, source, inn, ogrn, licenseNumber, licenseStatus, institutionStatus string
 		var recordID, sourceURL, registryUpdatedAt, verifiedAt, verificationStatus string
 		var verifiedBy, verifierName, verifierEmail string
+		var programCodes pq.StringArray
+		var programsSource string
+		var matchesOrder bool
 		var selectable bool
 		if rows.Scan(&id, &name, &kind, &region, &source, &inn, &ogrn, &licenseNumber, &licenseStatus,
 			&institutionStatus, &recordID, &sourceURL, &registryUpdatedAt, &verifiedAt, &verificationStatus,
-			&verifiedBy, &verifierName, &verifierEmail, &selectable) != nil {
+			&verifiedBy, &verifierName, &verifierEmail, &programCodes, &programsSource, &matchesOrder, &selectable) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
@@ -175,7 +187,8 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 			"institution_status": institutionStatus, "registry_record_id": recordID, "source_url": sourceURL,
 			"registry_updated_at": registryUpdatedAt, "verified_at": verifiedAt, "verification_status": verificationStatus,
 			"verified_by": verifiedBy, "verifier_name": verifierName, "verifier_email": verifierEmail,
-			"selectable": selectable,
+			"selectable":    selectable,
+			"program_codes": programCodes, "programs_source_url": programsSource, "matches_order": matchesOrder,
 		})
 	}
 	if rows.Err() != nil {
@@ -198,7 +211,7 @@ func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request,
 		count(*) FILTER(WHERE partner_kind='vuz' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days' AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE),
 		count(*) FILTER(WHERE partner_kind='kolledj' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days' AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE),
 		count(*) FILTER(WHERE partner_kind='school' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days' AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE),
-		max(verified_at) FROM education_directory`).Scan(&total, &verified, &pending, &universities, &colleges, &schools, &lastVerified)
+		max(verified_at) FROM education_directory WHERE education_matches_order(partner_kind,program_codes)`).Scan(&total, &verified, &pending, &universities, &colleges, &schools, &lastVerified)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка статистики справочника")
 		return

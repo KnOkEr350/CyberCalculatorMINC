@@ -116,6 +116,21 @@ func TestWorkspaceIntegration(t *testing.T) {
 			"activity_codes":     []string{"teachers", "ood_rpd", "internship", "top_it"},
 		}
 	}
+	// Verified licences alone are insufficient; an exact program is required.
+	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory1, "initial_agreement": agreement("NO-PROGRAM-" + stamp)}, 409)
+	if _, e := db.Exec(`UPDATE education_directory SET program_codes=ARRAY['09.03.01'],programs_source_url='https://university.example/sveden/education/' WHERE id IN ($1,$2)`, directory1, directory2); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := db.Exec(`UPDATE education_directory SET program_codes=ARRAY['38.03.01'] WHERE id=$1`, staleDirectory); e != nil {
+		t.Fatal(e)
+	}
+	programFiltered := call(admin, "GET", "/directory?partner_kind=vuz&q="+stamp, nil, 200)
+	if bytes.Contains(programFiltered, []byte(staleDirectory)) || !bytes.Contains(programFiltered, []byte(directory1)) {
+		t.Fatal("directory does not filter exact program codes")
+	}
+	if all := call(admin, "GET", "/directory?review_all=1&partner_kind=vuz&q="+stamp, nil, 200); !bytes.Contains(all, []byte(staleDirectory)) {
+		t.Fatal("review queue lost excluded university")
+	}
 	created1 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory1, "initial_agreement": agreement("A-" + stamp)}, 201))
 	created2 := object(call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("B-" + stamp)}, 201))
 	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": staleDirectory, "initial_agreement": agreement("STALE-" + stamp)}, 409)
@@ -396,7 +411,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if string(bytes.TrimSpace(filtered)) != "[]" {
 		t.Fatal("directory type filter failed")
 	}
-	upload(partnerClient, "/admin/directory-import?commit=1", map[string][]byte{"directory.xlsx": directoryData}, 403)
+	// Education users retain review access (canReviewEducationDirectory).
+	upload(partnerClient, "/admin/directory-import?commit=1", map[string][]byte{"directory.xlsx": directoryData}, 200)
 	// MFA enrolment revokes old sessions; recovery codes are single-use.
 	setup := object(call(admin, "POST", "/auth/mfa/enroll", map[string]string{"password": password}, 200))
 	code, err := auth.TOTP(setup["secret"].(string), time.Now().Unix()/30)

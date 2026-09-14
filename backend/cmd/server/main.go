@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -58,13 +59,32 @@ func main() {
 	if err := ensureBootstrapAdmin(db, cfg); err != nil {
 		log.Fatalf("ошибка создания admin-пользователя по умолчанию: %v", err)
 	}
-	if err := ensureInitialITCompanies(db); err != nil {
-		log.Fatalf("ошибка заполнения реестра ИТ-компаний: %v", err)
-	}
 	if migrationMode {
 		if err := dbx.ProvisionRuntime(db, os.Getenv("RUNTIME_DB_USER"), os.Getenv("RUNTIME_DB_PASSWORD")); err != nil {
 			log.Fatal(err)
 		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "sync-it-companies" {
+		data, readErr := io.ReadAll(io.LimitReader(os.Stdin, (32<<20)+1))
+		if readErr != nil {
+			log.Fatal(readErr)
+		}
+		count, importErr := handlers.ImportITCompanies(context.Background(), db, data, "")
+		if importErr != nil {
+			log.Fatal(importErr)
+		}
+		log.Printf("реестр ИТ-компаний: загружено %d записей", count)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "enrich-programs" {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		result, err := handlers.EnrichDirectoryPrograms(ctx, db, cfg.DirectoryEnrichLimit)
+		if err != nil {
+			log.Fatalf("направления: обработано %d: %v", result.Processed, err)
+		}
+		log.Printf("направления: обработано %d, получены коды %d, без данных %d", result.Processed, result.Matched, result.Unmatched)
 		return
 	}
 	if enrichmentMode {
@@ -161,27 +181,6 @@ func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 	return nil
 }
 
-// The public Gosuslugi page supports point checks rather than a downloadable
-// full registry. Keep a small verified initial directory so a fresh install is
-// useful immediately; further records are added from the same official check.
-func ensureInitialITCompanies(db *sql.DB) error {
-	_, err := db.Exec(`WITH creator AS (
-		SELECT id FROM users WHERE role='admin' ORDER BY created_at,id LIMIT 1
-	), seed(name,inn,ogrn,accreditation_number,registry_record_id) AS (VALUES
-		('Общество с ограниченной ответственностью «Киберпротект»','9715274292','1167746884348','','9715274292'),
-		('Общество с ограниченной ответственностью «Алнисофт»','7704784467','1117746460480','12988','7704784467'),
-		('Общество с ограниченной ответственностью «ДевелопментАксесс»','7840038958','1157847304757','5430','7840038958')
-	)
-	INSERT INTO accredited_it_companies(name,inn,ogrn,accreditation_number,
-		registry_record_id,registry_updated_at,source_url,notes,created_by)
-	SELECT seed.name,seed.inn,seed.ogrn,seed.accreditation_number,
-		seed.registry_record_id,DATE '2026-09-14','https://www.gosuslugi.ru/itorgs',
-		'Начальная запись реестра; перед юридически значимым действием проверьте актуальный статус на Госуслугах',creator.id
-	FROM seed CROSS JOIN creator
-	ON CONFLICT DO NOTHING`)
-	return err
-}
-
 func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 
@@ -220,6 +219,8 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/partners", middleware.RequireAuth(db, partnerH.Create))
 	mux.HandleFunc("GET /api/it-companies", middleware.RequireAuth(db, itCompanyH.List))
 	mux.HandleFunc("POST /api/it-companies", middleware.RequireAuth(db, itCompanyH.Create))
+	mux.HandleFunc("GET /api/it-companies/template", middleware.RequireAuth(db, itCompanyH.Template))
+	mux.HandleFunc("POST /api/it-companies/import", middleware.RequireAuth(db, itCompanyH.Import))
 	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
 	mux.HandleFunc("GET /api/directory/stats", middleware.RequireAuth(db, partnerH.DirectoryStats))
 	mux.HandleFunc("PUT /api/directory/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {

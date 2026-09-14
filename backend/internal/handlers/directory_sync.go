@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cybercalc/internal/xlsx"
+	"github.com/lib/pq"
 )
 
 var directoryColumns = []struct {
@@ -51,10 +52,19 @@ func freshRegistryDate(date, now time.Time) bool {
 }
 
 func validateDirectoryRows(rows [][]string) ([][]string, []string) {
-	if len(rows) == 0 || (len(rows[0]) != len(directoryColumns) && len(rows[0]) != len(directoryColumns)+1) {
+	if len(rows) == 0 || len(rows[0]) < len(directoryColumns) || len(rows[0]) > len(directoryColumns)+3 {
 		return nil, []string{"используйте заголовки из шаблона справочника"}
 	}
-	hasReviewAction := len(rows[0]) == len(directoryColumns)+1
+	hasPrograms := len(rows[0]) >= len(directoryColumns)+2
+	dataColumns := len(directoryColumns)
+	if hasPrograms {
+		dataColumns += 2
+		if (strings.TrimSpace(rows[0][11]) != "program_codes" && strings.TrimSpace(rows[0][11]) != "Коды направлений") ||
+			(strings.TrimSpace(rows[0][12]) != "programs_source_url" && strings.TrimSpace(rows[0][12]) != "Источник направлений") {
+			return nil, []string{"используйте заголовки из шаблона справочника"}
+		}
+	}
+	hasReviewAction := len(rows[0]) == dataColumns+1
 	for index, column := range directoryColumns {
 		header := strings.TrimSpace(rows[0][index])
 		if header != column.Label && header != column.Key {
@@ -62,7 +72,7 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 		}
 	}
 	if hasReviewAction {
-		header := strings.TrimSpace(rows[0][len(directoryColumns)])
+		header := strings.TrimSpace(rows[0][dataColumns])
 		if header != "Действие" && header != "review_action" {
 			return nil, []string{"используйте заголовки из шаблона справочника"}
 		}
@@ -77,7 +87,7 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 		if strings.Join(row, "") == "" {
 			continue
 		}
-		expectedColumns := len(directoryColumns)
+		expectedColumns := dataColumns
 		if hasReviewAction {
 			expectedColumns++
 		}
@@ -92,7 +102,7 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 			row[j] = normalizeDirectoryValue(directoryColumns[j].Key, row[j])
 		}
 		if hasReviewAction {
-			action := strings.TrimSpace(row[len(directoryColumns)])
+			action := strings.TrimSpace(row[dataColumns])
 			if action == "" || strings.EqualFold(action, "Оставить без подтверждения") || strings.EqualFold(action, "skip") {
 				continue
 			}
@@ -100,12 +110,21 @@ func validateDirectoryRows(rows [][]string) ([][]string, []string) {
 				errors = append(errors, fmt.Sprintf("Строка %d: в столбце «Действие» укажите «Подтвердить» или оставьте пустым", i+2))
 				continue
 			}
-			row = row[:len(directoryColumns)]
+			row = row[:dataColumns]
+		}
+		if hasPrograms {
+			codes, err := normalizeProgramCodes(strings.FieldsFunc(row[11], func(r rune) bool { return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\r' }))
+			row[12] = strings.TrimSpace(row[12])
+			if err != nil || (len(codes) > 0 && !publicProgramURL(row[12])) {
+				errors = append(errors, fmt.Sprintf("Строка %d: проверьте точные коды направлений и HTTPS-ссылку на образовательные программы", i+2))
+				continue
+			}
+			row[11] = strings.Join(codes, ",")
 		}
 		date, dateErr := time.Parse("2006-01-02", row[10])
 		licenseOK := row[6] == "active" || row[6] == "suspended" || row[6] == "expired" || row[6] == "revoked" || row[6] == "unknown"
 		institutionOK := row[7] == "active" || row[7] == "inactive" || row[7] == "reorganized" || row[7] == "liquidated" || row[7] == "unknown"
-		if len(row) != 11 || len([]rune(row[0])) < 2 || len([]rune(row[0])) > 1000 ||
+		if len(row) != dataColumns || len([]rune(row[0])) < 2 || len([]rune(row[0])) > 1000 ||
 			(row[1] != "vuz" && row[1] != "kolledj" && row[1] != "school") || len([]rune(row[2])) < 2 || len([]rune(row[2])) > 200 ||
 			!validINN(row[3]) || !validOGRN(row[4]) || len([]rune(row[5])) > 100 || !licenseOK || !institutionOK ||
 			row[8] == "" || len([]rune(row[8])) > 200 || !officialRegistryURL(row[9]) || dateErr != nil || !freshRegistryDate(date, time.Now()) {
@@ -130,13 +149,15 @@ func upsertDirectoryRows(ctx context.Context, tx *sql.Tx, rows [][]string, verif
 		var id string
 		var oldName, oldKind, oldRegion, oldINN, oldOGRN, oldLicenseNumber, oldLicenseStatus, oldInstitutionStatus string
 		var oldRecordID, oldSourceURL, oldUpdatedAt, oldVerificationStatus string
+		var oldProgramCodes pq.StringArray
+		var oldProgramsSource string
 		oldErr := tx.QueryRowContext(ctx, `SELECT id::text,name,partner_kind,region,COALESCE(inn,''),COALESCE(ogrn,''),
 			COALESCE(license_number,''),license_status,institution_status,COALESCE(registry_record_id,''),
-			COALESCE(source_url,''),COALESCE(registry_updated_at::text,''),verification_status
+			COALESCE(source_url,''),COALESCE(registry_updated_at::text,''),verification_status,program_codes,programs_source_url
 			FROM education_directory WHERE registry_record_id=$1 OR (name=$2 AND partner_kind=$3 AND region=$4)
 			ORDER BY (registry_record_id=$1) DESC LIMIT 1 FOR UPDATE`, row[8], row[0], row[1], row[2]).
 			Scan(&id, &oldName, &oldKind, &oldRegion, &oldINN, &oldOGRN, &oldLicenseNumber,
-				&oldLicenseStatus, &oldInstitutionStatus, &oldRecordID, &oldSourceURL, &oldUpdatedAt, &oldVerificationStatus)
+				&oldLicenseStatus, &oldInstitutionStatus, &oldRecordID, &oldSourceURL, &oldUpdatedAt, &oldVerificationStatus, &oldProgramCodes, &oldProgramsSource)
 		if oldErr != nil && oldErr != sql.ErrNoRows {
 			return oldErr
 		}
@@ -174,15 +195,31 @@ func upsertDirectoryRows(ctx context.Context, tx *sql.Tx, rows [][]string, verif
 				return err
 			}
 		}
+		if len(row) >= 13 {
+			codes := []string{}
+			if row[11] != "" {
+				codes = strings.Split(row[11], ",")
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE education_directory SET program_codes=$2,programs_source_url=$3,programs_checked_at=now() WHERE id::text=$1`, id, pq.Array(codes), row[12]); err != nil {
+				return err
+			}
+		}
 		if audit {
 			var oldValue interface{}
 			if oldErr == nil {
-				oldValue = directoryAuditValue(oldName, oldKind, oldRegion, oldINN, oldOGRN,
+				oldRecord := directoryAuditValue(oldName, oldKind, oldRegion, oldINN, oldOGRN,
 					oldLicenseNumber, oldLicenseStatus, oldInstitutionStatus, oldRecordID,
 					oldSourceURL, oldUpdatedAt, oldVerificationStatus)
+				oldRecord["program_codes"], oldRecord["programs_source_url"] = strings.Join(oldProgramCodes, ","), oldProgramsSource
+				oldValue = oldRecord
 			}
 			newValue := directoryAuditValue(row[0], row[1], row[2], row[3], row[4], row[5],
 				row[6], row[7], row[8], row[9], row[10], verificationStatus)
+			if len(row) >= 13 {
+				newValue["program_codes"], newValue["programs_source_url"] = row[11], row[12]
+			} else {
+				newValue["program_codes"], newValue["programs_source_url"] = strings.Join(oldProgramCodes, ","), oldProgramsSource
+			}
 			if err := logAudit(tx, "education_directory", id, "directory_confirm", userID,
 				"Подтверждено через Excel", oldValue, newValue); err != nil {
 				return err

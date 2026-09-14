@@ -598,25 +598,59 @@ async function renderITCompanies(root, embedded = false) {
   <div class="card filter-card"><div class="flex between"><div><h2>Поиск по реестру</h2><p class="muted">Введите название, ИНН, ОГРН или номер аккредитации.</p></div><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Проверить на Госуслугах</a><button class="btn" id="it-add">+ Добавить компанию</button></div></div><div class="directory-search"><div class="field"><label for="it-search">Поиск</label><input id="it-search" placeholder="Например, название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
   <div class="card"><div class="flex between"><h2>Компании с действующей аккредитацией</h2><span class="count-badge" id="it-count"></span></div><div id="it-list" class="loading-state"><span class="spinner"></span>Загрузка реестра…</div></div>`;
 
+  let offset = 0;
+  let generation = 0;
+  const pagination = el('<div class="flex"><button class="btn secondary" data-prev disabled>Предыдущая страница</button><button class="btn secondary" data-next disabled>Следующая страница</button></div>');
+  root.querySelector("#it-list").after(pagination);
   const load = async () => {
+    const version = ++generation;
     const list = root.querySelector("#it-list");
     list.className = "loading-state";
     list.innerHTML = '<span class="spinner"></span>Загрузка реестра…';
     try {
-      const companies = await api(`/it-companies?q=${encodeURIComponent(root.querySelector("#it-search").value.trim())}`);
-      root.querySelector("#it-count").textContent = `${companies.length} ${companies.length === 1 ? "компания" : "компаний"}`;
+      const companies = await api(`/it-companies?q=${encodeURIComponent(root.querySelector("#it-search").value.trim())}&offset=${offset}`);
+      if (version !== generation) return;
+      root.querySelector("#it-count").textContent = companies.length ? `Записи ${offset + 1}–${offset + companies.length}` : "0 компаний";
+      pagination.querySelector("[data-prev]").disabled = offset === 0;
+      pagination.querySelector("[data-next]").disabled = companies.nextOffset == null;
+      pagination.querySelector("[data-next]").onclick = () => { offset = companies.nextOffset; load(); };
       list.className = "";
       list.innerHTML = companies.length
         ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => `<tr><td><b>${escapeHTML(company.name)}</b>${company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn)}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>Данные на ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть официальный источник</a></td></tr>`).join("")}</tbody></table></div>`
         : '<div class="empty-state"><b>Компании не найдены</b><span>Измените запрос или добавьте запись из официального реестра.</span></div>';
     } catch (error) {
+      if (version !== generation) return;
       list.className = "error-state";
       list.textContent = error.message;
     }
   };
-  root.querySelector("#it-find").onclick = load;
+  const search = () => { offset = 0; load(); };
+  pagination.querySelector("[data-prev]").onclick = () => { offset = Math.max(0, offset - 500); load(); };
+  root.querySelector("#it-find").onclick = search;
+	const importButton = el('<button class="btn secondary" type="button">Загрузить выгрузку</button>');
+	root.querySelector("#it-add").before(importButton);
+	importButton.onclick = () => {
+		const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Загрузить ИТ-компании</h2><p>CSV в UTF-8 или XLSX, до 100 000 строк. Для действующих аккредитаций нужны сведения не старше 35 дней. Существующие записи обновятся по ИНН.</p><p><a href="/api/it-companies/template" target="_blank" rel="noopener">Скачать шаблон</a></p><div class="field"><label>Выгрузка реестра<input type="file" name="file" accept=".csv,.xlsx" required></label></div><p class="notice" data-preview hidden></p><p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Проверить файл</button><button class="btn secondary" type="button" data-close>Отмена</button></div></form></div>`);
+		document.body.appendChild(modal);
+		const form = modal.querySelector("form");
+		let checked = false;
+		form.querySelector("[data-close]").onclick = () => modal.remove();
+		form.querySelector('[type="file"]').onchange = () => { checked = false; form.querySelector('[type="submit"]').textContent = "Проверить файл"; form.querySelector("[data-preview]").hidden = true; };
+		form.onsubmit = async (event) => {
+			event.preventDefault();
+			const button = form.querySelector('[type="submit"]');
+			button.disabled = true;
+			form.querySelector(".error").textContent = "";
+			try {
+				const result = await api(`/it-companies/import${checked ? "?commit=1" : ""}`, {method: "POST", body: new FormData(form)});
+				if (result.committed) { modal.remove(); await load(); showToast(`Загружено компаний: ${result.valid_rows}`); }
+				else { checked = true; button.textContent = "Загрузить в справочник"; const preview = form.querySelector("[data-preview]"); preview.hidden = false; preview.textContent = `Проверено компаний: ${result.valid_rows}. Файл готов к загрузке.`; }
+			} catch (error) { form.querySelector(".error").textContent = error.message; }
+			finally { button.disabled = false; }
+		};
+	};
   root.querySelector("#it-search").onkeydown = (event) => {
-    if (event.key === "Enter") load();
+    if (event.key === "Enter") search();
   };
   root.querySelector("#it-add").onclick = () => {
     const today = new Date().toISOString().slice(0, 10);
@@ -677,6 +711,8 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
       <div class="field"><label>Статус лицензии</label><select name="license_status">${option("unknown", "Не указан", item.license_status)}${option("active", "Действует", item.license_status)}${option("suspended", "Приостановлена", item.license_status)}${option("expired", "Истекла", item.license_status)}${option("revoked", "Аннулирована", item.license_status)}</select></div>
       <div class="field"><label>Статус организации</label><select name="institution_status">${option("unknown", "Не указан", item.institution_status)}${option("active", "Действует", item.institution_status)}${option("inactive", "Не действует", item.institution_status)}${option("reorganized", "Реорганизована", item.institution_status)}${option("liquidated", "Ликвидирована", item.institution_status)}</select></div>
       <div class="field"><label>Официальный источник *</label><input name="source_url" type="url" required value="${escapeHTML(item.source_url || "https://egrul.nalog.ru/index.html")}"></div>
+      <div class="field"><label>Коды направлений</label><input name="program_codes" value="${escapeHTML((item.program_codes || []).join(", "))}" placeholder="09.03.01, 38.03.05"><small>Для вуза нужен хотя бы один точный код из приказа Минцифры № 27.</small></div>
+      <div class="field"><label>Источник направлений</label><input name="programs_source_url" type="url" value="${escapeHTML(item.programs_source_url || "")}" placeholder="https://сайт-вуза/sveden/education/"></div>
     </div>
     <div class="field"><label>Комментарий к проверке</label><textarea name="confirmation_comment" maxlength="1000" rows="2" placeholder="Что именно проверено или исправлено"></textarea></div>
     <p class="muted">«Сохранить изменения» оставит жёлтый статус. «Подтвердить» зафиксирует ваши ФИО, email, время и полный состав реквизитов в журнале изменений.</p>
@@ -696,6 +732,7 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
     try {
       const payload = Object.fromEntries(new FormData(form));
       payload.confirm = confirm;
+      payload.program_codes = payload.program_codes.split(/[,;\s]+/).filter(Boolean);
       await api(`/directory/${encodeURIComponent(item.id)}`, {
         method: "PUT",
         body: JSON.stringify(payload),
@@ -727,6 +764,8 @@ async function renderPartnerDirectory(root, embedded = false) {
   <div class="card"><div class="flex between"><div><h2>Региональные органы управления образованием</h2><p class="muted">Цепочка школьного мероприятия: РОИВ → соглашение → школа → план/факт.</p></div>${isStaffUser() ? '<button class="btn secondary" id="roiv-add">+ Добавить РОИВ</button>' : ""}</div><div id="roiv-list">${state.regionalAuthorities.length ? `<div class="table-wrap"><table><thead><tr><th>Регион и РОИВ</th><th>Реквизиты</th><th>Связи</th><th></th></tr></thead><tbody>${state.regionalAuthorities.map((authority) => `<tr><td>${escapeHTML(authority.region)}<br><b>${escapeHTML(authority.name)}</b></td><td>ИНН ${escapeHTML(authority.inn)}<br>ОГРН ${escapeHTML(authority.ogrn)}<br><a href="${escapeHTML(authority.source_url)}" target="_blank" rel="noopener noreferrer">Официальный источник</a></td><td><span class="status-badge ${authority.status === "active" ? "active" : "inactive"}">${authority.status === "active" ? "Действует" : "Не действует"}</span><br>Школ: ${authority.schools_count}<br>Мероприятий: ${authority.activities_count}</td><td>${isStaffUser() ? `<button class="btn secondary" data-edit-roiv="${authority.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>РОИВ ещё не добавлены. Для создания школьного партнёра сначала заполните этот справочник.</p>"}</div></div>
   <div class="card"><h2>Наши партнёры</h2><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
   let generation = 0;
+  const reviewFilter = el('<label class="muted"><input type="checkbox" id="d-review-all"> Показать также вузы без подтверждённого направления — для проверки</label>');
+  root.querySelector("#d-results").before(reviewFilter);
   const search = async () => {
     const version = ++generation;
     const box = root.querySelector("#d-results");
@@ -737,6 +776,7 @@ async function renderPartnerDirectory(root, embedded = false) {
           new URLSearchParams({
             partner_kind: root.querySelector("#d-kind").value,
             q: root.querySelector("#d-search").value,
+            review_all: root.querySelector("#d-review-all").checked ? "1" : "0",
           }),
       );
       if (version !== generation) return;
@@ -780,6 +820,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     }
   };
   root.querySelector("#d-find").onclick = search;
+  root.querySelector("#d-review-all").onchange = search;
   root.querySelector("#d-kind").onchange = () => {
     state.partnerKind = root.querySelector("#d-kind").value;
     search();

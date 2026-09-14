@@ -106,6 +106,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 	var selectable bool
 	err = tx.QueryRowContext(r.Context(), `SELECT name,partner_kind,
 		(verification_status='verified' AND license_status='active' AND institution_status='active'
+		 AND education_matches_order(partner_kind,program_codes)
 		 AND verified_at>=now()-interval '35 days'
 		 AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE)
 		FROM education_directory WHERE id::text=$1 FOR SHARE`, req.DirectoryID).
@@ -119,7 +120,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	if !selectable {
-		middleware.WriteError(w, 409, "организация не подтверждена действующей лицензией; обновите официальный справочник")
+		middleware.WriteError(w, 409, "проверьте действующую лицензию и актуальность сведений; у вуза должно быть направление из приказа Минцифры № 27")
 		return
 	}
 	var partnerID string

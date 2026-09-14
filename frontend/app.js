@@ -74,6 +74,7 @@ const VALUE_LABELS = {
   delete: "Удаление",
   settings_change: "Изменение настроек",
   directory_enrich: "Автоматический подбор реквизитов",
+  directory_programs: "Обновление направлений подготовки",
   directory_update: "Изменение реквизитов",
   directory_confirm: "Подтверждение учебного заведения",
 };
@@ -105,7 +106,7 @@ async function api(path, opts = {}, pageCount = 0) {
     throw new Error((data && data.error) || `Ошибка ${res.status}`);
   }
   if (Array.isArray(data) && res.headers.has("X-Next-Offset")) data.nextOffset = Number(res.headers.get("X-Next-Offset"));
-  if (Array.isArray(data) && data.nextOffset != null && path.split("?")[0] !== "/entries") {
+  if (Array.isArray(data) && data.nextOffset != null && !["/entries", "/it-companies"].includes(path.split("?")[0])) {
     if (pageCount >= 19) throw new Error("Список превышает 10000 элементов. Сузьте выборку.");
     const next = new URL(path, "http://local"); next.searchParams.set("offset", String(data.nextOffset));
     return data.concat(await api(next.pathname + next.search, opts, pageCount + 1));

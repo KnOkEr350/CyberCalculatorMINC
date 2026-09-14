@@ -62,6 +62,19 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := RunMigrations(db, dir); e != nil {
 		t.Fatal("second migration run must be harmless:", e)
 	}
+	for _, test := range []struct {
+		kind, code string
+		want       bool
+	}{
+		{"vuz", "09.03.01", true}, {"vuz", "38.03.05", true}, {"vuz", "45.04.04", true},
+		{"vuz", "38.03.01", false}, {"vuz", "01.04.01", false}, {"vuz", "09.00.00", false},
+		{"vuz", "", false}, {"school", "", true}, {"kolledj", "", true},
+	} {
+		var got bool
+		if err := db.QueryRow(`SELECT education_matches_order($1,ARRAY[$2])`, test.kind, test.code).Scan(&got); err != nil || got != test.want {
+			t.Fatalf("order filter %s %s: %v %v", test.kind, test.code, got, err)
+		}
+	}
 	var mentor string
 	var amount float64
 	if e := db.QueryRow(`SELECT payload->>'mentor_id',amount_rub FROM entries WHERE id=$1`, entry).Scan(&mentor, &amount); e != nil {
