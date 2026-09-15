@@ -1,12 +1,15 @@
 // Enrollment does not store secrets in localStorage or include them in URLs.
 function renderMFASetup() {
-  const root = el(`<main class="container"><section class="card"><h2>Двухфакторная защита</h2>
-    <p>Для администратора production требуется приложение-аутентификатор. Добавьте в нём учётную запись по секретному ключу: TOTP, 6 цифр, интервал 30 секунд.</p>
-    <form id="mfa-start"><label>Текущий пароль<input type="password" autocomplete="current-password" maxlength="128" required></label><button class="btn">Начать настройку</button></form>
-    <div id="mfa-secret" hidden><p>Секретный ключ (не передавайте другим):</p><code></code>
-    <form id="mfa-confirm"><label>Код из приложения<input inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><button class="btn">Подтвердить</button></form></div>
-    <div id="mfa-recovery" hidden><p>Сохраните резервные коды в менеджере паролей. Каждый используется один раз вместо кода приложения. Повторно эти коды не показываются.</p><pre></pre><button class="btn" id="mfa-done">Коды сохранены — перейти ко входу</button></div>
-    <p role="alert"></p><button class="btn secondary" id="mfa-exit">Выйти</button></section></main>`);
+  const root = el(`<div class="auth-shell compact-auth">
+    <aside class="auth-brand-panel">${brandMarkup(true)}<div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div></aside>
+    <main class="auth-form-panel"><section class="login-box mfa-box"><span class="eyebrow">Безопасность</span><h1>Защита входа</h1>
+      <form id="mfa-start"><div class="setup-step"><b>1</b><div><label>Подтвердите пароль<input type="password" autocomplete="current-password" maxlength="128" required></label></div></div><button class="btn wide">Продолжить</button></form>
+      <div id="mfa-secret" hidden><div class="setup-step"><b>2</b><div><label>Добавьте ключ в приложение-аутентификатор</label><code></code><div class="field-hint">TOTP · 6 цифр · 30 секунд</div></div></div>
+      <form id="mfa-confirm"><div class="setup-step"><b>3</b><div><label>Код из приложения<input inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000"></label></div></div><button class="btn wide">Подтвердить</button></form></div>
+      <div id="mfa-recovery" hidden><h2>Резервные коды</h2><p>Сохраните коды сейчас. Каждый код можно использовать один раз.</p><pre></pre><button class="btn wide" id="mfa-done">Готово</button></div>
+      <p role="alert" class="error"></p><button class="btn secondary wide" id="mfa-exit">Выйти</button>
+    </section></main>
+  </div>`);
   const error = root.querySelector('[role="alert"]');
   root.querySelector("#mfa-start").onsubmit = async (event) => {
     event.preventDefault(); const form = event.currentTarget; const button = form.querySelector("button"); button.disabled = true;
