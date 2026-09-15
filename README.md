@@ -87,6 +87,7 @@ bootstrap-аккаунт, либо обновить его пароль напр
 - `GET /api/categories` — справочник категорий + поля формы + формула
 - `GET/POST /api/partners`
 - `GET/POST /api/it-companies`
+- `GET /api/it-companies/registry-search?q=` — публичная проверка аккредитации через ПроРеестр; сохранённые записи доступны в `/api/it-companies`
 - `GET/POST /api/entries`, `PUT /api/entries/{id}` (требует `comment`)
 - `GET/POST /api/entries/{id}/attachments`, `GET /api/attachments/{id}/download`
 - `GET /api/dashboard`, `POST /api/dashboard/target`

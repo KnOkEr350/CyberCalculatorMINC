@@ -594,9 +594,9 @@ function openRegionalAuthority(authority, onSaved) {
 }
 
 async function renderITCompanies(root, embedded = false) {
-  root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Аккредитованные ИТ-компании</h2><p>Проверяйте и дополняйте реестр организаций с действующей государственной аккредитацией.</p></div>' : '<section class="page-heading"><div><span class="eyebrow">Официальный реестр</span><h1>Аккредитованные ИТ-компании</h1><p>Единый список организаций с действующей государственной аккредитацией. Новую запись можно добавить только по данным официального реестра.</p></div></section>'}
-  <div class="card filter-card"><div class="flex between"><div><h2>Поиск по реестру</h2><p class="muted">Введите название, ИНН, ОГРН или номер аккредитации.</p></div><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Проверить на Госуслугах</a><button class="btn" id="it-add">+ Добавить компанию</button></div></div><div class="directory-search"><div class="field"><label for="it-search">Поиск</label><input id="it-search" placeholder="Например, название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
-  <div class="card"><div class="flex between"><h2>Компании с действующей аккредитацией</h2><span class="count-badge" id="it-count"></span></div><div id="it-list" class="loading-state"><span class="spinner"></span>Загрузка реестра…</div></div>`;
+  root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Аккредитованные ИТ-компании</h2><p>Проверяйте и дополняйте реестр организаций с действующей государственной аккредитацией.</p></div>' : '<section class="page-heading"><div><span class="eyebrow">Проверка аккредитации</span><h1>Аккредитованные ИТ-компании</h1><p>Ищите компании по названию или ИНН и проверяйте действующую аккредитацию. Проверка доступна через публичный сервис ПроРеестр, обращающийся к Госуслугам.</p></div></section>'}
+  <div class="card filter-card"><div class="flex between"><div><h2>Поиск по реестру</h2><p class="muted">Для проверки реестра введите название или ИНН. В сохранённых записях также доступны ОГРН и номер аккредитации.</p></div><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Проверить на Госуслугах</a><button class="btn" id="it-add">+ Добавить компанию</button></div></div><div class="directory-search"><div class="field"><label for="it-scope">Источник поиска</label><select id="it-scope"><option value="registry">Проверка реестра Госуслуг через ПроРеестр</option><option value="saved">Сохранённые компании</option></select></div><div class="field"><label for="it-search">Поиск</label><input id="it-search" placeholder="Например, название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
+  <div class="card"><div class="flex between"><h2>Компании с действующей аккредитацией</h2><span class="count-badge" id="it-count"></span></div><p class="muted" id="it-scope-note"></p><div id="it-list" class="loading-state"><span class="spinner"></span>Загрузка реестра…</div></div>`;
 
   let offset = 0;
   let generation = 0;
@@ -608,16 +608,23 @@ async function renderITCompanies(root, embedded = false) {
     list.className = "loading-state";
     list.innerHTML = '<span class="spinner"></span>Загрузка реестра…';
     try {
-      const companies = await api(`/it-companies?q=${encodeURIComponent(root.querySelector("#it-search").value.trim())}&offset=${offset}`);
+      const registry = root.querySelector("#it-scope").value === "registry";
+      const query = encodeURIComponent(root.querySelector("#it-search").value.trim());
+      const result = await api(registry ? `/it-companies/registry-search?q=${query}` : `/it-companies?q=${query}&offset=${offset}`);
+      const companies = registry ? result.items : result;
       if (version !== generation) return;
-      root.querySelector("#it-count").textContent = companies.length ? `Записи ${offset + 1}–${offset + companies.length}` : "0 компаний";
+      root.querySelector("#it-count").textContent = companies.length ? (registry ? `Найдено: ${companies.length}` : `Записи ${offset + 1}–${offset + companies.length}`) : "0 компаний";
+      pagination.style.display = registry ? "none" : "";
+      root.querySelector("#it-scope-note").textContent = registry
+        ? (result.initial ? "Начальная подборка компаний. Введите название или ИНН для поиска нужной организации." : result.may_have_more ? "Показаны первые 100 совпадений. Уточните название или введите ИНН." : "Результат проверки реестра через ПроРеестр. Для подтверждающих документов откройте Госуслуги.")
+        : "Записи, добавленные вручную или загруженные из выгрузки. Для поиска других компаний выберите проверку реестра.";
       pagination.querySelector("[data-prev]").disabled = offset === 0;
       pagination.querySelector("[data-next]").disabled = companies.nextOffset == null;
       pagination.querySelector("[data-next]").onclick = () => { offset = companies.nextOffset; load(); };
       list.className = "";
       list.innerHTML = companies.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => `<tr><td><b>${escapeHTML(company.name)}</b>${company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn)}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>Данные на ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть официальный источник</a></td></tr>`).join("")}</tbody></table></div>`
-        : '<div class="empty-state"><b>Компании не найдены</b><span>Измените запрос или добавьте запись из официального реестра.</span></div>';
+        ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => `<tr><td><b>${escapeHTML(company.name)}</b>${!registry && company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn || "не предоставлен источником")}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>${registry ? "Запрос выполнен" : "Данные на"} ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть источник сведений</a></td></tr>`).join("")}</tbody></table></div>`
+        : '<div class="empty-state"><b>Компании не найдены</b><span>Измените название, попробуйте поиск по ИНН или выберите другой источник поиска.</span></div>';
     } catch (error) {
       if (version !== generation) return;
       list.className = "error-state";
@@ -627,6 +634,7 @@ async function renderITCompanies(root, embedded = false) {
   const search = () => { offset = 0; load(); };
   pagination.querySelector("[data-prev]").onclick = () => { offset = Math.max(0, offset - 500); load(); };
   root.querySelector("#it-find").onclick = search;
+  root.querySelector("#it-scope").onchange = search;
 	const importButton = el('<button class="btn secondary" type="button">Загрузить выгрузку</button>');
 	root.querySelector("#it-add").before(importButton);
 	importButton.onclick = () => {
@@ -781,15 +789,15 @@ async function renderPartnerDirectory(root, embedded = false) {
       );
       if (version !== generation) return;
       box.innerHTML = items.length
-        ? `<p class="muted">Показано до 100 результатов. Уточните запрос для поиска остальных.</p><div class="table-wrap"><table><thead><tr><th>Название</th><th>Реквизиты</th><th>Проверка и лицензия</th><th>Действия</th></tr></thead><tbody>${items.map((p) => {
+        ? `<p class="muted">Найдено записей: ${items.length}.</p><div class="table-wrap"><table><thead><tr><th>Название</th><th>Реквизиты</th><th>Проверка и лицензия</th><th>Действия</th></tr></thead><tbody>${items.map((p) => {
           const pending = p.verification_status !== "verified";
           const verificationLabel = pending ? "Требует проверки" : "Подтверждено";
           const verifier = !pending && (p.verifier_name || p.verifier_email)
             ? `<br><small>${escapeHTML(p.verifier_name || p.verifier_email)}${p.verified_at ? ` · ${new Date(p.verified_at).toLocaleString("ru-RU")}` : ""}</small>`
             : "";
-          return `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(p.region)}</small></td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td><button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
+          return `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(p.region)}</small>${p.partner_kind === "vuz" ? `<br><small>${p.matches_order ? `Подходящие направления: ${escapeHTML((p.matching_program_codes || []).join(", "))}` : (p.program_codes || []).length ? "Подходящих направлений по приказу нет" : "Направления ещё не получены"}</small>${p.programs_source_url ? `<br><a href="${escapeHTML(p.programs_source_url)}" target="_blank" rel="noopener noreferrer">Образовательные программы</a>` : ""}` : ""}</td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td><button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
         }).join("")}</tbody></table></div>`
-        : "<p>Совпадений нет. Администратор должен обновить справочник официальной выгрузкой — произвольный ручной ввод отключён.</p>";
+        : `<p>${root.querySelector("#d-kind").value === "vuz" ? "Вузы с найденными подходящими направлениями не найдены. Для проверки записи включите «Показать также вузы без подтверждённого направления» или измените запрос." : "Совпадений нет. Измените запрос или загрузите сведения в справочник."}</p>`;
 	  box.querySelectorAll("[data-review-directory]").forEach((button) => {
 	    button.onclick = () => openDirectoryReview(
 	      items.find((item) => item.id === button.dataset.reviewDirectory),
@@ -849,7 +857,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     .then((stats) => {
       const box = root.querySelector("#directory-stats");
       if (!box) return;
-      box.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Всего записей</div><div class="value">${stats.total}</div></div><div class="stat warning-stat"><div class="label">Требуют проверки</div><div class="value">${stats.pending || 0}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">Вузы / СПО / школы</div><div class="value">${stats.universities} / ${stats.colleges} / ${stats.schools}</div></div></div><p class="muted">Последнее подтверждение: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "записей пока нет"}. ${stats.sync_status ? `Обогащение/обновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автоматическое обогащение ещё не запускалось."}</p>`;
+      box.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Всего записей в справочнике</div><div class="value">${stats.all_total}</div></div><div class="stat warning-stat"><div class="label">Подходят, требуют проверки</div><div class="value">${stats.pending || 0}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">С подходящими направлениями</div><div class="value">${stats.total}</div></div></div><p class="muted">Вузов в справочнике: ${stats.all_universities}. Направления ещё не получены: ${stats.programs_unknown}. Последнее подтверждение: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "записей пока нет"}. ${stats.sync_status ? `Обогащение/обновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автоматическое обогащение ещё не запускалось."}</p>`;
     })
     .catch((error) => {
       const box = root.querySelector("#directory-stats");

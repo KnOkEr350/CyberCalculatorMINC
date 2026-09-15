@@ -80,7 +80,11 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "enrich-programs" {
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		result, err := handlers.EnrichDirectoryPrograms(ctx, db, cfg.DirectoryEnrichLimit)
+		query := ""
+		if len(os.Args) > 2 {
+			query = os.Args[2]
+		}
+		result, err := handlers.EnrichDirectoryProgramsForQuery(ctx, db, cfg.DirectoryEnrichLimit, query)
 		if err != nil {
 			log.Fatalf("направления: обработано %d: %v", result.Processed, err)
 		}
@@ -119,6 +123,7 @@ func main() {
 	go retention.Run(db, 1*time.Hour, stop, cfg.UploadDir)
 	go handlers.RunDirectorySync(db, cfg.DirectorySyncURL, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
 	if cfg.DirectoryEnrichOnStart {
+		go handlers.RunDirectoryPrograms(db, cfg.DirectoryEnrichLimit, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
 		go func() {
 			result, enrichErr := handlers.EnrichEducationDirectory(context.Background(), db, cfg.DirectoryEnrichLimit, time.Duration(cfg.DirectoryEnrichDelayMS)*time.Millisecond)
 			if enrichErr != nil {
@@ -218,6 +223,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/partners", middleware.RequireAuth(db, partnerH.List))
 	mux.HandleFunc("POST /api/partners", middleware.RequireAuth(db, partnerH.Create))
 	mux.HandleFunc("GET /api/it-companies", middleware.RequireAuth(db, itCompanyH.List))
+	mux.HandleFunc("GET /api/it-companies/registry-search", middleware.RequireAuth(db, itCompanyH.RegistrySearch))
 	mux.HandleFunc("POST /api/it-companies", middleware.RequireAuth(db, itCompanyH.Create))
 	mux.HandleFunc("GET /api/it-companies/template", middleware.RequireAuth(db, itCompanyH.Template))
 	mux.HandleFunc("POST /api/it-companies/import", middleware.RequireAuth(db, itCompanyH.Import))

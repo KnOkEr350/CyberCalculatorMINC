@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,46 @@ import (
 )
 
 var monitoringIDPattern = regexp.MustCompile(`https://monitoring\.miccedu\.ru/iam/[0-9]{4}/_vpo/inst\.php\?id=[0-9]+`)
+var educationLinkPattern = regexp.MustCompile(`(?is)<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>`)
+
+func educationProgramLinks(body, pageURL string) []string {
+	base, err := url.Parse(pageURL)
+	if err != nil {
+		return nil
+	}
+	links := []string{}
+	seen := map[string]bool{}
+	for _, match := range educationLinkPattern.FindAllStringSubmatch(body, -1) {
+		label := strings.ToLower(cellText(match[2]))
+		if !strings.Contains(label, "образовательн") || !strings.Contains(label, "программ") {
+			continue
+		}
+		excluded := false
+		for _, word := range []string{"прием", "приём", "перевод", "отчислен", "восстановлен", "трудоустр", "адаптирован", "научн"} {
+			if strings.Contains(label, word) {
+				excluded = true
+			}
+		}
+		if excluded {
+			continue
+		}
+		ref, err := url.Parse(match[1])
+		if err != nil {
+			continue
+		}
+		target := base.ResolveReference(ref)
+		target.Fragment = ""
+		value := target.String()
+		if target.Hostname() == base.Hostname() && strings.Contains(target.Path, "/sveden/education/") && publicProgramURL(value) && value != pageURL && !seen[value] {
+			links = append(links, value)
+			seen[value] = true
+			if len(links) == 3 {
+				break
+			}
+		}
+	}
+	return links
+}
 
 func programsHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 8 * time.Second}
@@ -38,9 +79,26 @@ func programsHTTPClient() *http.Client {
 		if len(ips) == 0 {
 			return nil, fmt.Errorf("нет адреса источника")
 		}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+		// Prefer IPv4 on hosts that publish IPv6 even when the deployment has
+		// no IPv6 route, and try remaining public addresses after a failure.
+		sort.SliceStable(ips, func(i, j int) bool { return ips[i].IP.To4() != nil && ips[j].IP.To4() == nil })
+		var lastErr error
+		for _, ip := range ips {
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		return nil, lastErr
 	}}
 	return &http.Client{Timeout: 15 * time.Second, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		// Older university sites still advertise an HTTP redirect to their new
+		// domain. Try that destination over HTTPS without sending an HTTP request.
+		if req.URL.Scheme == "http" && (req.URL.Port() == "" || req.URL.Port() == "80") {
+			req.URL.Scheme = "https"
+			req.URL.Host = req.URL.Hostname()
+		}
 		if len(via) >= 5 || !publicProgramURL(req.URL.String()) {
 			return fmt.Errorf("недопустимый редирект")
 		}
@@ -65,9 +123,9 @@ func fetchProgramPage(ctx context.Context, client *http.Client, rawURL string) (
 	if res.StatusCode != 200 {
 		return "", fmt.Errorf("HTTP %d", res.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, (8<<20)+1))
-	if len(body) > 8<<20 {
-		return "", fmt.Errorf("страница превышает 8 МБ")
+	body, err := io.ReadAll(io.LimitReader(res.Body, (24<<20)+1))
+	if len(body) > 24<<20 {
+		return "", fmt.Errorf("страница превышает 24 МБ")
 	}
 	return string(body), err
 }
@@ -78,7 +136,11 @@ func universityProgramURL(body string) string {
 		if len(cells) != 2 || !strings.Contains(cellText(cells[0][1]), "web-сайт") {
 			continue
 		}
-		site, err := url.Parse(cellText(cells[1][1]))
+		raw := cellText(cells[1][1])
+		if raw != "" && !strings.Contains(raw, "://") {
+			raw = "https://" + strings.TrimPrefix(raw, "//")
+		}
+		site, err := url.Parse(raw)
 		if err != nil || site.Hostname() == "" {
 			return ""
 		}
@@ -92,6 +154,10 @@ func universityProgramURL(body string) string {
 // Uses each monitoring record's own website, including branch websites.
 // A network failure never clears known programs or confirms a licence.
 func EnrichDirectoryPrograms(ctx context.Context, db *sql.DB, limit int) (DirectoryEnrichmentResult, error) {
+	return EnrichDirectoryProgramsForQuery(ctx, db, limit, "")
+}
+
+func EnrichDirectoryProgramsForQuery(ctx context.Context, db *sql.DB, limit int, query string) (DirectoryEnrichmentResult, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	result := DirectoryEnrichmentResult{}
@@ -111,7 +177,8 @@ func EnrichDirectoryPrograms(ctx context.Context, db *sql.DB, limit int) (Direct
 	defer conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(1129989446)`)
 	rows, err := db.QueryContext(ctx, `SELECT id::text,source,programs_source_url FROM education_directory
 	 WHERE partner_kind='vuz' AND (programs_checked_at IS NULL OR programs_checked_at<now()-interval '35 days')
-	 ORDER BY programs_attempted_at NULLS FIRST,id LIMIT NULLIF($1,0)`, limit)
+	 AND ($2='' OR name ILIKE '%'||$2||'%')
+	 ORDER BY (name ILIKE '%филиал%'),programs_attempted_at NULLS FIRST,id LIMIT NULLIF($1,0)`, limit, query)
 	if err != nil {
 		return result, err
 	}
@@ -152,11 +219,40 @@ func EnrichDirectoryPrograms(ctx context.Context, db *sql.DB, limit int) (Direct
 				}
 				pageURL := item.programsURL
 				if pageURL == "" {
-					body, _ := fetchProgramPage(ctx, client, monitoringIDPattern.FindString(item.source))
+					body, sourceErr := fetchProgramPage(ctx, client, monitoringIDPattern.FindString(item.source))
+					if sourceErr != nil {
+						log.Printf("направления %s: источник мониторинга: %v", item.id, sourceErr)
+					}
 					pageURL = universityProgramURL(body)
 				}
 				body, pageErr := fetchProgramPage(ctx, client, pageURL)
+				if pageErr != nil {
+					// Monitoring records sometimes retain a www alias which no
+					// longer has a valid certificate. Use the same site's bare host.
+					if target, err := url.Parse(pageURL); err == nil && strings.HasPrefix(target.Hostname(), "www.") {
+						target.Host = strings.TrimPrefix(target.Host, "www.")
+						fallbackBody, fallbackErr := fetchProgramPage(ctx, client, target.String())
+						if fallbackErr == nil {
+							body, pageErr, pageURL = fallbackBody, nil, target.String()
+						}
+					}
+				}
+				if pageErr != nil {
+					log.Printf("направления %s: %s: %v", item.id, pageURL, pageErr)
+				}
 				codes := parseEducationPrograms(body)
+				if len(codes) == 0 && pageErr == nil {
+					for _, linkedURL := range educationProgramLinks(body, pageURL) {
+						linkedBody, linkedErr := fetchProgramPage(ctx, client, linkedURL)
+						if linkedErr == nil {
+							codes = parseEducationPrograms(linkedBody)
+							if len(codes) > 0 {
+								pageURL = linkedURL
+								break
+							}
+						}
+					}
+				}
 				matched := pageErr == nil && len(codes) > 0
 				if matched {
 					tx, saveErr := db.BeginTx(ctx, nil)
@@ -224,4 +320,29 @@ func EnrichDirectoryPrograms(ctx context.Context, db *sql.DB, limit int) (Direct
 		return result, ctx.Err()
 	}
 	return result, firstError
+}
+
+// Keep missing program data moving through the queue without a manual CLI run.
+func RunDirectoryPrograms(db *sql.DB, limit int, interval time.Duration, stop <-chan struct{}) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	for {
+		result, err := EnrichDirectoryPrograms(ctx, db, limit)
+		if ctx.Err() != nil {
+			return
+		}
+		log.Printf("обновление направлений: обработано %d, получены коды %d, ошибка %v", result.Processed, result.Matched, err)
+		select {
+		case <-stop:
+			return
+		case <-time.After(interval):
+		}
+	}
 }

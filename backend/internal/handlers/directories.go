@@ -139,6 +139,10 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 	// The review queue remains reachable explicitly; normal lists contain only
 	// universities with at least one exact program code from Order 27.
 	reviewAll := q.Get("review_all") == "1"
+	page, ok := pageClause(w, r)
+	if !ok {
+		return
+	}
 	if verifiedOnly != "" && verifiedOnly != "0" && verifiedOnly != "1" {
 		middleware.WriteError(w, 400, "verified_only должен быть 0 или 1")
 		return
@@ -148,6 +152,7 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		COALESCE(d.registry_record_id,''),COALESCE(d.source_url,''),COALESCE(d.registry_updated_at::text,''),
 		COALESCE(d.verified_at::text,''),d.verification_status,COALESCE(d.verified_by::text,''),
 		COALESCE(verifier.full_name,''),COALESCE(verifier.email,''),d.program_codes,d.programs_source_url,
+		ARRAY(SELECT code FROM unnest(d.program_codes) AS code WHERE education_matches_order('vuz',ARRAY[code])),
 		education_matches_order(d.partner_kind,d.program_codes),
 		(d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
 		 AND education_matches_order(d.partner_kind,d.program_codes)
@@ -160,7 +165,7 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		 AND education_matches_order(d.partner_kind,d.program_codes)
 		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE))
 		ORDER BY (d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
-		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE) DESC,d.name LIMIT 100`, q.Get("partner_kind"), strings.TrimSpace(q.Get("q")), verifiedOnly, reviewAll)
+		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE) DESC,d.name,d.id`+page, q.Get("partner_kind"), strings.TrimSpace(q.Get("q")), verifiedOnly, reviewAll)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка справочника")
 		return
@@ -172,12 +177,13 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		var recordID, sourceURL, registryUpdatedAt, verifiedAt, verificationStatus string
 		var verifiedBy, verifierName, verifierEmail string
 		var programCodes pq.StringArray
+		var matchingCodes pq.StringArray
 		var programsSource string
 		var matchesOrder bool
 		var selectable bool
 		if rows.Scan(&id, &name, &kind, &region, &source, &inn, &ogrn, &licenseNumber, &licenseStatus,
 			&institutionStatus, &recordID, &sourceURL, &registryUpdatedAt, &verifiedAt, &verificationStatus,
-			&verifiedBy, &verifierName, &verifierEmail, &programCodes, &programsSource, &matchesOrder, &selectable) != nil {
+			&verifiedBy, &verifierName, &verifierEmail, &programCodes, &programsSource, &matchingCodes, &matchesOrder, &selectable) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
@@ -189,13 +195,14 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 			"verified_by": verifiedBy, "verifier_name": verifierName, "verifier_email": verifierEmail,
 			"selectable":    selectable,
 			"program_codes": programCodes, "programs_source_url": programsSource, "matches_order": matchesOrder,
+			"matching_program_codes": matchingCodes,
 		})
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения")
 		return
 	}
-	middleware.WriteJSON(w, 200, out)
+	writePage(w, r, out)
 }
 
 func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -216,6 +223,12 @@ func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request,
 		middleware.WriteError(w, 500, "ошибка статистики справочника")
 		return
 	}
+	var allTotal, allUniversities, programsUnknown int
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT count(*),count(*) FILTER(WHERE partner_kind='vuz'),
+		count(*) FILTER(WHERE partner_kind='vuz' AND programs_checked_at IS NULL) FROM education_directory`).Scan(&allTotal, &allUniversities, &programsUnknown); err != nil {
+		middleware.WriteError(w, 500, "ошибка статистики направлений")
+		return
+	}
 	last := ""
 	if lastVerified.Valid {
 		last = lastVerified.Time.Format(time.RFC3339)
@@ -234,6 +247,7 @@ func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request,
 	}
 	middleware.WriteJSON(w, 200, map[string]interface{}{
 		"total": total, "verified_active": verified, "pending": pending, "universities": universities,
+		"all_total": allTotal, "all_universities": allUniversities, "programs_unknown": programsUnknown,
 		"colleges": colleges, "schools": schools, "last_verified_at": last,
 		"sync_status": syncStatus, "sync_source": syncSource, "sync_error": syncError, "sync_finished_at": syncFinishedAt,
 	})
