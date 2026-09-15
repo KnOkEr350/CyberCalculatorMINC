@@ -1095,13 +1095,13 @@ async function renderAdmin(root) {
   const isAdmin = state.me.role === "admin";
   const isModerator = state.me.role === "moderator";
   const showEducationDirectory =
-    isModerator || state.me.entity_type === "organization";
+    isAdmin || isModerator || state.me.entity_type === "organization";
   const showITDirectory = canViewITCompanies();
   const initialDirectoryTab = showEducationDirectory ? "partners" : "it-companies";
   root.innerHTML = `<section class="page-heading"><div><h1>Управление</h1></div></section>
   <div class="admin-layout">
     <nav class="admin-nav" aria-label="Разделы административной панели">
-      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Образовательные организации</b></button>` : ""}
+      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО</b></button>` : ""}
       ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b></button>` : ""}
       ${isAdmin ? '<button data-t="users"><b>Пользователи</b></button><button data-t="settings"><b>Настройки</b></button><button data-t="logs"><b>Журнал изменений</b></button>' : ""}
     </nav>

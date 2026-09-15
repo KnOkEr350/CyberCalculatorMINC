@@ -15,9 +15,7 @@ function canViewITCompanies() {
 }
 
 function canReviewEducationDirectory() {
-  if (state.me?.role === "moderator") return true;
-  if (state.me?.role === "admin")
-    return state.me?.entity_type === "organization";
+  if (state.me?.role === "admin" || state.me?.role === "moderator") return true;
   return state.me?.entity_type === "edu_institution";
 }
 
