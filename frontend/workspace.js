@@ -4,7 +4,8 @@ function isStaffUser() {
 }
 
 function canManageITCompanies() {
-  if (state.me?.role === "admin" || state.me?.role === "moderator")
+  if (state.me?.role === "admin") return true;
+  if (state.me?.role === "moderator")
     return state.me?.entity_type === "edu_institution";
   return state.me?.entity_type === "organization";
 }
@@ -169,15 +170,21 @@ function collectAgreement(root, prefix, partnerIDs) {
 
 function openUserProfile(user, refresh) {
   const modal = el(
-    `<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Доступ: ${escapeHTML(user.full_name)}</h2><div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор — всё, кроме системных разделов</option><option value="admin">Администратор — полный доступ</option></select></div><div class="field"><label>Представляет</label><select name="entity"><option value="organization">ИТ-организация</option><option value="edu_institution">Учебное заведение — только свой партнёр</option></select></div><div class="field"><label>Учебное заведение</label><select name="partner"><option value="">Не назначено</option>${state.partners.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("")}</select></div><p class="error" role="alert"></p><button class="btn" type="submit">Сохранить доступ</button><button class="btn secondary" type="button">Закрыть</button></form></div>`,
+    `<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Доступ: ${escapeHTML(user.full_name)}</h2><div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор — всё, кроме системных разделов</option><option value="admin">Администратор — полный доступ</option></select></div><div class="field"><label>Тип пользователя</label><select name="entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div><div class="field" data-education-assignment><label data-education-label>Учебное заведение *</label><select name="partner"><option value="">Выберите учебное заведение</option>${state.partners.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("")}</select></div><div class="field" data-company-assignment><label data-company-label>ИТ-компания</label><select name="company"><option value="">Выберите ИТ-компанию</option>${(state.itCompanies || []).map((company) => `<option value="${company.id}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div><p class="error" role="alert"></p><button class="btn" type="submit">Сохранить доступ</button><button class="btn secondary" type="button">Закрыть</button></form></div>`,
   );
   const form = modal.querySelector("form");
   form.elements.role.value = user.role;
   form.elements.entity.value = user.entity_type || "edu_institution";
   form.elements.partner.value = user.partner_id || "";
+  form.elements.company.value = user.it_company_id || "";
   const sync = () => {
-    form.elements.partner.disabled =
-      form.elements.entity.value !== "edu_institution";
+    const education = form.elements.entity.value === "edu_institution";
+    form.querySelector("[data-education-assignment]").hidden = !education;
+    form.querySelector("[data-company-assignment]").hidden = education;
+    form.elements.partner.disabled = !education;
+    form.elements.company.disabled = education;
+    form.querySelector("[data-company-label]").textContent =
+      `ИТ-компания${form.elements.role.value === "user" ? " *" : ""}`;
   };
   form.elements.role.onchange = sync;
   form.elements.entity.onchange = sync;
@@ -185,6 +192,23 @@ function openUserProfile(user, refresh) {
   form.querySelector("[type=button]").onclick = () => modal.remove();
   form.onsubmit = async (e) => {
     e.preventDefault();
+    const error = form.querySelector(".error");
+    error.textContent = "";
+    const education = form.elements.entity.value === "edu_institution";
+    if (education && !form.elements.partner.value) {
+      error.textContent = "Выберите учебное заведение";
+      form.elements.partner.focus();
+      return;
+    }
+    if (
+      !education &&
+      form.elements.role.value === "user" &&
+      !form.elements.company.value
+    ) {
+      error.textContent = "Выберите ИТ-компанию";
+      form.elements.company.focus();
+      return;
+    }
     const b = form.querySelector("[type=submit]");
     b.disabled = true;
     try {
@@ -196,13 +220,17 @@ function openUserProfile(user, refresh) {
           partner_id: form.elements.partner.disabled
             ? ""
             : form.elements.partner.value,
+          it_company_id:
+            form.elements.entity.value === "organization"
+              ? form.elements.company.value
+              : "",
         }),
       });
       modal.remove();
       await refresh();
       if (user.id === state.me.id) await boot();
     } catch (err) {
-      form.querySelector(".error").textContent = err.message;
+      error.textContent = err.message;
     } finally {
       b.disabled = false;
     }
@@ -244,6 +272,9 @@ async function renderPartnerEntries(root) {
     state.categories = await api("/categories");
     state.categories.forEach((c) => (CATEGORY_LABELS[c.code] = c.name));
   }
+  const fixedEducationPartner =
+    state.me.role === "user" && state.me.entity_type === "edu_institution";
+  if (fixedEducationPartner) state.partnerID = state.me.partner_id || "";
   let partner = state.partners.find((p) => p.id === state.partnerID);
   if (!partner && state.partners.length === 1) {
     partner = state.partners[0];
@@ -281,63 +312,68 @@ async function renderPartnerEntries(root) {
   );
   if (!available.some((c) => c.code === state.categoryCode))
     state.categoryCode = available[0]?.code || "";
+  const educationSelector = fixedEducationPartner
+    ? `<div class="field"><label>Учебное заведение</label><input value="${escapeHTML(partner?.name || "Назначенное учебное заведение")}" readonly></div>`
+    : `<div class="field"><label for="workspace-kind">1. Тип учебного заведения</label><select id="workspace-kind">${Object.entries(
+        AUDIENCE_LABELS,
+      )
+        .map(
+          ([k, v]) =>
+            `<option value="${k}" ${k === state.partnerKind ? "selected" : ""}>${v}</option>`,
+        )
+        .join("")}</select></div>
+    <div class="field"><label for="partner-search">Поиск учебного заведения</label><input id="partner-search" placeholder="Введите часть названия"></div>
+    <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>`;
   root.innerHTML = `<section class="page-heading"><div><h1>План и факт</h1></div></section>
   <div class="card"><div class="grid cols-3">
-    <div class="field"><label for="workspace-kind">1. Тип ОО</label><select id="workspace-kind">${Object.entries(
-      AUDIENCE_LABELS,
-    )
-      .map(
-        ([k, v]) =>
-          `<option value="${k}" ${k === state.partnerKind ? "selected" : ""}>${v}</option>`,
-      )
-      .join("")}</select></div>
-    <div class="field"><label for="partner-search">Поиск своего партнёра</label><input id="partner-search" placeholder="Часть названия"></div>
-    <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>
+    ${educationSelector}
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
-  </div>${state.me.role === "admin" || state.me.role === "moderator" || state.me.entity_type === "edu_institution" ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения"}` : "Выберите партнёра и соглашение"}</p></div>
+  </div>${state.me.role === "admin" || state.me.role === "moderator" || state.me.entity_type === "edu_institution" ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения"}` : "Выберите учебное заведение и соглашение"}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     <div class="field"><label>4. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Действия</label><button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button></div></div>
-    <div class="flex"><button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button><a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности партнёра</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="flex"><button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button><a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><div class="field"><label for="entry-search">Поиск по реквизитам, студенту, наставнику, программе</label><input id="entry-search" placeholder="Введите текст"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const partnerSelect = root.querySelector("#workspace-partner");
-  const fillPartners = () => {
-    const term = root
-      .querySelector("#partner-search")
-      .value.trim()
-      .toLocaleLowerCase("ru");
-    partnerSelect.innerHTML =
-      '<option value="">— Выберите —</option>' +
-      state.partners
-        .filter(
-          (p) =>
-            p.partner_kind === state.partnerKind &&
-            (p.id === state.partnerID ||
-              p.name.toLocaleLowerCase("ru").includes(term)),
-        )
-        .map(
-          (p) =>
-            `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`,
-        )
-        .join("");
-  };
-  fillPartners();
-  root.querySelector("#partner-search").oninput = fillPartners;
-  root.querySelector("#workspace-kind").onchange = (e) => {
-    state.partnerKind = e.target.value;
-    state.partnerID = "";
-    state.agreementID = "";
-    state.agreementPartnerID = "";
-    renderEntries(root);
-  };
-  partnerSelect.onchange = (e) => {
-    state.partnerID = e.target.value;
-    state.agreementID = "";
-    state.agreementPartnerID = "";
-    renderEntries(root);
-  };
+  if (partnerSelect) {
+    const fillPartners = () => {
+      const term = root
+        .querySelector("#partner-search")
+        .value.trim()
+        .toLocaleLowerCase("ru");
+      partnerSelect.innerHTML =
+        '<option value="">— Выберите —</option>' +
+        state.partners
+          .filter(
+            (p) =>
+              p.partner_kind === state.partnerKind &&
+              (p.id === state.partnerID ||
+                p.name.toLocaleLowerCase("ru").includes(term)),
+          )
+          .map(
+            (p) =>
+              `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`,
+          )
+          .join("");
+    };
+    fillPartners();
+    root.querySelector("#partner-search").oninput = fillPartners;
+    root.querySelector("#workspace-kind").onchange = (e) => {
+      state.partnerKind = e.target.value;
+      state.partnerID = "";
+      state.agreementID = "";
+      state.agreementPartnerID = "";
+      renderEntries(root);
+    };
+    partnerSelect.onchange = (e) => {
+      state.partnerID = e.target.value;
+      state.agreementID = "";
+      state.agreementPartnerID = "";
+      renderEntries(root);
+    };
+  }
   root.querySelector("#workspace-agreement").onchange = (e) => {
     state.agreementID = e.target.value;
     renderEntries(root);

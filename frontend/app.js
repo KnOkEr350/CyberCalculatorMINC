@@ -5,6 +5,7 @@ const state = {
   me: null,
   categories: [],
   partners: [],
+  itCompanies: [],
   agreements: [],
   regionalAuthorities: [],
   view: "dashboard",
@@ -212,7 +213,10 @@ function render() {
   if (
     state.me.role !== "admin" &&
     (!state.me.entity_type ||
-      (state.me.entity_type === "edu_institution" && !state.me.partner_id))
+      (state.me.entity_type === "edu_institution" && !state.me.partner_id) ||
+      (state.me.role === "user" &&
+        state.me.entity_type === "organization" &&
+        !state.me.it_company_id))
   ) {
     app.appendChild(
       el(
@@ -377,6 +381,9 @@ function openPasswordDialog() {
 
 async function renderDashboard(root) {
   root.appendChild(el(`<div class="muted">Загрузка дашборда…</div>`));
+  const fixedEducationPartner =
+    state.me.role === "user" && state.me.entity_type === "edu_institution";
+  if (fixedEducationPartner) state.partnerID = state.me.partner_id || "";
   let d;
   try {
     d = await api(
@@ -473,6 +480,13 @@ async function renderDashboard(root) {
         (Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 100,
       )
     : 0;
+  const selectedPartner = state.partners.find(
+    (partner) => partner.id === state.partnerID,
+  );
+  const aggregateDashboard = isStaffUser() && !state.partnerID;
+  const partnerFilter = fixedEducationPartner
+    ? `<div class="field"><label>Учебное заведение</label><input value="${escapeHTML(selectedPartner?.name || "Назначенное учебное заведение")}" readonly></div>`
+    : `<div class="field"><label for="dash-partner">Учебное заведение</label><select id="dash-partner"><option value="">Все учебные заведения</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select></div>`;
 
   root.innerHTML = `
     <section class="page-heading">
@@ -484,20 +498,20 @@ async function renderDashboard(root) {
         <h2 style="margin:0">Показатели</h2>
         <div class="dashboard-filters">
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
-          <div class="field"><label for="dash-partner">Партнёр</label><select id="dash-partner"><option value="">Все доступные партнёры</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select></div>
+          ${partnerFilter}
           ${
-            isStaffUser()
+            aggregateDashboard
               ? `<div class="field"><label aria-hidden="true">Целевая сумма</label><button class="btn secondary" id="set-target">Задать целевую сумму (3%)</button></div>`
               : ""
           }
         </div>
       </div>
       <div class="grid cols-3" style="margin-top:14px">
-        <div class="stat"><div class="label">Моя целевая сумма (3% от льгот)</div><div class="value">${
-          d.target_amount_rub != null
-            ? fmtMoney(d.target_amount_rub)
-            : "не задана"
-        }</div></div>
+        ${
+          aggregateDashboard
+            ? `<div class="stat"><div class="label">Общая целевая сумма (3% от льгот)</div><div class="value">${d.target_amount_rub != null ? fmtMoney(d.target_amount_rub) : "не задана"}</div></div>`
+            : `<div class="stat"><div class="label">Учебное заведение</div><div class="value">${escapeHTML(selectedPartner?.name || "не выбрано")}</div></div>`
+        }
         <div class="stat"><div class="label">План: все расчёты, руб.</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
         <div class="stat"><div class="label">Факт: все расчёты, руб.</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
       </div>
@@ -536,11 +550,13 @@ async function renderDashboard(root) {
       e.target.reportValidity();
     }
   };
-  root.querySelector("#dash-partner").onchange = (e) => {
-    state.partnerID = e.target.value;
-    root.innerHTML = "";
-    renderDashboard(root);
-  };
+  const dashboardPartner = root.querySelector("#dash-partner");
+  if (dashboardPartner)
+    dashboardPartner.onchange = (e) => {
+      state.partnerID = e.target.value;
+      root.innerHTML = "";
+      renderDashboard(root);
+    };
   const targetBtn = root.querySelector("#set-target");
   if (targetBtn) {
     targetBtn.onclick = async () => {
@@ -1142,6 +1158,7 @@ async function renderAdminTab(box, tab) {
 }
 
 async function renderAdminUsers(box) {
+  state.itCompanies = (await api("/it-companies")) || [];
   box.innerHTML = `<div class="section-intro"><h2>Пользователи</h2></div><div class="card"><h2>Новый пользователь</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
@@ -1149,8 +1166,8 @@ async function renderAdminUsers(box) {
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select><div class="field-hint">Модератор не управляет пользователями и настройками.</div></div>
-      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">Представитель ИТ-организации</option><option value="edu_institution">Представитель учебного заведения</option></select></div>
-      <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(
+      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div>
+      <div class="field" id="u-partner-field" hidden><label id="u-partner-label">Учебное заведение *</label><select id="u-partner"><option value="">Выберите учебное заведение</option>${(Array.isArray(
         state.partners,
       )
         ? state.partners
@@ -1161,6 +1178,7 @@ async function renderAdminUsers(box) {
             `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`,
         )
         .join("")}</select></div>
+      <div class="field" id="u-company-field"><label id="u-company-label">ИТ-компания *</label><select id="u-company"><option value="">Выберите ИТ-компанию</option>${state.itCompanies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
     </div>
     <button type="submit" class="btn" id="u-create">Создать</button>
     <div class="error" id="u-error" style="display:none"></div>
@@ -1178,10 +1196,15 @@ async function renderAdminUsers(box) {
   const entitySelect = box.querySelector("#u-entity");
   const roleSelect = box.querySelector("#u-role");
   const syncUserType = () => {
-    box.querySelector("#u-partner-field").style.display =
-      entitySelect.value === "edu_institution" ? "block" : "none";
-    if (entitySelect.value !== "edu_institution")
+    const education = entitySelect.value === "edu_institution";
+    box.querySelector("#u-partner-field").hidden = !education;
+    box.querySelector("#u-company-field").hidden = education;
+    const companyRequired = roleSelect.value === "user";
+    box.querySelector("#u-partner-label").textContent = "Учебное заведение *";
+    box.querySelector("#u-company-label").textContent = `ИТ-компания${companyRequired ? " *" : ""}`;
+    if (!education)
       box.querySelector("#u-partner").value = "";
+    else box.querySelector("#u-company").value = "";
   };
   entitySelect.onchange = syncUserType;
   roleSelect.onchange = syncUserType;
@@ -1226,6 +1249,21 @@ async function renderAdminUsers(box) {
         "Добавьте строчную и заглавную буквы, цифру и специальный символ",
       );
     }
+    if (
+      entitySelect.value === "edu_institution" ||
+      roleSelect.value === "user"
+    ) {
+      const assignmentInput = entitySelect.value === "edu_institution"
+        ? box.querySelector("#u-partner")
+        : box.querySelector("#u-company");
+      if (!assignmentInput.value)
+        mark(
+          assignmentInput,
+          entitySelect.value === "edu_institution"
+            ? "Выберите учебное заведение"
+            : "Выберите ИТ-компанию",
+        );
+    }
     if (firstInvalid) {
       firstInvalid.focus();
       return;
@@ -1236,6 +1274,7 @@ async function renderAdminUsers(box) {
     createButton.textContent = "Создаём…";
     try {
       const partnerValue = box.querySelector("#u-partner").value;
+      const companyValue = box.querySelector("#u-company").value;
       await api("/admin/users", {
         method: "POST",
         body: JSON.stringify({
@@ -1245,6 +1284,7 @@ async function renderAdminUsers(box) {
           role: box.querySelector("#u-role").value,
           entity_type: entitySelect.value,
           partner_id: partnerValue || null,
+          it_company_id: companyValue || null,
         }),
       });
       showToast("Пользователь создан", "success");
@@ -1280,11 +1320,11 @@ async function renderAdminUsers(box) {
         ? `Найдено пользователей: ${users.length}`
         : `Всего пользователей: ${users.length}`;
       listBox.innerHTML = users.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Организация</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
           <tbody>${users
             .map(
               (u) => `<tr>
-            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
+            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.entity_type === "edu_institution" ? state.partners.find((partner) => partner.id === u.partner_id)?.name || "Учебное заведение не назначено" : state.itCompanies.find((company) => company.id === u.it_company_id)?.name || "ИТ-компания не назначена")}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
             <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
             <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
           </tr>`,

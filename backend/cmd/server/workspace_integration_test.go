@@ -54,7 +54,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	newClient := func() *http.Client { jar, _ := cookiejar.New(nil); return &http.Client{Jar: jar} }
-	admin, partnerClient := newClient(), newClient()
+	admin, partnerClient, companyClient := newClient(), newClient(), newClient()
 	call := func(client *http.Client, method, path string, body interface{}, want int) []byte {
 		t.Helper()
 		var data []byte
@@ -84,6 +84,27 @@ func TestWorkspaceIntegration(t *testing.T) {
 		return m
 	}
 	call(admin, "POST", "/auth/login", map[string]string{"email": email, "password": password}, 200)
+	itCompany := object(call(admin, "POST", "/it-companies", map[string]interface{}{
+		"name":                "Тестовая ИТ-компания " + stamp,
+		"inn":                 "7736050003",
+		"ogrn":                "1027700070518",
+		"registry_updated_at": time.Now().Format("2006-01-02"),
+		"source_url":          "https://www.gosuslugi.ru/itorgs",
+	}, 201))
+	itCompanyID := itCompany["id"].(string)
+	companyEmail := "company" + stamp + "@workspace.test"
+	companyUser := map[string]interface{}{
+		"email": companyEmail, "password": password, "full_name": "Представитель ИТ-компании",
+		"role": "user", "entity_type": "organization",
+	}
+	call(admin, "POST", "/admin/users", companyUser, 400)
+	companyUser["it_company_id"] = itCompanyID
+	call(admin, "POST", "/admin/users", companyUser, 201)
+	call(companyClient, "POST", "/auth/login", map[string]string{"email": companyEmail, "password": password}, 200)
+	companyProfile := object(call(companyClient, "GET", "/auth/me", nil, 200))
+	if companyProfile["it_company_id"] != itCompanyID || companyProfile["partner_id"] != nil {
+		t.Fatal("IT company assignment is missing or mixed with an educational institution")
+	}
 	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 5000}, 200)
 	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 6000}, 200)
 	adminDashboard := object(call(admin, "GET", "/dashboard?report_year=2026", nil, 200))

@@ -205,10 +205,10 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	var user models.User
-	var entityType, partnerID sql.NullString
-	err := h.DB.QueryRowContext(r.Context(), `SELECT id, email, full_name, role, entity_type, partner_id, is_active, created_at
+	var entityType, partnerID, itCompanyID sql.NullString
+	err := h.DB.QueryRowContext(r.Context(), `SELECT id, email, full_name, role, entity_type, partner_id, it_company_id, is_active, created_at
 		FROM users WHERE id = $1`, u.ID).
-		Scan(&user.ID, &user.Email, &user.FullName, &user.Role, &entityType, &partnerID, &user.IsActive, &user.CreatedAt)
+		Scan(&user.ID, &user.Email, &user.FullName, &user.Role, &entityType, &partnerID, &itCompanyID, &user.IsActive, &user.CreatedAt)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сервера")
 		return
@@ -219,6 +219,10 @@ func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request, u middleware.A
 	if partnerID.Valid {
 		p := partnerID.String
 		user.PartnerID = &p
+	}
+	if itCompanyID.Valid {
+		id := itCompanyID.String
+		user.ITCompanyID = &id
 	}
 	if err := h.DB.QueryRowContext(r.Context(), `SELECT mfa_secret IS NOT NULL FROM users WHERE id=$1`, u.ID).Scan(&user.MFAEnabled); err != nil {
 		middleware.WriteError(w, 500, "ошибка сервера")

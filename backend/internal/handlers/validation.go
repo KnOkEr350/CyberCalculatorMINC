@@ -80,8 +80,22 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 			}
 		}
 	}
+	if req.ITCompanyID != nil {
+		trimmed := strings.TrimSpace(*req.ITCompanyID)
+		if trimmed == "" {
+			req.ITCompanyID = nil
+		} else {
+			req.ITCompanyID = &trimmed
+			if req.EntityType != string(models.EntityOrganization) {
+				return fmt.Errorf("ИТ-компанию можно назначить только представителю ИТ-компании")
+			}
+		}
+	}
 	if req.EntityType == string(models.EntityEduInst) && req.PartnerID == nil {
-		return fmt.Errorf("для образовательной организации необходимо выбрать партнёра")
+		return fmt.Errorf("для образовательной организации необходимо выбрать учебное заведение")
+	}
+	if req.Role == string(models.RoleUser) && req.EntityType == string(models.EntityOrganization) && req.ITCompanyID == nil {
+		return fmt.Errorf("для представителя ИТ-компании необходимо выбрать ИТ-компанию")
 	}
 	return nil
 }

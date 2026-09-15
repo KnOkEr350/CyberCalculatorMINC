@@ -39,8 +39,8 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 		want bool
 	}{
 		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, true},
-		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, false},
-		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
+		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, true},
+		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, true},
 		{"moderator", middleware.AuthUser{Role: models.RoleModerator}, true},
 		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, true},
 		{"IT organization", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, false},
@@ -62,8 +62,8 @@ func TestITCompanyDirectoryAccess(t *testing.T) {
 		want bool
 	}{
 		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, true},
-		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, false},
-		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
+		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, true},
+		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, true},
 		{"IT organization moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}, false},
 		{"education moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst}, true},
 		{"unassigned moderator", middleware.AuthUser{Role: models.RoleModerator}, false},
@@ -83,7 +83,7 @@ func TestITCompanyReadAccess(t *testing.T) {
 	for _, role := range []models.Role{models.RoleAdmin, models.RoleModerator, models.RoleUser} {
 		for _, entity := range []models.EntityType{models.EntityOrganization, models.EntityEduInst, ""} {
 			u := middleware.AuthUser{Role: role, EntityType: entity}
-			want := entity == models.EntityEduInst || (role == models.RoleUser && entity == models.EntityOrganization)
+			want := role == models.RoleAdmin || entity == models.EntityEduInst || (role == models.RoleUser && entity == models.EntityOrganization)
 			if got := canViewITCompanies(u); got != want {
 				t.Fatalf("%s / %s: read access=%v, want %v", role, entity, got, want)
 			}
