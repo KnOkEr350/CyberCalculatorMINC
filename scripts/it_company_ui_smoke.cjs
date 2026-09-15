@@ -24,9 +24,11 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     const page = await browser.newPage();
     const errors = [];
     const searches = [];
+    const requests = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url());
+      requests.push(url.pathname);
       let body = [], status = 200, headers = {};
       if (url.pathname === '/api/auth/me') { status = 401; body = { error: 'test login' }; }
       else if (url.pathname === '/api/dashboard') { status = 500; body = { error: 'unused fixture' }; }
@@ -69,20 +71,30 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     await page.waitForFunction(() => document.querySelectorAll('#it-list tbody tr').length === 500);
     assert.deepEqual(searches, ['Киберпротект']);
     for (const role of ['admin', 'moderator']) {
+      requests.length = 0;
       await page.evaluate(role => { state.me.role = role; state.view = 'admin'; render(); }, role);
-      if (role === 'moderator') await page.locator('#partner-list table').waitFor();
-      await page.locator('.admin-nav [data-t="it-companies"]').click();
+      assert.equal(await page.locator('.admin-nav [data-t="partners"]').count(), 0);
+      assert.equal(await page.locator('.admin-nav [data-t="it-companies"].active').count(), 1);
       await page.locator('#it-add').waitFor();
       await page.locator('#it-list tbody tr').first().waitFor();
+      await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'partners'));
+      await page.getByText('Справочник учебных заведений недоступен для этого профиля', { exact: true }).waitFor();
+      await page.evaluate(() => renderPartnerDirectory(document.querySelector('#admin-content')));
+      assert.equal(requests.some(p => ['/api/directory', '/api/directory/stats', '/api/regional-authorities'].includes(p)), false);
     }
-    await page.evaluate(() => { state.me.role = 'moderator'; state.me.entity_type = 'organization'; state.view = 'admin'; render(); });
-    assert.equal(await page.locator('.admin-nav [data-t="it-companies"]').count(), 0);
-    assert.equal(await page.locator('.admin-nav [data-t="partners"]').count(), 1);
-    await page.locator('#partner-list table').waitFor();
-    await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'it-companies'));
-    await page.getByText('Реестр ИТ-компаний недоступен для этого профиля', { exact: true }).waitFor();
+    for (const role of ['admin', 'moderator']) {
+      requests.length = 0;
+      await page.evaluate(role => { state.me.role = role; state.me.entity_type = 'organization'; state.view = 'admin'; render(); }, role);
+      assert.equal(await page.locator('.admin-nav [data-t="it-companies"]').count(), 0);
+      assert.equal(await page.locator('.admin-nav [data-t="partners"].active').count(), 1);
+      await page.locator('#partner-list table').waitFor();
+      await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'it-companies'));
+      await page.getByText('Реестр ИТ-компаний недоступен для этого профиля', { exact: true }).waitFor();
+      await page.evaluate(() => renderITCompanies(document.querySelector('#admin-content')));
+      assert.equal(requests.some(p => p.startsWith('/api/it-companies')), false);
+    }
     assert.deepEqual(errors, []);
-    console.log('PASS: education read access, manager controls, IT moderator visibility, 650-row pagination, INN filter, registry outage recovery');
+    console.log('PASS: education read access, counterparty directories for all admin/moderator profiles, blocked direct views without API requests, 650-row pagination, INN filter, registry outage recovery');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

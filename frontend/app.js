@@ -288,7 +288,6 @@ function renderLayout() {
   const isAdmin = state.me.role === "admin";
   const isModerator = state.me.role === "moderator";
   const isManager = isAdmin || isModerator;
-  const isITOrganization = !isManager && state.me.entity_type === "organization";
   const profileLabel =
     state.me.entity_type === "organization"
       ? "ИТ-организация"
@@ -296,7 +295,7 @@ function renderLayout() {
   const allowedViews = new Set(["dashboard", "entries"]);
   if (isManager) allowedViews.add("admin");
   else {
-    if (!isITOrganization) allowedViews.add("partners");
+    if (canReviewEducationDirectory()) allowedViews.add("partners");
     if (canViewITCompanies()) allowedViews.add("it-companies");
   }
   if (!allowedViews.has(state.view)) state.view = "dashboard";
@@ -306,7 +305,7 @@ function renderLayout() {
       <nav>
         <button data-view="dashboard">Дашборд</button>
         <button data-view="entries">План / Факт</button>
-        ${!isManager && !isITOrganization ? '<button data-view="partners">Учебные заведения</button>' : ""}
+        ${!isManager && canReviewEducationDirectory() ? '<button data-view="partners">Учебные заведения</button>' : ""}
         ${!isManager && canViewITCompanies() ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
         ${isManager ? '<button data-view="admin">Админ. панель</button>' : ""}
       </nav>
@@ -1098,9 +1097,7 @@ async function wireAttachSection(root, entryId) {
 
 async function renderAdmin(root) {
   const isAdmin = state.me.role === "admin";
-  const isModerator = state.me.role === "moderator";
-  const showEducationDirectory =
-    isModerator || state.me.entity_type === "organization";
+  const showEducationDirectory = canReviewEducationDirectory();
   const showITDirectory = canViewITCompanies();
   const initialDirectoryTab = showEducationDirectory ? "partners" : "it-companies";
   root.innerHTML = `<section class="page-heading">

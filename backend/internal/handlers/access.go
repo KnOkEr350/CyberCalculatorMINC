@@ -24,16 +24,12 @@ func canViewITCompanies(u middleware.AuthUser) bool {
 	return canManageITCompanies(u) || (u.Role == models.RoleUser && u.EntityType == models.EntityEduInst)
 }
 
-// Administrators work with the counterparty directory: an IT-organization
-// administrator reviews educational organizations, while an educational-
-// organization administrator reviews accredited IT companies. IT-organization
-// moderators do not need the IT-company directory. The user-role branches
+// Administrators and moderators work with the counterparty directory:
+// IT-organization profiles review educational organizations, while educational-
+// organization profiles review accredited IT companies. The user-role branches
 // preserve the existing non-administrative workspaces.
 func canReviewEducationDirectory(u middleware.AuthUser) bool {
-	if u.Role == models.RoleModerator {
-		return true
-	}
-	if u.Role == models.RoleAdmin {
+	if u.Role == models.RoleAdmin || u.Role == models.RoleModerator {
 		return u.EntityType == models.EntityOrganization
 	}
 	return u.EntityType == models.EntityEduInst

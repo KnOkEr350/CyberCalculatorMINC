@@ -41,7 +41,9 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, true},
 		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, false},
 		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
-		{"moderator", middleware.AuthUser{Role: models.RoleModerator}, true},
+		{"IT organization moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}, true},
+		{"education moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst}, false},
+		{"unassigned moderator", middleware.AuthUser{Role: models.RoleModerator}, false},
 		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, true},
 		{"IT organization", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, false},
 		{"unassigned", middleware.AuthUser{Role: models.RoleUser}, false},
@@ -52,6 +54,31 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 				t.Fatalf("got %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestEducationDirectoryHandlersRejectEducationManagers(t *testing.T) {
+	h := PartnerHandlers{}
+	for _, role := range []models.Role{models.RoleAdmin, models.RoleModerator} {
+		u := middleware.AuthUser{Role: role, EntityType: models.EntityEduInst}
+		for _, handler := range []struct {
+			name   string
+			handle func(http.ResponseWriter, *http.Request, middleware.AuthUser)
+		}{
+			{"list", h.Directory}, {"stats", h.DirectoryStats},
+			{"template", h.DirectoryTemplate}, {"import", h.ImportDirectory},
+			{"update", func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+				h.UpdateDirectory(w, r, u, "test-directory")
+			}},
+		} {
+			t.Run(string(role)+"/"+handler.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				handler.handle(w, httptest.NewRequest("GET", "/directory", nil), u)
+				if w.Code != http.StatusForbidden {
+					t.Fatalf("status=%d, want 403", w.Code)
+				}
+			})
+		}
 	}
 }
 

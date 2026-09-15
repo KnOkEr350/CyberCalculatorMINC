@@ -15,8 +15,7 @@ function canViewITCompanies() {
 }
 
 function canReviewEducationDirectory() {
-  if (state.me?.role === "moderator") return true;
-  if (state.me?.role === "admin")
+  if (state.me?.role === "admin" || state.me?.role === "moderator")
     return state.me?.entity_type === "organization";
   return state.me?.entity_type === "edu_institution";
 }
@@ -296,7 +295,7 @@ async function renderPartnerEntries(root) {
     <div class="field"><label for="partner-search">Поиск своего партнёра</label><input id="partner-search" placeholder="Часть названия"></div>
     <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
-  </div>${state.me.role === "admin" || state.me.role === "moderator" || state.me.entity_type === "edu_institution" ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="muted">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)}. ${writable ? "Можно вносить план/факт за выбранный год." : "Просмотр доступен, но для ввода нужен статус «Действует» и период, охватывающий выбранный год."}` : "Сначала выберите партнёра и соглашение. Нового партнёра добавляет сотрудник Киберпротекта."}</p></div>
+  </div>${canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="muted">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)}. ${writable ? "Можно вносить план/факт за выбранный год." : "Просмотр доступен, но для ввода нужен статус «Действует» и период, охватывающий выбранный год."}` : "Сначала выберите партнёра и соглашение. Нового партнёра добавляет сотрудник Киберпротекта."}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     <div class="field"><label>4. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
@@ -790,6 +789,10 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
 }
 
 async function renderPartnerDirectory(root, embedded = false) {
+  if (!canReviewEducationDirectory()) {
+    root.innerHTML = '<div class="card error-state">Справочник учебных заведений недоступен для этого профиля</div>';
+    return;
+  }
   state.regionalAuthorities = await api("/regional-authorities");
   root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Учебные заведения и соглашения</h2><p>Проверяйте официальный справочник, добавляйте партнёров и управляйте соглашениями.</p></div>' : '<section class="page-heading"><div><span class="eyebrow">Справочники</span><h1>Учебные заведения и соглашения</h1><p>Новые партнёры создаются только из записей, подтверждённых официальным реестром лицензий.</p></div></section>'}
   <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><p class="muted">Данные, найденные автоматически, отмечены жёлтым статусом «Требует проверки». Проверьте ИНН и ОГРН, при необходимости исправьте реквизиты и подтвердите запись. Для создания партнёра дополнительно нужны действующие организация и лицензия.</p></div>
