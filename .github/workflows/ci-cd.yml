@@ -187,13 +187,15 @@ jobs:
             --command "INSERT INTO education_directory(
               name,partner_kind,region,source,inn,ogrn,license_number,
               license_status,institution_status,registry_record_id,source_url,
-              registry_updated_at,verified_at,verification_status
+              registry_updated_at,verified_at,verification_status,
+              program_codes,programs_source_url,programs_checked_at
             ) VALUES (
               'CI test university','vuz','г. Москва','CI verified fixture',
               '7707083893','1027700132195','CI-LICENSE-1','active','active',
               'ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',
               'https://islod.obrnadzor.gov.ru/rlic/details/ci-fixture',
-              CURRENT_DATE,now(),'verified'
+              CURRENT_DATE,now(),'verified',ARRAY['09.03.01'],
+              'https://ci.example.invalid/sveden/education/',now()
             ) RETURNING id;")"
           [[ "$directory_id" =~ ^[0-9a-f-]{36}$ ]]
 
