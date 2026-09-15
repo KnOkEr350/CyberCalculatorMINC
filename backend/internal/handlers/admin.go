@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"cybercalc/internal/auth"
 	"cybercalc/internal/middleware"
@@ -85,12 +87,19 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 }
 
 func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
+	q := strings.Join(strings.Fields(r.URL.Query().Get("q")), " ")
+	if utf8.RuneCountInString(q) > 200 {
+		middleware.WriteError(w, http.StatusBadRequest, "поисковый запрос не должен превышать 200 символов")
+		return
+	}
 	page, ok := pageClause(w, r)
 	if !ok {
 		return
 	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, email, full_name, role, entity_type, partner_id, is_active, created_at
-		FROM users ORDER BY created_at,id`+page)
+		FROM users
+		WHERE ($1='' OR POSITION(lower($1) IN lower(email)) > 0 OR POSITION(lower($1) IN lower(full_name)) > 0)
+		ORDER BY created_at,id`+page, q)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return

@@ -182,6 +182,19 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(admin, "PUT", "/agreements/"+groupID, groupAgreement, 200)
 	partnerEmail := "partner" + stamp + "@workspace.test"
 	call(admin, "POST", "/admin/users", map[string]interface{}{"email": partnerEmail, "password": password, "full_name": "Представитель Вуза", "role": "user", "entity_type": "edu_institution", "partner_id": p1}, 201)
+	usersByName := call(admin, "GET", "/admin/users?q="+url.QueryEscape("Представитель Вуза"), nil, 200)
+	if !bytes.Contains(usersByName, []byte(partnerEmail)) || bytes.Contains(usersByName, []byte(email)) {
+		t.Fatal("admin user search by full name returned the wrong users")
+	}
+	usersByEmail := call(admin, "GET", "/admin/users?q="+url.QueryEscape(strings.ToUpper(partnerEmail)), nil, 200)
+	if !bytes.Contains(usersByEmail, []byte(partnerEmail)) {
+		t.Fatal("admin user search by email must be case-insensitive")
+	}
+	usersByWildcard := call(admin, "GET", "/admin/users?q="+url.QueryEscape("%_"), nil, 200)
+	if bytes.Contains(usersByWildcard, []byte(partnerEmail)) || bytes.Contains(usersByWildcard, []byte(email)) {
+		t.Fatal("admin user search must treat SQL wildcard characters literally")
+	}
+	call(admin, "GET", "/admin/users?q="+strings.Repeat("я", 201), nil, 400)
 	call(partnerClient, "POST", "/auth/login", map[string]string{"email": partnerEmail, "password": password}, 200)
 	call(partnerClient, "POST", "/auth/entity-type", map[string]string{"entity_type": "organization"}, 403)
 	call(partnerClient, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("foreign")}, 403)

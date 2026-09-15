@@ -179,6 +179,7 @@ label { margin-bottom: 6px; color: var(--text); font-size: 12px; font-weight: 65
 .section-intro h2 { margin: 0 0 4px; color: var(--navy); font-size: 22px; }
 .section-intro p { margin: 0; color: var(--muted); }
 .directory-search { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; margin-top: 18px; }
+.directory-search.user-search { grid-template-columns: minmax(220px, 1fr) auto; }
 .directory-search .field { margin: 0; }
 .count-badge { padding: 5px 9px; border-radius: 99px; background: var(--blue-soft); color: var(--accent-2); font-size: 11px; font-weight: 700; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 38px 20px; color: var(--muted); text-align: center; }
@@ -300,7 +301,7 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
   .container { padding-top: 28px; }
   .page-heading h1 { font-size: 30px; }
   .page-heading p { font-size: 13px; }
-  .admin-nav, .directory-search { grid-template-columns: 1fr; }
+  .admin-nav, .directory-search, .directory-search.user-search { grid-template-columns: 1fr; }
   .card { padding: 18px 16px; }
   .tabs { width: 100%; overflow-x: auto; }
   .tabs button { flex: 1 0 auto; }

@@ -1173,7 +1173,14 @@ async function renderAdminUsers(box) {
     <div class="error" id="u-error" style="display:none"></div>
     </form>
   </div>
-  <div class="card"><h2>Пользователи</h2><div id="u-list">Загрузка…</div></div>`;
+  <div class="card"><h2>Пользователи</h2>
+    <form id="u-search-form" class="directory-search user-search" role="search">
+      <div class="field"><label for="u-search">Поиск пользователя</label><input id="u-search" type="search" maxlength="200" autocomplete="off" placeholder="Введите ФИО или email"></div>
+      <div class="flex"><button class="btn secondary" type="submit" id="u-find">Найти</button><button class="btn secondary" type="button" id="u-search-clear" hidden>Сбросить</button></div>
+    </form>
+    <p class="muted" id="u-search-status" aria-live="polite"></p>
+    <div id="u-list" class="loading-state"><span class="spinner"></span>Загрузка пользователей…</div>
+  </div>`;
 
   const entitySelect = box.querySelector("#u-entity");
   const roleSelect = box.querySelector("#u-role");
@@ -1258,42 +1265,80 @@ async function renderAdminUsers(box) {
     }
   };
 
-  const users = (await api("/admin/users")) || [];
+  const searchInput = box.querySelector("#u-search");
+  const searchStatus = box.querySelector("#u-search-status");
+  const clearSearch = box.querySelector("#u-search-clear");
   const listBox = box.querySelector("#u-list");
-  listBox.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
-    <tbody>${users
-      .map(
-        (u) => `<tr>
-      <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
-      <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
-      <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
-    </tr>`,
-      )
-      .join("")}</tbody></table></div>`;
-  listBox.querySelectorAll("button[data-id]").forEach((b) => {
-    b.onclick = async () => {
-      b.disabled = true;
-      try {
-        await api(`/admin/users/${b.dataset.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ is_active: b.dataset.active !== "true" }),
-        });
-        showToast("Статус пользователя обновлён", "success");
-        await renderAdminTab(box, "users");
-      } catch (e) {
-        showToast(e.message);
-        b.disabled = false;
-      }
-    };
-  });
-  listBox.querySelectorAll("[data-profile]").forEach(
-    (b) =>
-      (b.onclick = () =>
-        openUserProfile(
-          users.find((u) => u.id === b.dataset.profile),
-          () => renderAdminUsers(box),
-        )),
-  );
+  let requestGeneration = 0;
+  const loadUsers = async () => {
+    const generation = ++requestGeneration;
+    const query = searchInput.value.trim().replace(/\s+/g, " ");
+    searchInput.value = query;
+    clearSearch.hidden = !query;
+    searchStatus.textContent = "";
+    listBox.className = "loading-state";
+    listBox.innerHTML = '<span class="spinner"></span>Поиск пользователей…';
+    try {
+      const users =
+        (await api(`/admin/users?q=${encodeURIComponent(query)}`)) || [];
+      if (generation !== requestGeneration) return;
+      listBox.className = "";
+      searchStatus.textContent = query
+        ? `Найдено пользователей: ${users.length}`
+        : `Всего пользователей: ${users.length}`;
+      listBox.innerHTML = users.length
+        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+          <tbody>${users
+            .map(
+              (u) => `<tr>
+            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
+            <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
+            <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
+          </tr>`,
+            )
+            .join("")}</tbody></table></div>`
+        : `<div class="empty-state"><b>Пользователи не найдены</b><span>Проверьте ФИО или email и попробуйте снова.</span></div>`;
+      listBox.querySelectorAll("button[data-id]").forEach((button) => {
+        button.onclick = async () => {
+          button.disabled = true;
+          try {
+            await api(`/admin/users/${button.dataset.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                is_active: button.dataset.active !== "true",
+              }),
+            });
+            showToast("Статус пользователя обновлён", "success");
+            await loadUsers();
+          } catch (error) {
+            showToast(error.message);
+            button.disabled = false;
+          }
+        };
+      });
+      listBox.querySelectorAll("[data-profile]").forEach((button) => {
+        button.onclick = () =>
+          openUserProfile(
+            users.find((user) => user.id === button.dataset.profile),
+            loadUsers,
+          );
+      });
+    } catch (error) {
+      if (generation !== requestGeneration) return;
+      listBox.className = "error-state";
+      listBox.innerHTML = `<b>Не удалось найти пользователей</b><span>${escapeHTML(error.message)}</span>`;
+    }
+  };
+  box.querySelector("#u-search-form").onsubmit = (event) => {
+    event.preventDefault();
+    loadUsers();
+  };
+  clearSearch.onclick = () => {
+    searchInput.value = "";
+    searchInput.focus();
+    loadUsers();
+  };
+  await loadUsers();
 }
 
 async function renderAdminSettings(box) {
