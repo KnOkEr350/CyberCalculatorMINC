@@ -70,6 +70,7 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     assert.deepEqual(searches, ['Киберпротект']);
     for (const role of ['admin', 'moderator']) {
       await page.evaluate(role => { state.me.role = role; state.view = 'admin'; render(); }, role);
+      if (role === 'moderator') await page.locator('#partner-list table').waitFor();
       await page.locator('.admin-nav [data-t="it-companies"]').click();
       await page.locator('#it-add').waitFor();
       await page.locator('#it-list tbody tr').first().waitFor();
@@ -77,6 +78,7 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     await page.evaluate(() => { state.me.role = 'moderator'; state.me.entity_type = 'organization'; state.view = 'admin'; render(); });
     assert.equal(await page.locator('.admin-nav [data-t="it-companies"]').count(), 0);
     assert.equal(await page.locator('.admin-nav [data-t="partners"]').count(), 1);
+    await page.locator('#partner-list table').waitFor();
     await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'it-companies'));
     await page.getByText('Реестр ИТ-компаний недоступен для этого профиля', { exact: true }).waitFor();
     assert.deepEqual(errors, []);

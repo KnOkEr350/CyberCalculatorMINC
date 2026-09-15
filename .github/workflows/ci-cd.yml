@@ -306,6 +306,7 @@ jobs:
           base_url="http://127.0.0.1:${CI_HTTP_PORT}"
           admin_cookie="/tmp/cybercalc-ci-cookies"
           moderator_cookie="/tmp/cybercalc-ci-moderator-cookies"
+          education_cookie="/tmp/cybercalc-ci-education-moderator-cookies"
 
           curl --fail --silent --show-error \
             --cookie "$admin_cookie" \
@@ -321,9 +322,23 @@ jobs:
             --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!"}' \
             "${base_url}/api/auth/login" > /dev/null
 
-          for path in admin/users admin/settings admin/logs; do
-            status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cookie "$moderator_cookie" "${base_url}/api/${path}")"
-            [[ "$status" == "403" ]]
+          expect_forbidden() {
+            local cookie="$1" method="$2" path="$3" status
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --cookie "$cookie" --request "$method" --header "X-Cybercalc-Request: 1" \
+              "${base_url}/api/${path}")"
+            [[ "$status" == "403" ]] || {
+              echo "Expected 403 for ${method} ${path}, got ${status}"
+              return 1
+            }
+          }
+
+          # IT-organization moderators cannot access the IT-company directory.
+          for path in it-companies it-companies/registry-search it-companies/template; do
+            expect_forbidden "$moderator_cookie" GET "$path"
+          done
+          for path in it-companies it-companies/import; do
+            expect_forbidden "$moderator_cookie" POST "$path"
           done
 
           curl --fail --silent --show-error \
@@ -331,16 +346,40 @@ jobs:
             "${base_url}/api/admin/directory-template" \
             --output /tmp/cybercalc-directory-template.xlsx
 
+          # Registry management belongs to the educational-organization profile.
+          partner_id="$(curl --fail --silent --show-error --cookie "$admin_cookie" \
+            "${base_url}/api/partners" \
+            | jq --exit-status --raw-output '.[] | select(.name == "CI test university") | .id')"
+          [[ "$partner_id" =~ ^[0-9a-f-]{36}$ ]]
+          curl --fail --silent --show-error \
+            --cookie "$admin_cookie" \
+            --header "X-Cybercalc-Request: 1" \
+            --header "Content-Type: application/json" \
+            --data "$(jq --compact-output --null-input --arg partner "$partner_id" '{email:"ci-education-moderator@example.invalid",password:"ModeratorPass1!",full_name:"CI Education Moderator",role:"moderator",entity_type:"edu_institution",partner_id:$partner}')" \
+            "${base_url}/api/admin/users" > /dev/null
+          curl --fail --silent --show-error \
+            --cookie-jar "$education_cookie" \
+            --header "X-Cybercalc-Request: 1" \
+            --header "Content-Type: application/json" \
+            --data '{"email":"ci-education-moderator@example.invalid","password":"ModeratorPass1!"}' \
+            "${base_url}/api/auth/login" > /dev/null
+
+          for cookie in "$moderator_cookie" "$education_cookie"; do
+            for path in admin/users admin/settings admin/logs; do
+              expect_forbidden "$cookie" GET "$path"
+            done
+          done
+
           registry_date="$(date -u +%F)"
           curl --fail --silent --show-error \
-            --cookie "$moderator_cookie" \
+            --cookie "$education_cookie" \
             --header "X-Cybercalc-Request: 1" \
             --header "Content-Type: application/json" \
             --data "$(jq --compact-output --null-input --arg date "$registry_date" '{name:"CI accredited IT company",inn:"7707083893",ogrn:"1027700132195",accreditation_number:"CI-ACCREDITATION-1",registry_record_id:"ci-it-company-1",registry_updated_at:$date,source_url:"https://digital.gov.ru/ru/activity/govservices/1/"}')" \
             "${base_url}/api/it-companies" > /dev/null
 
           curl --fail --silent --show-error \
-            --cookie "$moderator_cookie" \
+            --cookie "$education_cookie" \
             "${base_url}/api/it-companies?q=CI%20accredited" \
             | jq --exit-status 'length == 1 and .[0].accreditation_status == "active"' > /dev/null
 
