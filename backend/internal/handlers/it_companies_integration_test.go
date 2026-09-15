@@ -45,6 +45,15 @@ func TestITCompanyBulkImportAndPagination(t *testing.T) {
 	}
 	user := middleware.AuthUser{ID: userID, Role: models.RoleAdmin, EntityType: models.EntityEduInst}
 	h := ITCompanyHandlers{DB: db}
+	for _, role := range []models.Role{models.RoleAdmin, models.RoleModerator, models.RoleUser} {
+		reader := middleware.AuthUser{ID: userID, Role: role, EntityType: models.EntityEduInst}
+		w := httptest.NewRecorder()
+		h.List(w, httptest.NewRequest("GET", "/it-companies?q=Компания", nil), reader)
+		var items []models.ITCompany
+		if err = json.Unmarshal(w.Body.Bytes(), &items); err != nil || w.Code != 200 || len(items) != 500 {
+			t.Fatalf("education %s: status=%d rows=%d body=%s", role, w.Code, len(items), w.Body.String())
+		}
+	}
 	for _, page := range []struct {
 		offset string
 		size   int

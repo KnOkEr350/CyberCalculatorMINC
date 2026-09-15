@@ -3,6 +3,8 @@ package handlers
 import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -62,7 +64,9 @@ func TestITCompanyDirectoryAccess(t *testing.T) {
 		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, true},
 		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, false},
 		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
-		{"moderator", middleware.AuthUser{Role: models.RoleModerator}, true},
+		{"IT organization moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}, false},
+		{"education moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst}, true},
+		{"unassigned moderator", middleware.AuthUser{Role: models.RoleModerator}, false},
 		{"IT organization user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, true},
 		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, false},
 	}
@@ -72,6 +76,48 @@ func TestITCompanyDirectoryAccess(t *testing.T) {
 				t.Fatalf("got %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestITCompanyReadAccess(t *testing.T) {
+	for _, role := range []models.Role{models.RoleAdmin, models.RoleModerator, models.RoleUser} {
+		for _, entity := range []models.EntityType{models.EntityOrganization, models.EntityEduInst, ""} {
+			u := middleware.AuthUser{Role: role, EntityType: entity}
+			want := entity == models.EntityEduInst || (role == models.RoleUser && entity == models.EntityOrganization)
+			if got := canViewITCompanies(u); got != want {
+				t.Fatalf("%s / %s: read access=%v, want %v", role, entity, got, want)
+			}
+		}
+	}
+}
+
+func TestITCompanyHandlersEnforceProfileAccess(t *testing.T) {
+	h := ITCompanyHandlers{}
+	u := middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}
+	for _, handler := range []struct {
+		name   string
+		handle func(http.ResponseWriter, *http.Request, middleware.AuthUser)
+	}{{"list", h.List}, {"search", h.RegistrySearch}, {"create", h.Create}, {"import", h.Import}, {"template", h.Template}} {
+		t.Run(handler.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			handler.handle(w, httptest.NewRequest("GET", "/it-companies", nil), u)
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("IT moderator: status=%d, want 403", w.Code)
+			}
+		})
+	}
+	reader := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}
+	for _, handler := range []func(http.ResponseWriter, *http.Request, middleware.AuthUser){h.Create, h.Import, h.Template} {
+		w := httptest.NewRecorder()
+		handler(w, httptest.NewRequest("POST", "/it-companies", nil), reader)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("education reader: write status=%d, want 403", w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	h.RegistrySearch(w, httptest.NewRequest("GET", "/it-companies/registry-search", nil), reader)
+	if w.Code != http.StatusOK {
+		t.Fatalf("education reader: search status=%d, want 200", w.Code)
 	}
 }
 func TestObligations(t *testing.T) {

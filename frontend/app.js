@@ -295,8 +295,10 @@ function renderLayout() {
       : "Учебное заведение";
   const allowedViews = new Set(["dashboard", "entries"]);
   if (isManager) allowedViews.add("admin");
-  else if (isITOrganization) allowedViews.add("it-companies");
-  else allowedViews.add("partners");
+  else {
+    if (!isITOrganization) allowedViews.add("partners");
+    if (canViewITCompanies()) allowedViews.add("it-companies");
+  }
   if (!allowedViews.has(state.view)) state.view = "dashboard";
   const wrap = el(`<div>
     <div class="topbar">
@@ -305,7 +307,7 @@ function renderLayout() {
         <button data-view="dashboard">Дашборд</button>
         <button data-view="entries">План / Факт</button>
         ${!isManager && !isITOrganization ? '<button data-view="partners">Учебные заведения</button>' : ""}
-        ${isITOrganization ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
+        ${!isManager && canViewITCompanies() ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
         ${isManager ? '<button data-view="admin">Админ. панель</button>' : ""}
       </nav>
       <div class="who">
@@ -1099,8 +1101,7 @@ async function renderAdmin(root) {
   const isModerator = state.me.role === "moderator";
   const showEducationDirectory =
     isModerator || state.me.entity_type === "organization";
-  const showITDirectory =
-    isModerator || state.me.entity_type === "edu_institution";
+  const showITDirectory = canViewITCompanies();
   const initialDirectoryTab = showEducationDirectory ? "partners" : "it-companies";
   root.innerHTML = `<section class="page-heading">
     <div><span class="eyebrow">Управление системой</span><h1>Административная панель</h1><p>${isAdmin ? "Управляйте справочниками, доступами, системными настройками и историей действий." : "Работайте со справочниками и соглашениями. Системные настройки и управление доступами доступны администратору."}</p></div>
@@ -1134,7 +1135,10 @@ async function renderAdminTab(box, tab) {
       throw new Error("Этот раздел доступен только администратору");
     if (tab === "users") return await renderAdminUsers(box);
     if (tab === "partners") return await renderPartnerDirectory(box, true);
-    if (tab === "it-companies") return await renderITCompanies(box, true);
+    if (tab === "it-companies") {
+      if (!canViewITCompanies()) throw new Error("Реестр ИТ-компаний недоступен для этого профиля");
+      return await renderITCompanies(box, true);
+    }
     if (tab === "settings") return await renderAdminSettings(box);
     if (tab === "logs") return await renderAdminLogs(box);
     throw new Error("Неизвестный раздел администрирования");

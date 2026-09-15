@@ -3,6 +3,17 @@ function isStaffUser() {
   return state.me?.role === "admin" || state.me?.role === "moderator" || state.me?.entity_type === "organization";
 }
 
+function canManageITCompanies() {
+  if (state.me?.role === "admin" || state.me?.role === "moderator")
+    return state.me?.entity_type === "edu_institution";
+  return state.me?.entity_type === "organization";
+}
+
+function canViewITCompanies() {
+  return canManageITCompanies() ||
+    (state.me?.role === "user" && state.me?.entity_type === "edu_institution");
+}
+
 function canReviewEducationDirectory() {
   if (state.me?.role === "moderator") return true;
   if (state.me?.role === "admin")
@@ -594,8 +605,13 @@ function openRegionalAuthority(authority, onSaved) {
 }
 
 async function renderITCompanies(root, embedded = false) {
-  root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Аккредитованные ИТ-компании</h2><p>Проверяйте и дополняйте реестр организаций с действующей государственной аккредитацией.</p></div>' : '<section class="page-heading"><div><span class="eyebrow">Проверка аккредитации</span><h1>Аккредитованные ИТ-компании</h1><p>Ищите компании по названию или ИНН и проверяйте действующую аккредитацию. Проверка доступна через публичный сервис ПроРеестр, обращающийся к Госуслугам.</p></div></section>'}
-  <div class="card filter-card"><div class="flex between"><div><h2>Поиск по реестру</h2><p class="muted">Для проверки реестра введите название или ИНН. В сохранённых записях также доступны ОГРН и номер аккредитации.</p></div><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Проверить на Госуслугах</a><button class="btn" id="it-add">+ Добавить компанию</button></div></div><div class="directory-search"><div class="field"><label for="it-scope">Источник поиска</label><select id="it-scope"><option value="registry">Проверка реестра Госуслуг через ПроРеестр</option><option value="saved">Сохранённые компании</option></select></div><div class="field"><label for="it-search">Поиск</label><input id="it-search" placeholder="Например, название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
+  if (!canViewITCompanies()) {
+    root.innerHTML = '<div class="card error-state">Реестр ИТ-компаний недоступен для этого профиля</div>';
+    return;
+  }
+  const writable = canManageITCompanies();
+  root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Аккредитованные ИТ-компании</h2><p>Ищите сохранённые компании и проверяйте аккредитацию по названию или ИНН.</p></div>' : '<section class="page-heading"><div><span class="eyebrow">Проверка аккредитации</span><h1>Аккредитованные ИТ-компании</h1><p>Ищите компании по названию или ИНН и проверяйте действующую аккредитацию. Проверка доступна через публичный сервис ПроРеестр, обращающийся к Госуслугам.</p></div></section>'}
+  <div class="card filter-card"><div class="flex between"><div><h2>Поиск по реестру</h2><p class="muted">Для проверки реестра введите название или ИНН. В сохранённых записях также доступны ОГРН и номер аккредитации.</p></div><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Проверить на Госуслугах</a>${writable ? '<button class="btn" id="it-add">+ Добавить компанию</button>' : ""}</div></div><div class="directory-search"><div class="field"><label for="it-scope">Источник поиска</label><select id="it-scope"><option value="saved">Сохранённые компании</option><option value="registry">Проверка реестра Госуслуг через ПроРеестр</option></select></div><div class="field"><label for="it-search">Поиск</label><input id="it-search" placeholder="Например, название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
   <div class="card"><div class="flex between"><h2>Компании с действующей аккредитацией</h2><span class="count-badge" id="it-count"></span></div><p class="muted" id="it-scope-note"></p><div id="it-list" class="loading-state"><span class="spinner"></span>Загрузка реестра…</div></div>`;
 
   let offset = 0;
@@ -609,7 +625,16 @@ async function renderITCompanies(root, embedded = false) {
     list.innerHTML = '<span class="spinner"></span>Загрузка реестра…';
     try {
       const registry = root.querySelector("#it-scope").value === "registry";
-      const query = encodeURIComponent(root.querySelector("#it-search").value.trim());
+      const searchText = root.querySelector("#it-search").value.trim();
+      if (registry && !searchText) {
+        root.querySelector("#it-count").textContent = "";
+        pagination.style.display = "none";
+        root.querySelector("#it-scope-note").textContent = "Для проверки в реестре введите название или ИНН компании.";
+        list.className = "empty-state";
+        list.textContent = "Введите название или ИНН и нажмите «Найти».";
+        return;
+      }
+      const query = encodeURIComponent(searchText);
       const result = await api(registry ? `/it-companies/registry-search?q=${query}` : `/it-companies?q=${query}&offset=${offset}`);
       const companies = registry ? result.items : result;
       if (version !== generation) return;
@@ -628,39 +653,48 @@ async function renderITCompanies(root, embedded = false) {
     } catch (error) {
       if (version !== generation) return;
       list.className = "error-state";
-      list.textContent = error.message;
+      list.innerHTML = `<span>${escapeHTML(error.message)}</span><button type="button" class="btn secondary" data-it-retry>Повторить</button><button type="button" class="btn secondary" data-it-saved>Открыть сохранённые компании</button>`;
+      list.querySelector("[data-it-retry]").onclick = load;
+      list.querySelector("[data-it-saved]").onclick = () => {
+        root.querySelector("#it-scope").value = "saved";
+        root.querySelector("#it-search").value = "";
+        offset = 0;
+        load();
+      };
     }
   };
   const search = () => { offset = 0; load(); };
   pagination.querySelector("[data-prev]").onclick = () => { offset = Math.max(0, offset - 500); load(); };
   root.querySelector("#it-find").onclick = search;
   root.querySelector("#it-scope").onchange = search;
-	const importButton = el('<button class="btn secondary" type="button">Загрузить выгрузку</button>');
-	root.querySelector("#it-add").before(importButton);
-	importButton.onclick = () => {
-		const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Загрузить ИТ-компании</h2><p>CSV в UTF-8 или XLSX, до 100 000 строк. Для действующих аккредитаций нужны сведения не старше 35 дней. Существующие записи обновятся по ИНН.</p><p><a href="/api/it-companies/template" target="_blank" rel="noopener">Скачать шаблон</a></p><div class="field"><label>Выгрузка реестра<input type="file" name="file" accept=".csv,.xlsx" required></label></div><p class="notice" data-preview hidden></p><p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Проверить файл</button><button class="btn secondary" type="button" data-close>Отмена</button></div></form></div>`);
-		document.body.appendChild(modal);
-		const form = modal.querySelector("form");
-		let checked = false;
-		form.querySelector("[data-close]").onclick = () => modal.remove();
-		form.querySelector('[type="file"]').onchange = () => { checked = false; form.querySelector('[type="submit"]').textContent = "Проверить файл"; form.querySelector("[data-preview]").hidden = true; };
-		form.onsubmit = async (event) => {
-			event.preventDefault();
-			const button = form.querySelector('[type="submit"]');
-			button.disabled = true;
-			form.querySelector(".error").textContent = "";
-			try {
-				const result = await api(`/it-companies/import${checked ? "?commit=1" : ""}`, {method: "POST", body: new FormData(form)});
-				if (result.committed) { modal.remove(); await load(); showToast(`Загружено компаний: ${result.valid_rows}`); }
-				else { checked = true; button.textContent = "Загрузить в справочник"; const preview = form.querySelector("[data-preview]"); preview.hidden = false; preview.textContent = `Проверено компаний: ${result.valid_rows}. Файл готов к загрузке.`; }
-			} catch (error) { form.querySelector(".error").textContent = error.message; }
-			finally { button.disabled = false; }
-		};
-	};
+  if (writable) {
+    const importButton = el('<button class="btn secondary" type="button">Загрузить выгрузку</button>');
+    root.querySelector("#it-add").before(importButton);
+    importButton.onclick = () => {
+      const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Загрузить ИТ-компании</h2><p>CSV в UTF-8 или XLSX, до 100 000 строк. Для действующих аккредитаций нужны сведения не старше 35 дней. Существующие записи обновятся по ИНН.</p><p><a href="/api/it-companies/template" target="_blank" rel="noopener">Скачать шаблон</a></p><div class="field"><label>Выгрузка реестра<input type="file" name="file" accept=".csv,.xlsx" required></label></div><p class="notice" data-preview hidden></p><p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Проверить файл</button><button class="btn secondary" type="button" data-close>Отмена</button></div></form></div>`);
+      document.body.appendChild(modal);
+      const form = modal.querySelector("form");
+      let checked = false;
+      form.querySelector("[data-close]").onclick = () => modal.remove();
+      form.querySelector('[type="file"]').onchange = () => { checked = false; form.querySelector('[type="submit"]').textContent = "Проверить файл"; form.querySelector("[data-preview]").hidden = true; };
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('[type="submit"]');
+        button.disabled = true;
+        form.querySelector(".error").textContent = "";
+        try {
+          const result = await api(`/it-companies/import${checked ? "?commit=1" : ""}`, {method: "POST", body: new FormData(form)});
+          if (result.committed) { modal.remove(); await load(); showToast(`Загружено компаний: ${result.valid_rows}`); }
+          else { checked = true; button.textContent = "Загрузить в справочник"; const preview = form.querySelector("[data-preview]"); preview.hidden = false; preview.textContent = `Проверено компаний: ${result.valid_rows}. Файл готов к загрузке.`; }
+        } catch (error) { form.querySelector(".error").textContent = error.message; }
+        finally { button.disabled = false; }
+      };
+    };
+  }
   root.querySelector("#it-search").onkeydown = (event) => {
     if (event.key === "Enter") search();
   };
-  root.querySelector("#it-add").onclick = () => {
+  if (writable) root.querySelector("#it-add").onclick = () => {
     const today = new Date().toISOString().slice(0, 10);
     const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><span class="eyebrow">Новая запись</span><h2>Добавить аккредитованную ИТ-компанию</h2><p class="notice">Сначала <a href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">проверьте аккредитацию на Госуслугах</a>, затем перенесите реквизиты без изменений. ИНН и ОГРН будут проверены.</p><div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="1000"></div><div class="grid cols-2"><div class="field"><label>ИНН *</label><input name="inn" required inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="ogrn" required inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}"></div><div class="field"><label>Номер аккредитации, если указан</label><input name="accreditation_number" maxlength="100"></div><div class="field"><label>Дата проверки в реестре *</label><input name="registry_updated_at" type="date" max="${today}" value="${today}" required></div></div><div class="field"><label>Ссылка на официальный источник *</label><input name="source_url" type="url" required value="https://www.gosuslugi.ru/itorgs"></div><div class="field"><label>Примечание</label><textarea name="notes" maxlength="1000" rows="2"></textarea></div><p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Добавить компанию</button><button class="btn secondary" type="button">Отмена</button></div></form></div>`);
     const form = modal.querySelector("form");

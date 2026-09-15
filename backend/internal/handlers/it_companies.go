@@ -65,7 +65,7 @@ func normalizeITCompany(req itCompanyWriteRequest) (itCompanyWriteRequest, error
 }
 
 func (h *ITCompanyHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	if !canManageITCompanies(u) {
+	if !canViewITCompanies(u) {
 		middleware.WriteError(w, http.StatusForbidden, "реестр ИТ-компаний недоступен для этого профиля")
 		return
 	}

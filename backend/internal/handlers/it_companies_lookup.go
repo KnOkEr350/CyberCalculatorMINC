@@ -46,14 +46,15 @@ func parseITLookup(body, query string, now time.Time) ([]models.ITCompany, error
 // The public registry is a search service. Keep it distinct from the local
 // imported records and show its intermediary and missing fields explicitly.
 func (h *ITCompanyHandlers) RegistrySearch(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	if !canManageITCompanies(u) {
+	if !canViewITCompanies(u) {
 		middleware.WriteError(w, 403, "реестр ИТ-компаний недоступен для этого профиля")
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	initial := query == ""
 	if initial {
-		query = "общество"
+		middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"items": []models.ITCompany{}, "initial": true, "may_have_more": false})
+		return
 	}
 	if utf8.RuneCountInString(query) < 2 || utf8.RuneCountInString(query) > 200 {
 		middleware.WriteError(w, 400, "введите от 2 до 200 символов названия или ИНН")
