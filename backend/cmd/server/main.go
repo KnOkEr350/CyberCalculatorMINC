@@ -285,6 +285,7 @@ func buildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 
 	// --- Административная панель ---
 	mux.HandleFunc("GET /api/admin/users", middleware.RequireAdmin(db, adminH.ListUsers))
+	mux.HandleFunc("GET /api/admin/it-company-options", middleware.RequireAdmin(db, adminH.ITCompanyOptions))
 	mux.HandleFunc("POST /api/admin/users", middleware.RequireAdmin(db, adminH.CreateUser))
 	mux.HandleFunc("PATCH /api/admin/users/{id}", middleware.RequireAdmin(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		adminH.UpdateUser(w, r, u, r.PathValue("id"))

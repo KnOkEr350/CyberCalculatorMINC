@@ -27,6 +27,21 @@ func TestValidateAndNormalizeModerator(t *testing.T) {
 	}
 }
 
+func TestValidateAndNormalizeOrganizationUserWithITCompany(t *testing.T) {
+	itCompanyID := "11111111-1111-1111-1111-111111111111"
+	req := createUserRequest{
+		Email:       "company-user@example.com",
+		Password:    "StrongPass1!",
+		FullName:    "Иван Иванов",
+		Role:        "user",
+		EntityType:  "organization",
+		ITCompanyID: &itCompanyID,
+	}
+	if err := validateAndNormalizeNewUser(&req); err != nil {
+		t.Fatalf("valid IT company user rejected: %v", err)
+	}
+}
+
 func TestValidateAndNormalizeNewUserRejectsInvalidData(t *testing.T) {
 	tests := []struct {
 		name string
@@ -37,6 +52,7 @@ func TestValidateAndNormalizeNewUserRejectsInvalidData(t *testing.T) {
 		{"blank name", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: " ", Role: "user"}},
 		{"bad role", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "owner"}},
 		{"education user without partner", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "user", EntityType: "edu_institution"}},
+		{"IT company user without company", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "user", EntityType: "organization"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

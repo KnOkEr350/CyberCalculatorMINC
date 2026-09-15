@@ -5,6 +5,7 @@ const state = {
   me: null,
   categories: [],
   partners: [],
+  itCompanies: [],
   agreements: [],
   regionalAuthorities: [],
   view: "dashboard",
@@ -212,11 +213,14 @@ function render() {
   if (
     state.me.role !== "admin" &&
     (!state.me.entity_type ||
-      (state.me.entity_type === "edu_institution" && !state.me.partner_id))
+      (state.me.entity_type === "edu_institution" && !state.me.partner_id) ||
+      (state.me.role === "user" &&
+        state.me.entity_type === "organization" &&
+        !state.me.it_company_id))
   ) {
     app.appendChild(
       el(
-        `<div class="card"><h2>Профиль не назначен</h2><p>Попросите администратора назначить роль и учебное заведение. Самостоятельная смена прав недоступна.</p><button class="btn" id="reload-profile">Проверить назначение</button><button class="btn secondary" id="unassigned-logout">Выйти</button></div>`,
+        `<main class="system-state"><div class="card"><span class="state-mark" aria-hidden="true">!</span><h1>Профиль не настроен</h1><p>Администратор должен назначить вам роль и организацию.</p><div class="flex"><button class="btn" id="reload-profile">Проверить снова</button><button class="btn secondary" id="unassigned-logout">Выйти</button></div></div></main>`,
       ),
     );
     app.querySelector("#unassigned-logout").onclick = async () => {
@@ -236,23 +240,18 @@ function renderLogin() {
   const wrap = el(`<div class="auth-shell">
     <aside class="auth-brand-panel">
       ${brandMarkup(true)}
-      <div class="auth-message">
-        <span class="eyebrow">Контроль исполнения</span>
-        <h1>Планируйте затраты.<br>Подтверждайте результат.</h1>
-        <p>Единое пространство для расчёта мероприятий по Приказу Минцифры, ведения плана и фиксации факта.</p>
-      </div>
       <div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
     </aside>
     <main class="auth-form-panel">
       <form class="login-box" id="login-form">
         <span class="eyebrow">Личный кабинет</span>
-        <h2>Вход в систему</h2>
-        <p class="muted">Используйте учётную запись, выданную администратором.</p>
+        <h1>Вход</h1>
         <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
-        <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Введите пароль"></div>
-        <div class="field"><label for="login-code">Код двухфакторной защиты, если настроена</label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"></div>
+        <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Пароль"></div>
+        <div class="field"><label for="login-code">Код подтверждения <span class="label-optional">необязательно</span></label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"><div class="field-hint">Заполните, если включена двухфакторная защита.</div></div>
         <div class="error form-message" id="login-error" style="display:none" role="alert"></div>
         <button type="submit" class="btn wide" id="login-submit">Войти</button>
+        <p class="auth-help">Нет доступа? Обратитесь к администратору.</p>
       </form>
     </main>
   </div>`);
@@ -300,20 +299,21 @@ function renderLayout() {
   }
   if (!allowedViews.has(state.view)) state.view = "dashboard";
   const wrap = el(`<div>
+    <a class="skip-link" href="#content">К содержанию</a>
     <div class="topbar">
       ${brandMarkup()}
       <nav>
-        <button data-view="dashboard">Дашборд</button>
+        <button data-view="dashboard">Сводка</button>
         <button data-view="entries">План / Факт</button>
         ${!isManager && canReviewEducationDirectory() ? '<button data-view="partners">Учебные заведения</button>' : ""}
         ${!isManager && canViewITCompanies() ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
-        ${isManager ? '<button data-view="admin">Админ. панель</button>' : ""}
+        ${isManager ? '<button data-view="admin">Управление</button>' : ""}
       </nav>
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
         <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
-        <button id="change-password" title="Изменить пароль">Пароль</button>
-        ${state.me.mfa_available && !state.me.mfa_enabled ? '<button id="setup-mfa">Защита входа</button>' : ''}
+        <button id="change-password" title="Изменить пароль">Сменить пароль</button>
+        ${state.me.mfa_available && !state.me.mfa_enabled ? '<button id="setup-mfa">Настроить 2FA</button>' : ''}
         <button id="logout" title="Выйти из системы">Выйти</button>
       </div>
     </div>
@@ -380,6 +380,9 @@ function openPasswordDialog() {
 
 async function renderDashboard(root) {
   root.appendChild(el(`<div class="muted">Загрузка дашборда…</div>`));
+  const fixedEducationPartner =
+    state.me.role === "user" && state.me.entity_type === "edu_institution";
+  if (fixedEducationPartner) state.partnerID = state.me.partner_id || "";
   let d;
   try {
     d = await api(
@@ -476,32 +479,38 @@ async function renderDashboard(root) {
         (Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 100,
       )
     : 0;
+  const selectedPartner = state.partners.find(
+    (partner) => partner.id === state.partnerID,
+  );
+  const aggregateDashboard = isStaffUser() && !state.partnerID;
+  const partnerFilter = fixedEducationPartner
+    ? `<div class="field"><label>Учебное заведение</label><input value="${escapeHTML(selectedPartner?.name || "Назначенное учебное заведение")}" readonly></div>`
+    : `<div class="field"><label for="dash-partner">Учебное заведение</label><select id="dash-partner"><option value="">Все учебные заведения</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select></div>`;
 
   root.innerHTML = `
     <section class="page-heading">
-      <div><span class="eyebrow">Аналитика</span><h1>Дашборд</h1><p>Суммы внесённых мероприятий за выбранный год. Проверка обязательных активностей — в плане/факте партнёра; суммы сами по себе не подтверждают соответствие приказу.</p></div>
+      <div><h1>Сводка</h1></div>
       <span class="year-badge">${state.year}</span>
     </section>
     <div class="card">
-      <div class="flex between">
-        <h2 style="margin:0">Пульс проекта</h2>
-        <div class="flex">
-          <label style="margin:0">Год</label>
-          <input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}" style="width:90px">
-          <label for="dash-partner">Партнёр</label><select id="dash-partner"><option value="">Все доступные партнёры</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select>
+      <div class="dashboard-toolbar">
+        <h2 style="margin:0">Показатели</h2>
+        <div class="dashboard-filters">
+          <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
+          ${partnerFilter}
           ${
-            isStaffUser()
-              ? `<button class="btn secondary" id="set-target">Задать целевую сумму (3%)</button>`
+            aggregateDashboard
+              ? `<div class="field"><label aria-hidden="true">Целевая сумма</label><button class="btn secondary" id="set-target">Задать целевую сумму (3%)</button></div>`
               : ""
           }
         </div>
       </div>
       <div class="grid cols-3" style="margin-top:14px">
-        <div class="stat"><div class="label">Моя целевая сумма (3% от льгот)</div><div class="value">${
-          d.target_amount_rub != null
-            ? fmtMoney(d.target_amount_rub)
-            : "не задана"
-        }</div></div>
+        ${
+          aggregateDashboard
+            ? `<div class="stat"><div class="label">Общая целевая сумма (3% от льгот)</div><div class="value">${d.target_amount_rub != null ? fmtMoney(d.target_amount_rub) : "не задана"}</div></div>`
+            : `<div class="stat"><div class="label">Учебное заведение</div><div class="value">${escapeHTML(selectedPartner?.name || "не выбрано")}</div></div>`
+        }
         <div class="stat"><div class="label">План: все расчёты, руб.</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
         <div class="stat"><div class="label">Факт: все расчёты, руб.</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
       </div>
@@ -522,9 +531,9 @@ async function renderDashboard(root) {
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
-      <div class="card"><h2>Утверждённые суммы</h2><p>План: ${fmtMoney(d.eligible_plan_total_rub)}. Факт: ${fmtMoney(d.eligible_fact_total_rub)}.</p><p>Записей в неутверждённых отчётах: ${Number(d.incomplete_entries || 0)}. Отдельные преподавание или ООП/РПД больше не засчитываются сами по себе: учитывается только полностью проверенный и утверждённый комплект по соглашению. Исключение ТОП ИТ/ИИ применяется лишь при наличии утверждённых остальных видов в другой ОО.</p></div>
-      <div class="card"><h2>Диаграмма структуры — План</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
-      <div class="card"><h2>Диаграмма структуры — Факт</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
+      <div class="card approved-summary"><h2>После утверждения</h2><div class="approved-values"><div><span>План</span><strong>${fmtMoney(d.eligible_plan_total_rub)}</strong></div><div><span>Факт</span><strong>${fmtMoney(d.eligible_fact_total_rub)}</strong></div></div><p class="muted">Не учтено записей: ${Number(d.incomplete_entries || 0)}</p><details class="rules-note"><summary>Как учитываются суммы</summary><p>Сумма учитывается после проверки и утверждения полного комплекта по соглашению. Для ТОП ИТ/ИИ действует предусмотренное приказом исключение.</p></details></div>
+      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
+      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
     </div>
     <div class="grid cols-2">
       <div class="card"><h2>Детализация — План</h2>${breakdownList(d.plan_by_category)}</div>
@@ -540,11 +549,13 @@ async function renderDashboard(root) {
       e.target.reportValidity();
     }
   };
-  root.querySelector("#dash-partner").onchange = (e) => {
-    state.partnerID = e.target.value;
-    root.innerHTML = "";
-    renderDashboard(root);
-  };
+  const dashboardPartner = root.querySelector("#dash-partner");
+  if (dashboardPartner)
+    dashboardPartner.onchange = (e) => {
+      state.partnerID = e.target.value;
+      root.innerHTML = "";
+      renderDashboard(root);
+    };
   const targetBtn = root.querySelector("#set-target");
   if (targetBtn) {
     targetBtn.onclick = async () => {
@@ -1100,14 +1111,12 @@ async function renderAdmin(root) {
   const showEducationDirectory = canReviewEducationDirectory();
   const showITDirectory = canViewITCompanies();
   const initialDirectoryTab = showEducationDirectory ? "partners" : "it-companies";
-  root.innerHTML = `<section class="page-heading">
-    <div><span class="eyebrow">Управление системой</span><h1>Административная панель</h1><p>${isAdmin ? "Управляйте справочниками, доступами, системными настройками и историей действий." : "Работайте со справочниками и соглашениями. Системные настройки и управление доступами доступны администратору."}</p></div>
-  </section>
+  root.innerHTML = `<section class="page-heading"><div><h1>Управление</h1></div></section>
   <div class="admin-layout">
     <nav class="admin-nav" aria-label="Разделы административной панели">
-      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Образовательные организации</b><span>Реестр, партнёры и соглашения</span></button>` : ""}
-      ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b><span>Реестр действующих аккредитаций</span></button>` : ""}
-      ${isAdmin ? '<button data-t="users"><b>Пользователи</b><span>Роли и доступ к системе</span></button><button data-t="settings"><b>Настройки</b><span>Сроки хранения данных</span></button><button data-t="logs"><b>Журнал изменений</b><span>История действий пользователей</span></button>' : ""}
+      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО</b></button>` : ""}
+      ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b></button>` : ""}
+      ${isAdmin ? '<button data-t="users"><b>Пользователи</b></button><button data-t="settings"><b>Настройки</b></button><button data-t="logs"><b>Журнал изменений</b></button>' : ""}
     </nav>
     <div id="admin-content"></div>
   </div>`;
@@ -1146,15 +1155,16 @@ async function renderAdminTab(box, tab) {
 }
 
 async function renderAdminUsers(box) {
-  box.innerHTML = `<div class="section-intro"><h2>Пользователи и права доступа</h2><p>Создавайте учётные записи и назначайте минимально необходимую роль.</p></div><div class="card"><h2>Новый пользователь</h2>
+  state.itCompanies = (await api("/admin/it-company-options")) || [];
+  box.innerHTML = `<div class="section-intro"><h2>Пользователи</h2></div><div class="card"><h2>Новый пользователь</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
       <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select><div class="field-hint">Модератор видит всё, кроме пользователей, настроек и журнала изменений.</div></div>
-      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">Представитель ИТ-организации</option><option value="edu_institution">Представитель учебного заведения</option></select></div>
-      <div class="field" id="u-partner-field" style="display:none"><label>Партнёр</label><select id="u-partner"><option value="">Не назначен</option>${(Array.isArray(
+      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select><div class="field-hint">Модератор не управляет пользователями и настройками.</div></div>
+      <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div>
+      <div class="field" id="u-partner-field" hidden><label id="u-partner-label">Учебное заведение *</label><select id="u-partner"><option value="">Выберите учебное заведение</option>${(Array.isArray(
         state.partners,
       )
         ? state.partners
@@ -1165,12 +1175,13 @@ async function renderAdminUsers(box) {
             `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`,
         )
         .join("")}</select></div>
+      <div class="field" id="u-company-field"><label id="u-company-label">ИТ-компания *</label><select id="u-company"><option value="">Выберите ИТ-компанию</option>${state.itCompanies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
     </div>
     <button type="submit" class="btn" id="u-create">Создать</button>
     <div class="error" id="u-error" style="display:none"></div>
     </form>
   </div>
-  <div class="card"><h2>Пользователи</h2>
+  <div class="card"><h2>Список пользователей</h2>
     <form id="u-search-form" class="directory-search user-search" role="search">
       <div class="field"><label for="u-search">Поиск пользователя</label><input id="u-search" type="search" maxlength="200" autocomplete="off" placeholder="Введите ФИО или email"></div>
       <div class="flex"><button class="btn secondary" type="submit" id="u-find">Найти</button><button class="btn secondary" type="button" id="u-search-clear" hidden>Сбросить</button></div>
@@ -1182,10 +1193,15 @@ async function renderAdminUsers(box) {
   const entitySelect = box.querySelector("#u-entity");
   const roleSelect = box.querySelector("#u-role");
   const syncUserType = () => {
-    box.querySelector("#u-partner-field").style.display =
-      entitySelect.value === "edu_institution" ? "block" : "none";
-    if (entitySelect.value !== "edu_institution")
+    const education = entitySelect.value === "edu_institution";
+    box.querySelector("#u-partner-field").hidden = !education;
+    box.querySelector("#u-company-field").hidden = education;
+    const companyRequired = roleSelect.value === "user";
+    box.querySelector("#u-partner-label").textContent = "Учебное заведение *";
+    box.querySelector("#u-company-label").textContent = `ИТ-компания${companyRequired ? " *" : ""}`;
+    if (!education)
       box.querySelector("#u-partner").value = "";
+    else box.querySelector("#u-company").value = "";
   };
   entitySelect.onchange = syncUserType;
   roleSelect.onchange = syncUserType;
@@ -1230,6 +1246,21 @@ async function renderAdminUsers(box) {
         "Добавьте строчную и заглавную буквы, цифру и специальный символ",
       );
     }
+    if (
+      entitySelect.value === "edu_institution" ||
+      roleSelect.value === "user"
+    ) {
+      const assignmentInput = entitySelect.value === "edu_institution"
+        ? box.querySelector("#u-partner")
+        : box.querySelector("#u-company");
+      if (!assignmentInput.value)
+        mark(
+          assignmentInput,
+          entitySelect.value === "edu_institution"
+            ? "Выберите учебное заведение"
+            : "Выберите ИТ-компанию",
+        );
+    }
     if (firstInvalid) {
       firstInvalid.focus();
       return;
@@ -1240,6 +1271,7 @@ async function renderAdminUsers(box) {
     createButton.textContent = "Создаём…";
     try {
       const partnerValue = box.querySelector("#u-partner").value;
+      const companyValue = box.querySelector("#u-company").value;
       await api("/admin/users", {
         method: "POST",
         body: JSON.stringify({
@@ -1249,6 +1281,7 @@ async function renderAdminUsers(box) {
           role: box.querySelector("#u-role").value,
           entity_type: entitySelect.value,
           partner_id: partnerValue || null,
+          it_company_id: companyValue || null,
         }),
       });
       showToast("Пользователь создан", "success");
@@ -1284,17 +1317,17 @@ async function renderAdminUsers(box) {
         ? `Найдено пользователей: ${users.length}`
         : `Всего пользователей: ${users.length}`;
       listBox.innerHTML = users.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Организация</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
           <tbody>${users
             .map(
               (u) => `<tr>
-            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
+            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.entity_type === "edu_institution" ? state.partners.find((partner) => partner.id === u.partner_id)?.name || "Учебное заведение не назначено" : state.itCompanies.find((company) => company.id === u.it_company_id)?.name || "ИТ-компания не назначена")}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
             <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
             <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
           </tr>`,
             )
             .join("")}</tbody></table></div>`
-        : `<div class="empty-state"><b>Пользователи не найдены</b><span>Проверьте ФИО или email и попробуйте снова.</span></div>`;
+        : `<div class="empty-state"><b>Пользователи не найдены</b><span>Измените запрос.</span></div>`;
       listBox.querySelectorAll("button[data-id]").forEach((button) => {
         button.onclick = async () => {
           button.disabled = true;
@@ -1348,7 +1381,7 @@ async function renderAdminSettings(box) {
         <input id="s-audit" type="number" min="60" max="3650" step="1" value="${settings.audit_log_retention_days || 60}"></div>
     </div>
     <button class="btn" id="s-save">Сохранить</button>
-    <p class="muted">По ТЗ подтверждающие документы хранятся год, но администратор может изменить срок; журнал изменений — 2 месяца.</p>
+    <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
   </div>`;
   box.querySelector("#s-save").onclick = async () => {
     const button = box.querySelector("#s-save");
@@ -1391,7 +1424,7 @@ async function renderAdminSettings(box) {
 }
 
 async function renderAdminLogs(box) {
-  box.innerHTML = `<div class="section-intro"><h2>Журнал изменений</h2><p>Здесь зафиксировано, кто, что и когда изменил или подтвердил.</p></div><div class="card"><div class="flex between"><h2>Последние действия</h2><div class="tabs"><button class="active" data-log-filter="all">Все</button><button data-log-filter="directory_confirm">Подтверждения справочника</button></div></div><div id="logs-list">Загрузка…</div></div>`;
+  box.innerHTML = `<div class="section-intro"><h2>Журнал изменений</h2></div><div class="card"><div class="flex between"><h2>Последние действия</h2><div class="tabs"><button class="active" data-log-filter="all">Все</button><button data-log-filter="directory_confirm">Подтверждения справочника</button></div></div><div id="logs-list">Загрузка…</div></div>`;
   const logs = (await api("/admin/logs?limit=200")) || [];
   const fieldLabels = {
     name: "Наименование", partner_kind: "Тип", region: "Регион", inn: "ИНН", ogrn: "ОГРН",

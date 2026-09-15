@@ -25,10 +25,11 @@ const (
 
 // AuthUser хранит информацию о текущем пользователе в контексте запроса.
 type AuthUser struct {
-	ID         string
-	Role       models.Role
-	EntityType models.EntityType
-	PartnerID  *string
+	ID          string
+	Role        models.Role
+	EntityType  models.EntityType
+	PartnerID   *string
+	ITCompanyID *string
 }
 
 func WriteJSON(w http.ResponseWriter, status int, v interface{}) {
@@ -55,11 +56,11 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 		}
 		var u AuthUser
 		var entityType sql.NullString
-		var partnerID sql.NullString
+		var partnerID, itCompanyID sql.NullString
 		var role string
 		var mfaEnabled bool
-		err := db.QueryRowContext(r.Context(), `SELECT id, role, entity_type, partner_id,mfa_secret IS NOT NULL FROM users WHERE id = $1 AND is_active`, userID).
-			Scan(&u.ID, &role, &entityType, &partnerID, &mfaEnabled)
+		err := db.QueryRowContext(r.Context(), `SELECT id, role, entity_type, partner_id,it_company_id,mfa_secret IS NOT NULL FROM users WHERE id = $1 AND is_active`, userID).
+			Scan(&u.ID, &role, &entityType, &partnerID, &itCompanyID, &mfaEnabled)
 		if err != nil {
 			WriteError(w, http.StatusUnauthorized, "пользователь не найден или деактивирован")
 			return
@@ -80,6 +81,10 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 		if partnerID.Valid {
 			pid := partnerID.String
 			u.PartnerID = &pid
+		}
+		if itCompanyID.Valid {
+			id := itCompanyID.String
+			u.ITCompanyID = &id
 		}
 		next(w, r, u)
 	}

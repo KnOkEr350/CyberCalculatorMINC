@@ -20,12 +20,13 @@ type AdminHandlers struct {
 // --- Пользователи (в т.ч. создание дополнительных админов) -----------------
 
 type createUserRequest struct {
-	Email      string  `json:"email"`
-	Password   string  `json:"password"`
-	FullName   string  `json:"full_name"`
-	Role       string  `json:"role"` // admin|moderator|user
-	EntityType string  `json:"entity_type,omitempty"`
-	PartnerID  *string `json:"partner_id,omitempty"`
+	Email       string  `json:"email"`
+	Password    string  `json:"password"`
+	FullName    string  `json:"full_name"`
+	Role        string  `json:"role"` // admin|moderator|user
+	EntityType  string  `json:"entity_type,omitempty"`
+	PartnerID   *string `json:"partner_id,omitempty"`
+	ITCompanyID *string `json:"it_company_id,omitempty"`
 }
 
 func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
@@ -38,8 +39,8 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.EntityType == "" || (req.EntityType == "edu_institution" && req.PartnerID == nil) {
-		middleware.WriteError(w, 400, "назначьте тип профиля и учебное заведение для представителя ОО")
+	if req.EntityType == "" {
+		middleware.WriteError(w, 400, "назначьте тип профиля")
 		return
 	}
 	if req.PartnerID != nil {
@@ -50,6 +51,17 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		}
 		if !exists {
 			middleware.WriteError(w, http.StatusBadRequest, "выбранный партнёр не найден")
+			return
+		}
+	}
+	if req.ITCompanyID != nil {
+		var exists bool
+		if err := h.DB.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM accredited_it_companies WHERE id::text=$1 AND accreditation_status='active')`, *req.ITCompanyID).Scan(&exists); err != nil {
+			middleware.WriteError(w, http.StatusInternalServerError, "не удалось проверить выбранную ИТ-компанию")
+			return
+		}
+		if !exists {
+			middleware.WriteError(w, http.StatusBadRequest, "выбранная ИТ-компания не найдена или не аккредитована")
 			return
 		}
 	}
@@ -71,9 +83,9 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 	}
 	defer tx.Rollback()
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO users (email, password_hash, full_name, role, entity_type, partner_id)
-		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-		req.Email, hash, req.FullName, req.Role, entityType, req.PartnerID,
+		`INSERT INTO users (email, password_hash, full_name, role, entity_type, partner_id, it_company_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+		req.Email, hash, req.FullName, req.Role, entityType, req.PartnerID, req.ITCompanyID,
 	).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusConflict, "не удалось создать пользователя; возможно, email уже занят")
@@ -86,6 +98,36 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 	middleware.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
+// ITCompanyOptions supplies only the fields needed to assign a user to a company.
+// Access to the full accreditation directory still depends on the profile type.
+func (h *AdminHandlers) ITCompanyOptions(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
+	page, ok := pageClause(w, r)
+	if !ok {
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,name,inn FROM accredited_it_companies
+		WHERE accreditation_status='active' ORDER BY name,id`+page)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось загрузить ИТ-компании для назначения")
+		return
+	}
+	defer rows.Close()
+	out := make([]map[string]string, 0)
+	for rows.Next() {
+		var id, name, inn string
+		if err := rows.Scan(&id, &name, &inn); err != nil {
+			middleware.WriteError(w, 500, "не удалось прочитать ИТ-компании для назначения")
+			return
+		}
+		out = append(out, map[string]string{"id": id, "name": name, "inn": inn})
+	}
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "не удалось прочитать ИТ-компании для назначения")
+		return
+	}
+	writePage(w, r, out)
+}
+
 func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
 	q := strings.Join(strings.Fields(r.URL.Query().Get("q")), " ")
 	if utf8.RuneCountInString(q) > 200 {
@@ -96,7 +138,7 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 	if !ok {
 		return
 	}
-	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, email, full_name, role, entity_type, partner_id, is_active, created_at
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, email, full_name, role, entity_type, partner_id, it_company_id, is_active, created_at
 		FROM users
 		WHERE ($1='' OR POSITION(lower($1) IN lower(email)) > 0 OR POSITION(lower($1) IN lower(full_name)) > 0)
 		ORDER BY created_at,id`+page, q)
@@ -108,8 +150,8 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 	out := make([]models.User, 0)
 	for rows.Next() {
 		var u models.User
-		var entityType, partnerID sql.NullString
-		if err := rows.Scan(&u.ID, &u.Email, &u.FullName, &u.Role, &entityType, &partnerID, &u.IsActive, &u.CreatedAt); err != nil {
+		var entityType, partnerID, itCompanyID sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.FullName, &u.Role, &entityType, &partnerID, &itCompanyID, &u.IsActive, &u.CreatedAt); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -119,6 +161,10 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 		if partnerID.Valid {
 			p := partnerID.String
 			u.PartnerID = &p
+		}
+		if itCompanyID.Valid {
+			id := itCompanyID.String
+			u.ITCompanyID = &id
 		}
 		out = append(out, u)
 	}
@@ -130,10 +176,11 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request, admin 
 }
 
 type updateUserRequest struct {
-	IsActive   *bool   `json:"is_active,omitempty"`
-	Role       *string `json:"role,omitempty"`
-	EntityType *string `json:"entity_type,omitempty"`
-	PartnerID  *string `json:"partner_id,omitempty"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+	Role        *string `json:"role,omitempty"`
+	EntityType  *string `json:"entity_type,omitempty"`
+	PartnerID   *string `json:"partner_id,omitempty"`
+	ITCompanyID *string `json:"it_company_id,omitempty"`
 }
 
 func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser, userID string) {
@@ -163,12 +210,12 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		return
 	}
 	var active bool
-	var role, entity, partner string
-	if tx.QueryRowContext(r.Context(), `SELECT is_active,role,COALESCE(entity_type,''),COALESCE(partner_id::text,'') FROM users WHERE id::text=$1 FOR UPDATE`, userID).Scan(&active, &role, &entity, &partner) != nil {
+	var role, entity, partner, itCompany string
+	if tx.QueryRowContext(r.Context(), `SELECT is_active,role,COALESCE(entity_type,''),COALESCE(partner_id::text,''),COALESCE(it_company_id::text,'') FROM users WHERE id::text=$1 FOR UPDATE`, userID).Scan(&active, &role, &entity, &partner, &itCompany) != nil {
 		middleware.WriteError(w, 404, "пользователь не найден")
 		return
 	}
-	old := map[string]interface{}{"is_active": active, "role": role, "entity_type": entity, "partner_id": partner}
+	old := map[string]interface{}{"is_active": active, "role": role, "entity_type": entity, "partner_id": partner, "it_company_id": itCompany}
 	if req.IsActive != nil {
 		active = *req.IsActive
 	}
@@ -181,7 +228,12 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 	if req.PartnerID != nil {
 		partner = *req.PartnerID
 	}
-	if entity != "edu_institution" {
+	if req.ITCompanyID != nil {
+		itCompany = *req.ITCompanyID
+	}
+	if entity == "edu_institution" {
+		itCompany = ""
+	} else {
 		partner = ""
 	}
 	if entity == "edu_institution" && partner == "" {
@@ -192,6 +244,17 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		var exists bool
 		if tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1)`, partner).Scan(&exists) != nil || !exists {
 			middleware.WriteError(w, 400, "партнёр не найден")
+			return
+		}
+	}
+	if role == string(models.RoleUser) && entity == "organization" && itCompany == "" {
+		middleware.WriteError(w, 400, "назначьте ИТ-компанию")
+		return
+	}
+	if itCompany != "" {
+		var exists bool
+		if tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM accredited_it_companies WHERE id::text=$1 AND accreditation_status='active')`, itCompany).Scan(&exists) != nil || !exists {
+			middleware.WriteError(w, 400, "ИТ-компания не найдена или не аккредитована")
 			return
 		}
 	}
@@ -206,7 +269,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 			return
 		}
 	}
-	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET is_active=$1,role=$2,entity_type=NULLIF($3,''),partner_id=NULLIF($4,'')::uuid,updated_at=now() WHERE id::text=$5`, active, role, entity, partner, userID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET is_active=$1,role=$2,entity_type=NULLIF($3,''),partner_id=NULLIF($4,'')::uuid,it_company_id=NULLIF($5,'')::uuid,updated_at=now() WHERE id::text=$6`, active, role, entity, partner, itCompany, userID); err != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}

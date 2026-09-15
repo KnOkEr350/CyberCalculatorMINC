@@ -47,6 +47,7 @@ type User struct {
 	Role         Role       `json:"role"`
 	EntityType   EntityType `json:"entity_type,omitempty"`
 	PartnerID    *string    `json:"partner_id,omitempty"`
+	ITCompanyID  *string    `json:"it_company_id,omitempty"`
 	IsActive     bool       `json:"is_active"`
 	CreatedAt    time.Time  `json:"created_at"`
 }

@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const frontend = path.resolve(__dirname, '../frontend');
 const companies = Array.from({ length: 650 }, (_, i) => ({
+  id: `test-company-${i}`,
   name: `Компания ${i}`, inn: String(7700000000 + i), ogrn: '1027700132195',
   accreditation_status: 'active', registry_updated_at: '2026-09-15',
   source_url: 'https://www.gosuslugi.ru/itorgs', notes: '',
@@ -36,7 +37,7 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
       else if (url.pathname === '/api/it-companies/registry-search') {
         searches.push(url.searchParams.get('q'));
         status = 502; body = { error: 'Сервис проверки реестра временно недоступен' };
-      } else if (url.pathname === '/api/it-companies') {
+      } else if (['/api/it-companies', '/api/admin/it-company-options'].includes(url.pathname)) {
         const q = url.searchParams.get('q') || '';
         const filtered = companies.filter(c => c.name.includes(q) || c.inn === q);
         const offset = Number(url.searchParams.get('offset') || 0);
@@ -93,6 +94,16 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
       await page.evaluate(() => renderITCompanies(document.querySelector('#admin-content')));
       assert.equal(requests.some(p => p.startsWith('/api/it-companies')), false);
     }
+    await page.evaluate(() => { state.me.role = 'admin'; state.view = 'admin'; render(); });
+    await page.locator('#partner-list table').waitFor();
+    await page.locator('.admin-nav [data-t="users"]').click();
+    await page.locator('#u-company').waitFor();
+    assert.equal(await page.locator('#u-company option').count(), 651);
+    await page.locator('#u-company').selectOption('test-company-649');
+    assert.equal(await page.locator('#u-company').inputValue(), 'test-company-649');
+    await page.locator('#u-entity').selectOption('edu_institution');
+    assert.equal(await page.locator('#u-company-field').isVisible(), false);
+    assert.equal(await page.locator('#u-partner-field').isVisible(), true);
     assert.deepEqual(errors, []);
     console.log('PASS: education read access, counterparty directories for all admin/moderator profiles, blocked direct views without API requests, 650-row pagination, INN filter, registry outage recovery');
   } finally {
