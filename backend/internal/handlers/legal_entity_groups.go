@@ -40,7 +40,7 @@ func normalizeLegalEntityGroup(req legalEntityGroupWriteRequest) (legalEntityGro
 	if len(req.Members) == 0 || len(req.Members) > 100 {
 		return req, time.Time{}, validationError("укажите от 1 до 100 участников группы")
 	}
-	seen, hasIT := map[string]bool{}, false
+	seen, hasIT, hasAuthorized := map[string]bool{}, false, false
 	for i := range req.Members {
 		member := &req.Members[i]
 		member.Name = clean(member.Name)
@@ -53,9 +53,13 @@ func normalizeLegalEntityGroup(req legalEntityGroupWriteRequest) (legalEntityGro
 			return req, time.Time{}, validationError("целевой объём участника должен быть положительным")
 		}
 		seen[member.INN], hasIT = true, hasIT || member.IsITOrganization
+		hasAuthorized = hasAuthorized || member.INN == req.AuthorizedEntityINN
 	}
 	if !hasIT {
 		return req, time.Time{}, validationError("в группе должна быть хотя бы одна ИТ-организация")
+	}
+	if !hasAuthorized {
+		return req, time.Time{}, validationError("уполномоченное юридическое лицо должно быть указано среди участников группы")
 	}
 	return req, date, nil
 }

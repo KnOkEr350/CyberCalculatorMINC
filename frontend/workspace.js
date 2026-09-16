@@ -881,13 +881,13 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
 }
 
 async function openLegalEntityGroups(onSaved) {
-  const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Группы юридических лиц</h2><button class="btn secondary" id="group-close">Закрыть</button></div><div id="group-list"></div><form id="group-form"><h3 id="group-title">Новая группа</h3><div class="grid cols-2"><div class="field"><label>Название группы *</label><input name="name" required maxlength="500"></div><div class="field"><label>Номер договора о взаимодействии *</label><input name="agreement_number" required maxlength="100"></div><div class="field"><label>Дата договора *</label><input name="agreement_date" type="date" required></div><div class="field"><label>Уполномоченное юридическое лицо *</label><input name="authorized_name" required maxlength="1000"></div><div class="field"><label>ИНН уполномоченного лица *</label><input name="authorized_inn" required inputmode="numeric" maxlength="12"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="authorized_ogrn" required inputmode="numeric" maxlength="15"></div></div><div class="field"><label>Участники группы *</label><textarea name="members" rows="6" required placeholder="Название | ИНН | ОГРН | ИТ или иное | целевой объём, руб."></textarea><div class="field-hint">Один участник на строку. Пример: ООО Компания | 7700000000 | 1027700000000 | ИТ | 1500000</div></div><div class="flex"><button class="btn" type="submit">Сохранить</button><button class="btn secondary" type="button" id="group-new">Новая группа</button></div><p class="error" role="alert"></p></form></div></div>`);
+  const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Группа юридических лиц</h2><button class="btn secondary" id="group-close">Закрыть</button></div><div id="group-list"></div><form id="group-form"><h3 id="group-title">Договор о взаимодействии</h3><div class="grid cols-2"><div class="field"><label>Название группы *</label><input name="name" required maxlength="500"></div><div class="field"><label>Номер договора о взаимодействии *</label><input name="agreement_number" required maxlength="100"></div><div class="field"><label>Дата договора *</label><input name="agreement_date" type="date" required></div><div class="field"><label>Уполномоченное юридическое лицо *</label><input name="authorized_name" required maxlength="1000"></div><div class="field"><label>ИНН уполномоченного лица *</label><input name="authorized_inn" required inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}" maxlength="12"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="authorized_ogrn" required inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}" maxlength="15"></div></div><div class="field"><label>Участники группы *</label><textarea name="members" rows="6" required placeholder="Название | ИНН | ОГРН | ИТ или иное | целевой объём, руб."></textarea><div class="field-hint">Один участник на строку. Уполномоченное лицо тоже добавьте в список. Пример: ООО Компания | 7700000000 | 1027700000000 | ИТ | 1500000</div></div><div class="flex"><button class="btn" type="submit">Сохранить</button></div><p class="error" role="alert"></p></form></div></div>`);
   const form = modal.querySelector("#group-form");
   let editingID = "";
   const memberText = (members) => (members || []).map((member) => [member.name, member.inn, member.ogrn, member.is_it_organization ? "ИТ" : "иное", member.target_amount_rub || ""].join(" | ")).join("\n");
   const fill = (group = {}) => {
     editingID = group.id || "";
-    modal.querySelector("#group-title").textContent = editingID ? "Изменить группу" : "Новая группа";
+    modal.querySelector("#group-title").textContent = editingID ? "Договор о взаимодействии" : "Новый договор о взаимодействии";
     form.elements.name.value = group.name || "";
     form.elements.agreement_number.value = group.interaction_agreement_number || "";
     form.elements.agreement_date.value = group.interaction_agreement_date || "";
@@ -898,11 +898,11 @@ async function openLegalEntityGroups(onSaved) {
   };
   const load = async () => {
     state.legalEntityGroups = await api("/legal-entity-groups");
-    modal.querySelector("#group-list").innerHTML = state.legalEntityGroups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа и договор</th><th>Уполномоченное лицо</th><th>Участники</th><th></th></tr></thead><tbody>${state.legalEntityGroups.map((group) => `<tr><td><b>${escapeHTML(group.name)}</b><br>№ ${escapeHTML(group.interaction_agreement_number)} от ${escapeHTML(group.interaction_agreement_date)}</td><td>${escapeHTML(group.authorized_entity_name)}<br>ИНН ${escapeHTML(group.authorized_entity_inn)}</td><td>${group.members.length}</td><td><button class="btn secondary" data-group-edit="${group.id}">Изменить</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Группы ещё не созданы.</p>';
+    modal.querySelector("#group-list").innerHTML = state.legalEntityGroups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа и договор</th><th>Уполномоченное лицо</th><th>Участники</th><th></th></tr></thead><tbody>${state.legalEntityGroups.map((group) => `<tr><td><b>${escapeHTML(group.name)}</b><br>№ ${escapeHTML(group.interaction_agreement_number)} от ${escapeHTML(group.interaction_agreement_date)}</td><td>${escapeHTML(group.authorized_entity_name)}<br>ИНН ${escapeHTML(group.authorized_entity_inn)}</td><td>${group.members.length}</td><td><button class="btn secondary" data-group-edit="${group.id}">Изменить</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Договор о взаимодействии ещё не добавлен.</p>';
     modal.querySelectorAll("[data-group-edit]").forEach((button) => button.onclick = () => fill(state.legalEntityGroups.find((group) => group.id === button.dataset.groupEdit)));
+    if (state.legalEntityGroups.length === 1 && !editingID) fill(state.legalEntityGroups[0]);
   };
   modal.querySelector("#group-close").onclick = () => modal.remove();
-  modal.querySelector("#group-new").onclick = () => fill();
   form.onsubmit = async (event) => {
     event.preventDefault();
     const error = form.querySelector('[role="alert"]');
@@ -911,6 +911,14 @@ async function openLegalEntityGroups(onSaved) {
       const [name = "", inn = "", ogrn = "", kind = "", target = ""] = line.split("|").map((value) => value.trim());
       return { name, inn, ogrn, is_it_organization: kind.toLocaleLowerCase("ru").startsWith("ит"), target_amount_rub: target ? Number(target.replace(",", ".")) : null };
     });
+    if (!members.length || members.some((member) => !member.name || !member.inn || !member.ogrn || (member.target_amount_rub != null && (!Number.isFinite(member.target_amount_rub) || member.target_amount_rub <= 0)))) {
+      error.textContent = "Проверьте строки участников: название, ИНН и ОГРН обязательны, целевой объём должен быть положительным.";
+      return;
+    }
+    if (!members.some((member) => member.inn === form.elements.authorized_inn.value.trim())) {
+      error.textContent = "Добавьте уполномоченное юридическое лицо в список участников с тем же ИНН.";
+      return;
+    }
     const button = form.querySelector('[type="submit"]'); button.disabled = true;
     try {
       await api(editingID ? `/legal-entity-groups/${editingID}` : "/legal-entity-groups", { method: editingID ? "PUT" : "POST", body: JSON.stringify({ name: form.elements.name.value.trim(), interaction_agreement_number: form.elements.agreement_number.value.trim(), interaction_agreement_date: form.elements.agreement_date.value, authorized_entity_name: form.elements.authorized_name.value.trim(), authorized_entity_inn: form.elements.authorized_inn.value.trim(), authorized_entity_ogrn: form.elements.authorized_ogrn.value.trim(), members }) });

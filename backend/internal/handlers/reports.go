@@ -35,6 +35,7 @@ type reportEntryRow struct {
 	AgreementKind         string
 	AgreementStatus       string
 	RegionalAuthorityName string
+	LegalEntityGroupID    string
 	LegalEntityGroup      string
 	InteractionAgreement  string
 }
@@ -59,7 +60,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
 	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.formula_amount_rub,e.cost_method,e.payload,eligibility.eligible,
-		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,''),COALESCE(ra.name,''),COALESCE(g.name,''),
+		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,''),COALESCE(ra.name,''),COALESCE(g.id::text,''),COALESCE(g.name,''),
 		CASE WHEN g.id IS NULL THEN '' ELSE concat('от ',to_char(g.interaction_agreement_date,'DD.MM.YYYY'),' № ',g.interaction_agreement_number) END
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id
 		LEFT JOIN agreements a ON a.id=e.agreement_id
@@ -101,7 +102,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	for rows.Next() {
 		var row reportEntryRow
 		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.FormulaAmountRub, &row.CostMethod, &row.Payload, &row.Eligible,
-			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus, &row.RegionalAuthorityName, &row.LegalEntityGroup, &row.InteractionAgreement); err != nil {
+			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus, &row.RegionalAuthorityName, &row.LegalEntityGroupID, &row.LegalEntityGroup, &row.InteractionAgreement); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -178,6 +179,46 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	consolidated = append(consolidated, []interface{}{"ИТОГО (только утверждённые данные)", "", "", "", "", "", "", "", "", "", total, "", "Утверждено"})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
+	groupIDs := map[string]bool{}
+	for _, row := range data {
+		if row.LegalEntityGroupID != "" {
+			groupIDs[row.LegalEntityGroupID] = true
+		}
+	}
+	if len(groupIDs) > 0 {
+		groupRows := [][]interface{}{}
+		for groupID := range groupIDs {
+			rows, groupErr := h.DB.QueryContext(r.Context(), `SELECT g.name,g.interaction_agreement_number,g.interaction_agreement_date::text,
+				g.authorized_entity_name,g.authorized_entity_inn,g.authorized_entity_ogrn,
+				m.name,m.inn,m.ogrn,m.is_it_organization,COALESCE(m.target_amount_rub::text,'')
+				FROM legal_entity_groups g JOIN legal_entity_group_members m ON m.group_id=g.id
+				WHERE g.id::text=$1 ORDER BY m.is_it_organization DESC,m.name,m.id`, groupID)
+			if groupErr != nil {
+				middleware.WriteError(w, 500, "ошибка состава группы юридических лиц")
+				return
+			}
+			for rows.Next() {
+				var groupName, agreementNumber, agreementDate, authorizedName, authorizedINN, authorizedOGRN string
+				var memberName, memberINN, memberOGRN, targetAmount string
+				var isITOrganization bool
+				if groupErr = rows.Scan(&groupName, &agreementNumber, &agreementDate, &authorizedName, &authorizedINN, &authorizedOGRN,
+					&memberName, &memberINN, &memberOGRN, &isITOrganization, &targetAmount); groupErr != nil {
+					rows.Close()
+					middleware.WriteError(w, 500, "ошибка состава группы юридических лиц")
+					return
+				}
+				groupRows = append(groupRows, []interface{}{groupName, agreementNumber, agreementDate, authorizedName, authorizedINN, authorizedOGRN,
+					memberName, memberINN, memberOGRN, map[bool]string{true: "ИТ-организация", false: "Иное юридическое лицо"}[isITOrganization], targetAmount})
+			}
+			groupErr = rows.Err()
+			rows.Close()
+			if groupErr != nil {
+				middleware.WriteError(w, 500, "ошибка состава группы юридических лиц")
+				return
+			}
+		}
+		wb.AddSheet("Группа лиц", []string{"Группа", "Номер договора", "Дата договора", "Уполномоченное лицо", "ИНН уполномоченного", "ОГРН уполномоченного", "Участник", "ИНН участника", "ОГРН участника", "Тип участника", "Целевой объём, руб."}, groupRows)
+	}
 	if q.Get("format") == "docx" {
 		docRows := [][]string{}
 		for _, row := range consolidated {
