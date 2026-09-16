@@ -443,6 +443,10 @@ jobs:
       # only together with a real HTTPS origin and a reachable ClamAV service.
       APP_ENV: development
       MFA_ENCRYPTION_KEY: ${{ secrets.PROD_MFA_ENCRYPTION_KEY }}
+      # The application is reached through the VM floating IP. Set this
+      # explicitly so a stale runner/service environment cannot restrict the
+      # published nginx port to 127.0.0.1 while local health checks still pass.
+      HTTP_BIND: 0.0.0.0
       HTTP_PORT: ${{ vars.PROD_HTTP_PORT || '8080' }}
       BACKEND_REPLICAS: ${{ vars.PROD_BACKEND_REPLICAS || '2' }}
 

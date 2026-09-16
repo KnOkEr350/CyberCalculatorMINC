@@ -31,6 +31,18 @@ rollback() {
 trap rollback ERR
 docker compose build --pull
 docker compose up -d --remove-orphans --wait --wait-timeout 180
+
+# A local curl succeeds even when Docker publishes nginx only on 127.0.0.1.
+# Production is opened through the VM floating IP, so verify the real host
+# binding before declaring the deployment healthy.
+nginx_container="$(docker compose ps -q nginx)"
+[[ -n "$nginx_container" ]]
+published_addresses="$(docker inspect "$nginx_container" | jq -r '.[0].NetworkSettings.Ports["80/tcp"][]?.HostIp')"
+if ! grep -Fxq '0.0.0.0' <<< "$published_addresses"; then
+  echo "nginx port 80 is not published on all IPv4 interfaces; addresses: ${published_addresses:-none}" >&2
+  false
+fi
+
 for attempt in {1..30}; do
   version="$(curl --max-time 5 -fsS "http://127.0.0.1:${HTTP_PORT:-8080}/version.txt" 2>/dev/null || true)"
   if [[ "$version" == "${APP_VERSION:-dev}" ]] && curl --max-time 5 -fsS "http://127.0.0.1:${HTTP_PORT:-8080}/api/health" >/dev/null; then

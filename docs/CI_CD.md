@@ -87,6 +87,11 @@ workflow production runner используется только после push
 | `PROD_BACKEND_REPLICAS` | `2` |
 | `PROD_DB_RUNTIME_USER` | `cybercalc_app` |
 
+Production workflow всегда задаёт `HTTP_BIND=0.0.0.0`, поскольку приложение
+доступно через плавающий IP виртуальной машины. Деплой дополнительно проверяет
+реальный проброс порта контейнера nginx и завершается с ошибкой, если Docker
+опубликовал порт только на `127.0.0.1`.
+
 Workflow передаёт секреты Docker Compose через окружение runner и не сохраняет
 deployment `.env` в репозитории. Пока система разрабатывается без домена, CD
 запускает её с `APP_ENV=development` по HTTP и не требует `PUBLIC_URL` или
