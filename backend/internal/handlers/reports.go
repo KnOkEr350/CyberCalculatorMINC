@@ -67,16 +67,21 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	if scope := partnerScope(u, q.Get("partner_id")); scope != "" {
 		args = append(args, scope)
+		// Only the positional parameter number is formatted into this fixed fragment.
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		query += fmt.Sprintf(" AND e.partner_id::text=$%d", len(args))
 	}
 	if mentor := q.Get("mentor_id"); mentor != "" {
 		args = append(args, mentor)
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		query += fmt.Sprintf(" AND e.payload->>'mentor_id'=$%d", len(args))
 	}
 	if agreement := q.Get("agreement_id"); agreement != "" {
 		args = append(args, agreement)
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		query += fmt.Sprintf(" AND e.agreement_id::text=$%d", len(args))
 	}
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	query += ` ORDER BY p.name NULLS LAST, e.category_code LIMIT 10001`
 
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)

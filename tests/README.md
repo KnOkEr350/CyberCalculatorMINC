@@ -35,3 +35,16 @@ go test -count=1 -run TestWorkspaceIntegration ./...
 (cd backend && go test ./...)
 (cd tests && go test ./...)
 ```
+
+Динамические проверки, используемые CI:
+
+```bash
+cd tests
+go test -race ./...
+go test -run '^$' -fuzz '^FuzzWorkbookReader$' -fuzztime 20s ./...
+go test -run '^$' -bench '^BenchmarkCalculateAmount$' -benchmem ./...
+```
+
+Fuzz-target проверяет обработку недоверенных XLSX/ZIP/XML-данных, а benchmark
+используется для формирования CPU и memory profiles через `go test
+-cpuprofile/-memprofile`.

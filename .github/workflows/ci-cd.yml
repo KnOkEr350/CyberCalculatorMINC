@@ -4,14 +4,21 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
 
+env:
+  GO_VERSION_FILE: backend/go.mod
+  DEPENDENCY_CHECK_VERSION: 12.2.2
+  TRIVY_VERSION: v0.74.0
+
 jobs:
   quality:
-    name: Linters and security
-    runs-on: ubuntu-latest
+    name: Formatting and linters
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -23,14 +30,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
 
       - name: Check Go formatting
-        working-directory: backend
         shell: bash
         run: |
-          unformatted="$(gofmt -l .)"
+          unformatted="$(gofmt -l backend tests)"
           if [[ -n "$unformatted" ]]; then
             echo "These files must be formatted with gofmt:"
             echo "$unformatted"
@@ -38,19 +46,232 @@ jobs:
           fi
 
       - name: Run go vet
-        working-directory: backend
-        run: go vet ./...
+        shell: bash
+        run: |
+          (cd backend && go vet ./...)
+          (cd tests && go vet ./...)
 
       - name: Run staticcheck
-        working-directory: backend
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+        shell: bash
+        run: |
+          (cd backend && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...)
+          (cd tests && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...)
+
+      - name: Check frontend JavaScript syntax
+        shell: bash
+        run: |
+          node --check frontend/app.js
+          node --check frontend/workspace.js
+          node --check frontend/mfa.js
 
       - name: Lint GitHub Actions workflow
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
-      - name: Check Go dependencies for known vulnerabilities
+  tests:
+    name: Unit, race and API integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_USER: workspace_test
+          POSTGRES_PASSWORD: workspace_test
+          POSTGRES_DB: workspace_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workspace_test -d workspace_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
+
+      - name: Run backend unit tests with race detector
         working-directory: backend
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+        run: go test -count=1 -race -covermode=atomic -coverprofile=backend-coverage.out ./...
+
+      - name: Run API and authentication tests against PostgreSQL
+        working-directory: tests
+        env:
+          TEST_DATABASE_DSN: host=127.0.0.1 port=5432 user=workspace_test password=workspace_test dbname=workspace_test sslmode=disable
+          TEST_MIGRATIONS_DIR: ${{ github.workspace }}/migrations
+        run: go test -count=1 -race -coverpkg=cybercalc/... -covermode=atomic -coverprofile=integration-coverage.out ./...
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: go-coverage
+          path: |
+            backend/backend-coverage.out
+            tests/integration-coverage.out
+          if-no-files-found: warn
+          retention-days: 14
+
+  dynamic:
+    name: Fuzzing and performance profiles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
+
+      - name: Fuzz untrusted XLSX input
+        working-directory: tests
+        run: go test -run '^$' -fuzz '^FuzzWorkbookReader$' -fuzztime 20s ./...
+
+      - name: Record calculator CPU and memory profiles
+        working-directory: tests
+        run: |
+          go test -run '^$' -bench '^BenchmarkCalculateAmount$' -benchmem \
+            -cpuprofile perf-cpu.pprof -memprofile perf-memory.pprof ./...
+          go tool pprof -top perf-cpu.pprof > perf-cpu.txt
+          go tool pprof -top perf-memory.pprof > perf-memory.txt
+
+      - name: Upload performance profiles
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: performance-profiles
+          path: |
+            tests/perf-*.pprof
+            tests/perf-*.txt
+          retention-days: 14
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - go
+          - javascript-typescript
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@311b4ee155dcdab395044f00946f664bd51ff173 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Build Go application for CodeQL
+        if: matrix.language == 'go'
+        working-directory: backend
+        run: go build ./cmd/server
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@311b4ee155dcdab395044f00946f664bd51ff173 # v4.38.0
+        with:
+          category: /language:${{ matrix.language }}
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Scan Go, JavaScript and OWASP patterns
+        run: |
+          mkdir -p security-artifacts
+          docker run --rm \
+            --volume "$PWD:/src" \
+            --workdir /src \
+            semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198 \
+            semgrep scan --error --metrics=off --severity ERROR \
+            --config p/default --config p/owasp-top-ten \
+            --sarif --output security-artifacts/semgrep.sarif .
+
+      - name: Upload Semgrep results to code scanning
+        if: >-
+          always() && hashFiles('security-artifacts/semgrep.sarif') != '' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@311b4ee155dcdab395044f00946f664bd51ff173 # v4.38.0
+        with:
+          sarif_file: security-artifacts/semgrep.sarif
+          category: semgrep
+
+      - name: Upload Semgrep report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: semgrep-report
+          path: security-artifacts/semgrep.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+  supply-chain:
+    name: Secrets, dependencies and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      DTRACK_HOSTNAME: ${{ vars.DTRACK_HOSTNAME }}
+      DTRACK_API_KEY: ${{ secrets.DTRACK_API_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
 
       - name: Scan repository, secrets and Docker configuration
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
@@ -63,10 +284,93 @@ jobs:
           exit-code: "1"
           format: table
 
-  verify:
-    name: Tests and Compose smoke test
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+      - name: Check Go dependencies with govulncheck
+        shell: bash
+        run: |
+          (cd backend && go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...)
+          (cd tests && go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...)
+
+      - name: Generate CycloneDX SBOM for the shipped backend
+        working-directory: backend
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p ../security-artifacts
+          go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0 \
+            app -json -licenses -main cmd/server \
+            -output ../security-artifacts/cybercalculator-backend.cdx.json .
+
+      - name: Restore Dependency-Check vulnerability database
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/dependency-check
+          key: dependency-check-${{ runner.os }}-${{ env.DEPENDENCY_CHECK_VERSION }}-v1
+
+      - name: Install verified OWASP Dependency-Check
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://github.com/dependency-check/DependencyCheck/releases/download/v${DEPENDENCY_CHECK_VERSION}/dependency-check-${DEPENDENCY_CHECK_VERSION}-release.zip" \
+            --output dependency-check.zip
+          echo "bf07fefd81af3094c5f6850423b014df44db62ce2dbad0f79079a90df675e44a  dependency-check.zip" | sha256sum --check
+          unzip -q dependency-check.zip
+
+      - name: Run OWASP Dependency-Check
+        shell: bash
+        run: |
+          mkdir -p security-artifacts/dependency-check "$HOME/.cache/dependency-check"
+          args=(
+            --project CyberCalculatorMINC
+            --scan backend/go.mod
+            --scan tests/go.mod
+            --enableExperimental
+            --format HTML
+            --format JSON
+            --format SARIF
+            --failOnCVSS 7
+            --data "$HOME/.cache/dependency-check"
+            --out security-artifacts/dependency-check
+          )
+          if [[ -n "$NVD_API_KEY" ]]; then
+            args+=(--nvdApiKey "$NVD_API_KEY")
+          fi
+          dependency-check/bin/dependency-check.sh "${args[@]}"
+
+      - name: Upload SBOM to OWASP Dependency-Track
+        if: env.DTRACK_HOSTNAME != '' && env.DTRACK_API_KEY != ''
+        uses: DependencyTrack/gh-upload-sbom@d8935b70f527d6aca6bbef5ab02db3933c9a8626 # v4.2.0
+        with:
+          server-hostname: ${{ env.DTRACK_HOSTNAME }}
+          protocol: ${{ vars.DTRACK_PROTOCOL || 'https' }}
+          port: ${{ vars.DTRACK_PORT || '443' }}
+          api-key: ${{ env.DTRACK_API_KEY }}
+          project-name: CyberCalculatorMINC
+          project-version: ${{ github.sha }}
+          project-tags: ci,go
+          auto-create: true
+          is-latest: ${{ github.ref == 'refs/heads/main' }}
+          bom-filename: security-artifacts/cybercalculator-backend.cdx.json
+
+      - name: Report missing Dependency-Track connection
+        if: env.DTRACK_HOSTNAME == '' || env.DTRACK_API_KEY == ''
+        run: echo "::warning::Dependency-Track upload is disabled; configure DTRACK_HOSTNAME and DTRACK_API_KEY"
+
+      - name: Upload dependency reports and SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-security-reports
+          path: security-artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
+  container-dast:
+    name: Isolated containers and OWASP ZAP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    needs: tests
     env:
       COMPOSE_PROJECT_NAME: cybercalc-ci-${{ github.run_id }}-${{ github.run_attempt }}
       CI_HTTP_PORT: "18080"
@@ -77,21 +381,6 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
-      - name: Run required Go tests
-        working-directory: backend
-        run: go test ./...
-
-      - name: Check frontend JavaScript syntax
-        run: |
-          node --check frontend/app.js
-          node --check frontend/workspace.js
 
       - name: Create isolated CI configuration
         shell: bash
@@ -113,275 +402,54 @@ jobs:
       - name: Build and start the complete application
         run: docker compose up --detach --build --wait --wait-timeout 180
 
-      - name: Verify frontend and API through nginx
+      - name: Verify isolated application boundary
         shell: bash
         run: |
-          set -Eeuo pipefail
           base_url="http://127.0.0.1:${CI_HTTP_PORT}"
-
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error "${base_url}/" | grep -q "Калькулятор затрат"; then
-              break
-            fi
-            if [[ "$attempt" == "30" ]]; then
-              echo "Frontend did not become ready"
-              exit 1
-            fi
-            sleep 2
-          done
-
-          curl --fail --silent --show-error "${base_url}/app.js" > /dev/null
-          curl --fail --silent --show-error "${base_url}/style.css" > /dev/null
+          curl --fail --silent --show-error "${base_url}/" > /dev/null
+          curl --fail --silent --show-error "${base_url}/api/health" | jq --exit-status '.status == "ok"' > /dev/null
           served_version="$(curl --fail --silent --show-error "${base_url}/version.txt" | tr -d '\r\n')"
-          [[ "$served_version" == "$APP_VERSION" ]] || {
-            echo "Expected frontend $APP_VERSION, got $served_version"
-            exit 1
-          }
+          [[ "$served_version" == "$APP_VERSION" ]]
+          anonymous_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/api/auth/me")"
+          [[ "$anonymous_status" == "401" ]]
 
-          logged_in=false
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error \
-              --cookie-jar /tmp/cybercalc-ci-cookies \
-              --header "X-Cybercalc-Request: 1" \
-              --header "Content-Type: application/json" \
-              --data '{"email":"ci-admin@example.invalid","password":"ci-only-admin-password"}' \
-              "${base_url}/api/auth/login" > /dev/null; then
-              logged_in=true
-              break
-            fi
-            sleep 2
-          done
-          if [[ "$logged_in" != "true" ]]; then
-            echo "Backend login did not become ready"
-            exit 1
-          fi
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
 
-          curl --fail --silent --show-error \
-            --cookie /tmp/cybercalc-ci-cookies \
-            "${base_url}/api/auth/me" \
-            | grep -q '"email":"ci-admin@example.invalid"'
+      - name: Scan every built image and generate image SBOMs
+        run: bash scripts/scan-images.sh
 
-      - name: Verify creating, editing and attaching files
+      - name: Run OWASP ZAP active application scan
         shell: bash
         run: |
-          set -Eeuo pipefail
-          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
-          cookie_file="/tmp/cybercalc-ci-cookies"
+          mkdir -p security-artifacts
+          sudo chown -R 1000:1000 security-artifacts
+          set +e
+          docker run --rm \
+            --network "${COMPOSE_PROJECT_NAME}_application" \
+            --volume "$PWD/security-artifacts:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:2.17.0@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef \
+            zap-full-scan.py -t http://nginx -m 1 -T 10 -I \
+            -z "-config ascan.maxScanDurationInMins=5 -config ascan.maxRuleDurationInMins=1" \
+            -J zap-report.json -r zap-report.html
+          zap_status=$?
+          set -e
+          sudo chown -R "$(id -u):$(id -g)" security-artifacts
+          [[ "$zap_status" == "0" ]]
+          jq --exit-status '[.site[]?.alerts[]? | select((.riskcode | tonumber) >= 3)] | length == 0' \
+            security-artifacts/zap-report.json > /dev/null
 
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"entity_type":"organization"}' \
-            "${base_url}/api/auth/entity-type" > /dev/null
-
-          # Production forbids arbitrary partner names. Seed a verified registry
-          # row into this disposable CI database, then exercise the public API.
-          directory_id="$(docker compose exec -T db psql \
-            --username cybercalc_ci \
-            --dbname cybercalc_ci \
-            --quiet \
-            --tuples-only \
-            --no-align \
-            --set ON_ERROR_STOP=1 \
-            --command "INSERT INTO education_directory(
-              name,partner_kind,region,source,inn,ogrn,license_number,
-              license_status,institution_status,registry_record_id,source_url,
-              registry_updated_at,verified_at,verification_status,
-              program_codes,programs_source_url,programs_checked_at
-            ) VALUES (
-              'CI test university','vuz','г. Москва','CI verified fixture',
-              '7707083893','1027700132195','CI-LICENSE-1','active','active',
-              'ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',
-              'https://islod.obrnadzor.gov.ru/rlic/details/ci-fixture',
-              CURRENT_DATE,now(),'verified',ARRAY['09.03.01'],
-              'https://ci.example.invalid/sveden/education/',now()
-            ) RETURNING id;")"
-          [[ "$directory_id" =~ ^[0-9a-f-]{36}$ ]]
-
-          partner_response="$(curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$(jq --compact-output --null-input --arg directory "$directory_id" '{
-              directory_id: $directory,
-              initial_agreement: {
-                partner_ids: [],
-                agreement_kind: "education_organization",
-                number: "CI-1",
-                status: "active",
-                signed_on: "2026-01-01",
-                valid_from: "2020-01-01",
-                valid_until: "2100-12-31",
-                signature_method: "qualified_electronic",
-                signed_by: "CI Signer",
-                signature_date: "2026-01-01",
-                document_reference: "CI smoke test",
-                responsible_people: [
-                  {party: "cyberprotect", full_name: "CI Administrator"},
-                  {party: "counterparty", full_name: "CI Partner"}
-                ]
-              }
-            }')" \
-            "${base_url}/api/partners")"
-          partner_id="$(jq --exit-status --raw-output '.id' <<< "$partner_response")"
-          agreement_id="$(jq --exit-status --raw-output '.agreement_id' <<< "$partner_response")"
-
-          entry_payload="$(jq --compact-output --null-input \
-            --arg partner "$partner_id" \
-            --arg agreement "$agreement_id" '{
-            category_code: "teachers",
-            partner_id: $partner,
-            agreement_id: $agreement,
-            period_type: "fact",
-            report_year: 2026,
-            audience: "vuz",
-            payload: {
-              org_name: $partner,
-              course_name: "CI course",
-              teacher_full_name: "CI teacher",
-              employment_form: "ГПХ",
-              academic_hours: 2
-            }
-          }')"
-          printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
-          entry_response="$(curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$entry_payload" \
-            "${base_url}/api/entries")"
-          entry_id="$(jq --exit-status --raw-output '.id' <<< "$entry_response")"
-
-          # Fact can be created and edited without attachments.
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --form 'files=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
-            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
-
-          update_payload="$(jq --compact-output --null-input \
-            --arg partner "$partner_id" \
-            --arg agreement "$agreement_id" '{
-            audience: "vuz",
-            agreement_id: $agreement,
-            comment: "CI attachment edit check",
-            payload: {
-              org_name: $partner,
-              course_name: "Updated CI course",
-              teacher_full_name: "CI teacher",
-              employment_form: "ГПХ",
-              academic_hours: 3
-            }
-          }')"
-          curl --fail --silent --show-error --request PUT \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$update_payload" \
-            "${base_url}/api/entries/${entry_id}" > /dev/null
-
-          printf 'attached after edit\n' > /tmp/cybercalc-second-attachment.txt
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --form 'file=@/tmp/cybercalc-second-attachment.txt;filename=second.txt' \
-            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
-
-          attachments="$(curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            "${base_url}/api/entries/${entry_id}/attachments")"
-          [[ "$(jq 'length' <<< "$attachments")" == "2" ]]
-          first_attachment_id="$(jq --exit-status --raw-output '.[] | select(.file_name == "first.txt") | .id' <<< "$attachments")"
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            "${base_url}/api/attachments/${first_attachment_id}/download" \
-            --output /tmp/cybercalc-downloaded-attachment.txt
-          cmp /tmp/cybercalc-first-attachment.txt /tmp/cybercalc-downloaded-attachment.txt
-
-      - name: Verify moderator boundaries and IT-company registry
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
-          admin_cookie="/tmp/cybercalc-ci-cookies"
-          moderator_cookie="/tmp/cybercalc-ci-moderator-cookies"
-          education_cookie="/tmp/cybercalc-ci-education-moderator-cookies"
-
-          curl --fail --silent --show-error \
-            --cookie "$admin_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!","full_name":"CI Moderator","role":"moderator","entity_type":"organization"}' \
-            "${base_url}/api/admin/users" > /dev/null
-
-          curl --fail --silent --show-error \
-            --cookie-jar "$moderator_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!"}' \
-            "${base_url}/api/auth/login" > /dev/null
-
-          expect_forbidden() {
-            local cookie="$1" method="$2" path="$3" status
-            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              --cookie "$cookie" --request "$method" --header "X-Cybercalc-Request: 1" \
-              "${base_url}/api/${path}")"
-            [[ "$status" == "403" ]] || {
-              echo "Expected 403 for ${method} ${path}, got ${status}"
-              return 1
-            }
-          }
-
-          # IT-organization moderators cannot access the IT-company directory.
-          for path in it-companies it-companies/registry-search it-companies/template; do
-            expect_forbidden "$moderator_cookie" GET "$path"
-          done
-          for path in it-companies it-companies/import; do
-            expect_forbidden "$moderator_cookie" POST "$path"
-          done
-
-          curl --fail --silent --show-error \
-            --cookie "$moderator_cookie" \
-            "${base_url}/api/admin/directory-template" \
-            --output /tmp/cybercalc-directory-template.xlsx
-
-          # Registry management belongs to the educational-organization profile.
-          partner_id="$(curl --fail --silent --show-error --cookie "$admin_cookie" \
-            "${base_url}/api/partners" \
-            | jq --exit-status --raw-output '.[] | select(.name == "CI test university") | .id')"
-          [[ "$partner_id" =~ ^[0-9a-f-]{36}$ ]]
-          curl --fail --silent --show-error \
-            --cookie "$admin_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$(jq --compact-output --null-input --arg partner "$partner_id" '{email:"ci-education-moderator@example.invalid",password:"ModeratorPass1!",full_name:"CI Education Moderator",role:"moderator",entity_type:"edu_institution",partner_id:$partner}')" \
-            "${base_url}/api/admin/users" > /dev/null
-          curl --fail --silent --show-error \
-            --cookie-jar "$education_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"email":"ci-education-moderator@example.invalid","password":"ModeratorPass1!"}' \
-            "${base_url}/api/auth/login" > /dev/null
-
-          for cookie in "$moderator_cookie" "$education_cookie"; do
-            for path in admin/users admin/settings admin/logs; do
-              expect_forbidden "$cookie" GET "$path"
-            done
-          done
-
-          registry_date="$(date -u +%F)"
-          curl --fail --silent --show-error \
-            --cookie "$education_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$(jq --compact-output --null-input --arg date "$registry_date" '{name:"CI accredited IT company",inn:"7707083893",ogrn:"1027700132195",accreditation_number:"CI-ACCREDITATION-1",registry_record_id:"ci-it-company-1",registry_updated_at:$date,source_url:"https://digital.gov.ru/ru/activity/govservices/1/"}')" \
-            "${base_url}/api/it-companies" > /dev/null
-
-          curl --fail --silent --show-error \
-            --cookie "$education_cookie" \
-            "${base_url}/api/it-companies?q=CI%20accredited" \
-            | jq --exit-status 'length == 1 and .[0].accreditation_status == "active"' > /dev/null
+      - name: Upload container and DAST reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: container-and-zap-reports
+          path: security-artifacts
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Print Compose diagnostics on failure
         if: failure()
@@ -395,8 +463,17 @@ jobs:
 
   deploy:
     name: Deploy to Debian VM
-    needs: [quality, verify]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs:
+      - quality
+      - tests
+      - dynamic
+      - codeql
+      - semgrep
+      - supply-chain
+      - container-dast
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: [self-hosted, linux, x64, cybercalculator-prod]
     timeout-minutes: 20
     environment: production
@@ -413,8 +490,6 @@ jobs:
       DB_RUNTIME_PASSWORD: ${{ secrets.PROD_DB_RUNTIME_PASSWORD }}
       ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.PROD_ADMIN_BOOTSTRAP_EMAIL }}
       ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.PROD_ADMIN_BOOTSTRAP_PASSWORD }}
-      # Temporary development deployment over HTTP. Switch back to production
-      # only together with a real HTTPS origin and a reachable ClamAV service.
       APP_ENV: development
       MFA_ENCRYPTION_KEY: ${{ secrets.PROD_MFA_ENCRYPTION_KEY }}
       HTTP_PORT: ${{ vars.PROD_HTTP_PORT || '8080' }}
@@ -443,18 +518,13 @@ jobs:
           docker compose config --quiet
 
       - name: Build and deploy verified revision with Docker Compose
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          echo "Deploying $APP_VERSION from $GITHUB_WORKSPACE"
-          bash scripts/deploy-safe.sh
+        run: bash scripts/deploy-safe.sh
 
       - name: Verify deployed application
         shell: bash
         run: |
           set -Eeuo pipefail
           base_url="http://127.0.0.1:${HTTP_PORT}"
-
           for attempt in {1..30}; do
             frontend_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/" || true)"
             api_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/api/auth/me" || true)"
@@ -465,8 +535,7 @@ jobs:
             fi
             sleep 2
           done
-
-          echo "Deployment health check failed after $attempt attempts: expected revision $APP_VERSION, got ${served_version:-nothing}"
+          echo "Deployment health check failed: expected revision $APP_VERSION, got ${served_version:-nothing}"
           exit 1
 
       - name: Print deployment diagnostics on failure

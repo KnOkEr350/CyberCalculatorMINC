@@ -1,18 +1,66 @@
 # CI/CD для Debian VM
 
 Workflow `.github/workflows/ci-cd.yml` запускается при каждом push, pull
-request и вручную. Он состоит из трёх jobs:
+request, вручную и по понедельникам для плановой перепроверки баз уязвимостей.
+Проверки разделены по назначению и выполняются параллельно:
 
-1. `quality` запускает форматирование, линтеры и проверки безопасности.
-   Найденные проблемы блокируют production-деплой.
-2. `verify` на GitHub-hosted Ubuntu runner выполняет Go-тесты, собирает и
-   запускает весь Docker Compose, проверяет frontend, nginx, PostgreSQL,
-   миграции, вход, создание и редактирование факта, загрузку и скачивание
-   вложений. Ошибка этого job блокирует CD.
-3. `deploy` запускается только для `main`, только после успешного `verify` и
-   выполняет `docker compose up` на Debian VM через self-hosted runner. После
-   пересоздания сервисов он перезапускает nginx, затем сверяет версию, которую
-   отдаёт frontend, с SHA проверенного коммита.
+| Job | Что проверяет |
+|---|---|
+| `quality` | `gofmt`, `go vet`, `staticcheck`, синтаксис JavaScript и `actionlint` |
+| `tests` | unit-тесты с Go race detector и API-интеграцию из `tests/` с настоящим PostgreSQL |
+| `dynamic` | fuzzing XLSX-парсера и воспроизводимые CPU/memory-профили benchmark |
+| `codeql` | data-flow/SAST анализ Go и JavaScript набором `security-extended` |
+| `semgrep` | блокирующие security-правила Semgrep для Go, JavaScript, конфигураций и OWASP Top 10 |
+| `supply-chain` | Trivy (включая секреты), `govulncheck`, CycloneDX SBOM, OWASP Dependency-Check и Dependency-Track |
+| `container-dast` | сборка изолированного Compose-стенда, сканирование всех образов Trivy и активный DAST через OWASP ZAP |
+| `deploy` | безопасное обновление Debian VM и проверка SHA реально запущенной версии |
+
+Старые многострочные проверки API через `curl`/`psql` удалены. Сценарии входа,
+ролей, планов и фактов, workflow, импорта, вложений и отчётов теперь выполняет
+типизированный Go-тест `tests/workspace_integration_test.go`. В Compose-job
+остался только минимальный smoke test границы nginx/контейнеров: подробное
+повторение тех же API-сценариев там не даёт нового покрытия.
+
+## Почему выбраны именно эти динамические инструменты
+
+Backend написан на чистом Go и production-бинарник собирается с
+`CGO_ENABLED=0`. Поэтому Valgrind, AddressSanitizer, gprof, Helgrind и
+ThreadSanitizer для C/C++ не дают здесь полезного покрытия. Их задачи закрыты
+нативными средствами Go:
+
+- `go test -race` проверяет гонки памяти и конкурентный доступ;
+- Go fuzzing мутирует недоверенный XLSX/ZIP/XML-ввод;
+- `go test -bench -benchmem` и `pprof` дают CPU, allocation и heap-профили.
+
+Linux `perf` и `strace` зависят от прав и настроек ядра GitHub runner, поэтому
+их результаты нестабильны и плохо подходят для обязательного merge-gate.
+`DTrace` на Linux runner недоступен. OWASP ZAP используется как практический
+application scan/DAST уже собранного стенда; отдельный коммерческий IBM
+AppScan не добавлен, поскольку требует лицензии и дублирует этот слой.
+
+## Отчёты безопасности
+
+CI сохраняет артефакты с покрытием, `pprof`, SARIF Semgrep, отчётами ZAP,
+Dependency-Check и CycloneDX SBOM. CodeQL и Semgrep также отправляют результаты
+в GitHub Code Scanning. Security actions и Docker-образы закреплены по commit
+SHA или digest, чтобы тег стороннего инструмента нельзя было незаметно
+подменить.
+
+OWASP Dependency-Check блокирует CVE с CVSS `7.0` и выше. Для быстрого и
+стабильного обновления NVD рекомендуется добавить repository secret
+`NVD_API_KEY`; локальная база Dependency-Check кэшируется между запусками.
+
+Для отправки SBOM в существующий OWASP Dependency-Track настройте:
+
+| Тип | Имя | Значение |
+|---|---|---|
+| Repository variable | `DTRACK_HOSTNAME` | hostname сервера без `https://` |
+| Repository variable | `DTRACK_PROTOCOL` | необязательно: `https` по умолчанию |
+| Repository variable | `DTRACK_PORT` | необязательно: `443` по умолчанию |
+| Repository secret | `DTRACK_API_KEY` | API-ключ команды с правами `BOM_UPLOAD` и `PROJECT_CREATION_UPLOAD` |
+
+Без этих двух значений SBOM всё равно создаётся и сохраняется как CI artifact,
+но upload в Dependency-Track явно помечается предупреждением.
 
 ## Подготовка Debian VM
 
@@ -106,7 +154,7 @@ production-запуском необходимо вернуть `APP_ENV=product
 в `main`. Последовательность будет такой:
 
 ```text
-push → quality (не блокирует) + verify → deploy на Debian VM
+push → параллельные quality/tests/SAST/SCA/DAST gates → deploy на Debian VM
 ```
 
 `actions/checkout` обновляет служебную копию в рабочем каталоге runner, обычно

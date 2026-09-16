@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+var benchmarkAmount string
+
 func TestAllOrderDocumentRates(t *testing.T) {
 	for _, tt := range []struct{ doc, level, activity, want string }{
 		{"rpd", "vo", "development", "300000.00"}, {"rpd", "vo", "update", "160000.00"}, {"rpd", "vo", "expertise", "55000.00"},
@@ -35,5 +37,21 @@ func TestExactDecimalAmounts(t *testing.T) {
 		if err != nil || a.String() != tt.want {
 			t.Fatalf("%+v: %s %v", tt, a, err)
 		}
+	}
+}
+
+func BenchmarkCalculateAmount(b *testing.B) {
+	payload := map[string]interface{}{
+		"duration_months":              6,
+		"student_load_hours_per_month": 80,
+		"mentor_load_hours_per_month":  20,
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		amount, err := calculators.CalculateAmount("internship", models.AudienceVuz, payload)
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkAmount = amount.String()
 	}
 }

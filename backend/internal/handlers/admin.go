@@ -394,6 +394,8 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 		}
 	}
 
+	// SQL structure comes only from fixed fragments; values remain positional parameters.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	query := `SELECT a.id, a.entity_type, a.entity_id, a.action, a.user_id,
 		COALESCE(u.email,''),COALESCE(u.full_name,''),a.comment_text,a.old_value,a.new_value,a.created_at
 		FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE ` + joinAnd(conds) +

@@ -202,6 +202,8 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 			return
 		}
 	}
+	// SQL structure comes only from fixed fragments; values remain positional parameters.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	query := `SELECT id, category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,
 		created_by, updated_by, created_at, updated_at FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
