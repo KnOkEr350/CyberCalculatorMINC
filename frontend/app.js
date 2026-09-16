@@ -508,7 +508,7 @@ async function renderDashboard(root) {
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
           ${
             aggregateDashboard
-              ? `<div class="field"><label aria-hidden="true">Целевая сумма</label><button class="btn secondary" id="set-target">Задать целевую сумму (3%)</button></div>`
+              ? `<div class="field"><label>Целевая сумма</label><button class="btn secondary" id="set-target">Задать сумму (3%)</button></div>`
               : ""
           }
         </div>
