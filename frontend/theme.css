@@ -98,8 +98,8 @@ button { touch-action: manipulation; }
 }
 .card h2 { margin: 0 0 18px; color: var(--navy); font-size: 17px; line-height: 1.25; font-weight: 720; text-transform: none; letter-spacing: -.01em; }
 .filter-card { padding-bottom: 13px; }
-.dashboard-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; align-items: end; }
-.dashboard-filters { display: grid; grid-template-columns: 100px minmax(240px, 1fr) auto; gap: 12px; align-items: end; justify-self: end; width: min(820px, 100%); }
+.dashboard-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: end; }
+.dashboard-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 12px; align-items: end; justify-self: stretch; width: 100%; }
 .dashboard-filters .field { margin: 0; }
 .dashboard-filters .btn { width: 100%; white-space: nowrap; }
 .grid { gap: 18px; }
