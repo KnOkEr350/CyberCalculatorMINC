@@ -1,10 +1,11 @@
-package main
+package tests
 
 import (
 	"bytes"
 	"cybercalc/internal/auth"
 	"cybercalc/internal/config"
 	"cybercalc/internal/dbx"
+	appserver "cybercalc/internal/server"
 	"cybercalc/internal/xlsx"
 	"database/sql"
 	"encoding/json"
@@ -44,7 +45,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := config.Config{UploadDir: t.TempDir(), MFAKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}
-	server := httptest.NewServer(buildRoutes(db, cfg))
+	server := httptest.NewServer(appserver.BuildRoutes(db, cfg))
 	defer server.Close()
 	stamp := fmt.Sprint(time.Now().UnixNano())
 	password := "WorkspaceTest1!"
@@ -207,6 +208,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(admin, "PUT", "/agreements/"+groupID, groupAgreement, 200)
 	partnerEmail := "partner" + stamp + "@workspace.test"
 	call(admin, "POST", "/admin/users", map[string]interface{}{"email": partnerEmail, "password": password, "full_name": "Представитель Вуза", "role": "user", "entity_type": "edu_institution", "partner_id": p1}, 201)
+	educationAdminEmail := "education-admin" + stamp + "@workspace.test"
+	call(admin, "POST", "/admin/users", map[string]interface{}{"email": educationAdminEmail, "password": password, "full_name": "Администратор Вуза", "role": "admin", "entity_type": "edu_institution", "partner_id": p1}, 201)
 	usersByName := call(admin, "GET", "/admin/users?q="+url.QueryEscape("Представитель Вуза"), nil, 200)
 	if !bytes.Contains(usersByName, []byte(partnerEmail)) || bytes.Contains(usersByName, []byte(email)) {
 		t.Fatal("admin user search by full name returned the wrong users")
@@ -221,6 +224,12 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(admin, "GET", "/admin/users?q="+strings.Repeat("я", 201), nil, 400)
 	call(partnerClient, "POST", "/auth/login", map[string]string{"email": partnerEmail, "password": password}, 200)
+	educationAdminClient := newClient()
+	call(educationAdminClient, "POST", "/auth/login", map[string]string{"email": educationAdminEmail, "password": password}, 200)
+	educationAdminProfile := object(call(educationAdminClient, "GET", "/auth/me", nil, 200))
+	if educationAdminProfile["role"] != "admin" || educationAdminProfile["entity_type"] != "edu_institution" || educationAdminProfile["partner_id"] != p1 {
+		t.Fatal("education admin profile lost its assigned institution")
+	}
 	call(partnerClient, "POST", "/auth/entity-type", map[string]string{"entity_type": "organization"}, 403)
 	call(partnerClient, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("foreign")}, 403)
 	call(partnerClient, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 1000}, 403)
@@ -250,6 +259,26 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if !bytes.Contains(partners, []byte(p1)) || bytes.Contains(partners, []byte(p2)) {
 		t.Fatal("partner list leaks data")
 	}
+	educationAdminPartners := call(educationAdminClient, "GET", "/partners", nil, 200)
+	if !bytes.Contains(educationAdminPartners, []byte(p1)) || bytes.Contains(educationAdminPartners, []byte(p2)) {
+		t.Fatal("education admin can select an institution outside its assignment")
+	}
+	call(educationAdminClient, "POST", "/entries", map[string]interface{}{
+		"partner_id": p1, "agreement_id": agreement1, "category_code": "teachers", "period_type": "plan", "report_year": 2026, "audience": "vuz",
+		"payload": map[string]interface{}{"org_name": p1, "course_name": "Недопустимый план", "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 1},
+	}, 403)
+	educationAdminEntries := call(educationAdminClient, "GET", "/entries?report_year=2026", nil, 200)
+	if bytes.Contains(educationAdminEntries, []byte(schoolPartner)) {
+		t.Fatal("education admin sees another institution's entries")
+	}
+	educationAdminWorkflowPath := "/report-workflow?agreement_id=" + agreement1 + "&report_year=2026&period_type=plan"
+	educationAdminWorkflow := object(call(educationAdminClient, "GET", educationAdminWorkflowPath, nil, 200))
+	if educationAdminWorkflow["can_mark_ready"].(bool) {
+		t.Fatal("education admin can prepare the plan")
+	}
+	call(educationAdminClient, "POST", "/report-workflow/transition?agreement_id="+agreement1+"&report_year=2026&period_type=plan", map[string]interface{}{
+		"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "comment": "Недопустимая отправка плана",
+	}, 409)
 	mentor := object(call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p1, "full_name": "Иванов Иван Иванович"}, 201))["id"].(string)
 	call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p2, "full_name": "Иванов Иван Иванович"}, 403)
 	call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p1, "full_name": "123"}, 400)

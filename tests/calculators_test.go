@@ -1,6 +1,7 @@
-package calculators
+package tests
 
 import (
+	"cybercalc/internal/calculators"
 	"cybercalc/internal/models"
 	"encoding/json"
 	"testing"
@@ -17,7 +18,7 @@ func TestAllOrderDocumentRates(t *testing.T) {
 		if tt.level == "spo" {
 			audience = models.AudienceKolledj
 		}
-		a, err := CalculateAmount("ood_rpd", audience, map[string]interface{}{"doc_type": tt.doc, "level": tt.level, "activity_type": tt.activity})
+		a, err := calculators.CalculateAmount("ood_rpd", audience, map[string]interface{}{"doc_type": tt.doc, "level": tt.level, "activity_type": tt.activity})
 		if err != nil || a.String() != tt.want {
 			t.Fatalf("%+v: %s %v", tt, a, err)
 		}
@@ -30,7 +31,7 @@ func TestExactDecimalAmounts(t *testing.T) {
 		{"top_it", "cofinancing_amount_rub", "123456789012.345", "123456789012.35"},
 		{"minc_decision", "amount_manual", "1.005", "1.01"},
 	} {
-		a, err := CalculateAmount(tt.category, models.AudienceVuz, map[string]interface{}{tt.key: json.Number(tt.value)})
+		a, err := calculators.CalculateAmount(tt.category, models.AudienceVuz, map[string]interface{}{tt.key: json.Number(tt.value)})
 		if err != nil || a.String() != tt.want {
 			t.Fatalf("%+v: %s %v", tt, a, err)
 		}

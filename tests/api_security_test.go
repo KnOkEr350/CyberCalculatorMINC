@@ -1,13 +1,14 @@
-package middleware
+package tests
 
 import (
+	"cybercalc/internal/middleware"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestCrossOriginProtection(t *testing.T) {
-	h := Security(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }), "https://calc.example")
+	h := middleware.Security(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }), "https://calc.example", false)
 	for _, tt := range []struct {
 		origin, site, header string
 		want                 int
