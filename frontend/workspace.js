@@ -702,7 +702,7 @@ async function renderITCompanies(root, embedded = false) {
   }
   const writable = canManageITCompanies();
   root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Аккредитованные ИТ-компании</h2></div>' : '<section class="page-heading"><div><h1>Аккредитованные ИТ-компании</h1></div></section>'}
-  <div class="card filter-card"><div class="flex between"><h2>Поиск по реестру</h2><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Открыть Госуслуги</a>${writable ? '<button class="btn" id="it-add">+ Добавить компанию</button>' : ""}</div></div><div class="directory-search"><div class="field"><label for="it-scope">Источник</label><select id="it-scope"><option value="saved">Сохранённые компании</option><option value="registry">Госуслуги через ПроРеестр</option></select></div><div class="field"><label for="it-search">Название или ИНН</label><input id="it-search" placeholder="Введите название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
+  <div class="card filter-card"><div class="flex between"><h2>Поиск по реестру</h2><div class="flex"><a class="btn secondary" href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">Открыть Госуслуги</a>${writable ? '<button class="btn" id="it-add">+ Добавить компанию</button>' : ""}</div></div><div class="directory-search"><div class="field"><label for="it-scope">Источник</label><select id="it-scope"><option value="all">Все источники</option><option value="saved">Сохранённые компании</option><option value="registry">Госуслуги через ПроРеестр</option></select></div><div class="field"><label for="it-search">Название или ИНН</label><input id="it-search" placeholder="Введите название или ИНН"></div><button class="btn secondary" id="it-find">Найти</button></div></div>
   <div class="card"><div class="flex between"><h2>Компании с действующей аккредитацией</h2><span class="count-badge" id="it-count"></span></div><p class="muted" id="it-scope-note"></p><div id="it-list" class="loading-state"><span class="spinner"></span>Загрузка реестра…</div></div>`;
 
   let offset = 0;
@@ -715,9 +715,10 @@ async function renderITCompanies(root, embedded = false) {
     list.className = "loading-state";
     list.innerHTML = '<span class="spinner"></span>Загрузка реестра…';
     try {
-      const registry = root.querySelector("#it-scope").value === "registry";
+      const scope = root.querySelector("#it-scope").value;
+      const registryOnly = scope === "registry";
       const searchText = root.querySelector("#it-search").value.trim();
-      if (registry && !searchText) {
+      if (registryOnly && !searchText) {
         root.querySelector("#it-count").textContent = "";
         pagination.style.display = "none";
         root.querySelector("#it-scope-note").textContent = "Для проверки в реестре введите название или ИНН компании.";
@@ -726,21 +727,59 @@ async function renderITCompanies(root, embedded = false) {
         return;
       }
       const query = encodeURIComponent(searchText);
-      const result = await api(registry ? `/it-companies/registry-search?q=${query}` : `/it-companies?q=${query}&offset=${offset}`);
-      const companies = registry ? result.items : result;
+      const combined = scope === "all" && searchText !== "";
+      let companies = [];
+      let nextOffset = null;
+      let registryResult = null;
+      let registryError = null;
+      if (combined) {
+        const [saved, external] = await Promise.all([
+          api(`/it-companies?q=${query}&offset=0`),
+          api(`/it-companies/registry-search?q=${query}`).catch((error) => ({ error })),
+        ]);
+        registryError = external.error || null;
+        registryResult = registryError ? null : external;
+        const seen = new Set();
+        companies = saved.map((company) => {
+          seen.add(company.inn);
+          return { ...company, lookup_source: "saved" };
+        });
+        for (const company of registryResult?.items || []) {
+          if (!seen.has(company.inn)) {
+            seen.add(company.inn);
+            companies.push({ ...company, lookup_source: "registry" });
+          }
+        }
+      } else if (registryOnly) {
+        registryResult = await api(`/it-companies/registry-search?q=${query}`);
+        companies = registryResult.items.map((company) => ({ ...company, lookup_source: "registry" }));
+      } else {
+        const saved = await api(`/it-companies?q=${query}&offset=${offset}`);
+        nextOffset = saved.nextOffset;
+        companies = saved.map((company) => ({ ...company, lookup_source: "saved" }));
+      }
       if (version !== generation) return;
-      root.querySelector("#it-count").textContent = companies.length ? (registry ? `Найдено: ${companies.length}` : `Записи ${offset + 1}–${offset + companies.length}`) : "0 компаний";
-      pagination.style.display = registry ? "none" : "";
-      root.querySelector("#it-scope-note").textContent = registry
-        ? (result.initial ? "Начальная подборка компаний. Введите название или ИНН для поиска нужной организации." : result.may_have_more ? "Показаны первые 100 совпадений. Уточните название или введите ИНН." : "Результат проверки реестра через ПроРеестр. Для подтверждающих документов откройте Госуслуги.")
-        : "Записи, добавленные вручную или загруженные из выгрузки. Для поиска других компаний выберите проверку реестра.";
+      const localListing = !registryOnly && !combined;
+      root.querySelector("#it-count").textContent = companies.length ? (localListing ? `Записи ${offset + 1}–${offset + companies.length}` : `Найдено: ${companies.length}`) : "0 компаний";
+      pagination.style.display = localListing ? "" : "none";
+      root.querySelector("#it-scope-note").textContent = combined
+        ? registryError
+          ? `Показаны совпадения из сохранённых компаний. Внешний реестр временно недоступен: ${registryError.message}`
+          : registryResult.may_have_more
+            ? "Совпадения из сохранённых компаний и первые 100 результатов внешнего реестра. Уточните запрос."
+            : "Поиск выполнен по сохранённым компаниям и внешнему реестру."
+        : registryOnly
+          ? (registryResult.initial ? "Введите название или ИНН для поиска нужной организации." : registryResult.may_have_more ? "Показаны первые 100 совпадений. Уточните название или введите ИНН." : "Результат проверки реестра через ПроРеестр. Для подтверждающих документов откройте Госуслуги.")
+          : scope === "all"
+            ? "Показаны сохранённые компании. Введите название или ИНН, чтобы также проверить внешний реестр."
+            : "Записи, добавленные вручную или загруженные из выгрузки.";
       pagination.querySelector("[data-prev]").disabled = offset === 0;
-      pagination.querySelector("[data-next]").disabled = companies.nextOffset == null;
-      pagination.querySelector("[data-next]").onclick = () => { offset = companies.nextOffset; load(); };
+      pagination.querySelector("[data-next]").disabled = nextOffset == null;
+      pagination.querySelector("[data-next]").onclick = () => { offset = nextOffset; load(); };
       list.className = "";
       list.innerHTML = companies.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => `<tr><td><b>${escapeHTML(company.name)}</b>${company.director_name ? `<br><small>Руководитель: ${escapeHTML(company.director_name)}</small>` : ""}${company.legal_address ? `<br><small>${escapeHTML(company.legal_address)}</small>` : ""}${!registry && company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn || "не предоставлен источником")}${company.phone ? `<br>${escapeHTML(company.phone)}` : ""}${company.email ? `<br>${escapeHTML(company.email)}` : ""}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>${registry ? "Запрос выполнен" : "Данные на"} ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть источник сведений</a>${company.website ? `<br><a href="${escapeHTML(company.website)}" target="_blank" rel="noopener noreferrer">Сайт компании</a>` : ""}</td></tr>`).join("")}</tbody></table></div>`
-        : '<div class="empty-state"><b>Компании не найдены</b><span>Измените название, попробуйте поиск по ИНН или выберите другой источник поиска.</span></div>';
+        ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => { const fromRegistry = company.lookup_source === "registry"; return `<tr><td><b>${escapeHTML(company.name)}</b>${company.director_name ? `<br><small>Руководитель: ${escapeHTML(company.director_name)}</small>` : ""}${company.legal_address ? `<br><small>${escapeHTML(company.legal_address)}</small>` : ""}${!fromRegistry && company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn || "не предоставлен источником")}${company.phone ? `<br>${escapeHTML(company.phone)}` : ""}${company.email ? `<br>${escapeHTML(company.email)}` : ""}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>${fromRegistry ? "Запрос выполнен" : "Данные на"} ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><span class="status-badge ${fromRegistry ? "pending" : "active"}">${fromRegistry ? "Внешний реестр" : "Сохранено"}</span><br><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть источник сведений</a>${company.website ? `<br><a href="${escapeHTML(company.website)}" target="_blank" rel="noopener noreferrer">Сайт компании</a>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`
+        : `<div class="empty-state"><b>Компании не найдены</b><span>${registryError ? "В сохранённых данных совпадений нет, а внешний реестр временно недоступен. Повторите поиск позже." : "Проверьте ИНН или введите полное название юридического лица."}</span></div>`;
     } catch (error) {
       if (version !== generation) return;
       list.className = "error-state";
