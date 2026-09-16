@@ -45,7 +45,7 @@ func (h *EntryHandlers) Mentors(w http.ResponseWriter, r *http.Request, u middle
 		middleware.WriteError(w, 400, "сначала выберите партнёра")
 		return
 	}
-	if !requirePartner(w, u, partner) {
+	if !requirePartnerTenant(w, r, h.DB, u, partner) {
 		return
 	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,full_name FROM mentors WHERE partner_id::text=$1 ORDER BY full_name,id`+page, partner)
@@ -92,7 +92,7 @@ func (h *EntryHandlers) CreateMentor(w http.ResponseWriter, r *http.Request, u m
 		return
 	}
 	req.FullName = strings.Join(strings.Fields(req.FullName), " ")
-	if !requirePartner(w, u, req.PartnerID) {
+	if !requirePartnerTenant(w, r, h.DB, u, req.PartnerID) {
 		return
 	}
 	if !validMentorName(req.FullName) {

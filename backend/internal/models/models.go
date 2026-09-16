@@ -63,11 +63,17 @@ type ITCompany struct {
 	RegistryUpdatedAt   string    `json:"registry_updated_at"`
 	SourceURL           string    `json:"source_url"`
 	Notes               string    `json:"notes,omitempty"`
+	LegalAddress        string    `json:"legal_address,omitempty"`
+	Phone               string    `json:"phone,omitempty"`
+	Email               string    `json:"email,omitempty"`
+	Website             string    `json:"website,omitempty"`
+	DirectorName        string    `json:"director_name,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 }
 
 type Partner struct {
 	ID                    string    `json:"id"`
+	ITCompanyID           string    `json:"it_company_id,omitempty"`
 	Name                  string    `json:"name"`
 	PartnerKind           string    `json:"partner_kind"` // vuz|kolledj|school
 	DirectoryID           string    `json:"directory_id,omitempty"`
@@ -96,6 +102,7 @@ type AgreementResponsiblePerson struct {
 
 type Agreement struct {
 	ID                  string                       `json:"id"`
+	ITCompanyID         string                       `json:"it_company_id,omitempty"`
 	PartnerIDs          []string                     `json:"partner_ids"`
 	AgreementKind       string                       `json:"agreement_kind"`
 	Number              string                       `json:"number"`
@@ -106,6 +113,7 @@ type Agreement struct {
 	ROIVName            string                       `json:"roiv_name,omitempty"`
 	RegionalAuthorityID string                       `json:"regional_authority_id,omitempty"`
 	LegalEntityGroup    string                       `json:"legal_entity_group,omitempty"`
+	LegalEntityGroupID  string                       `json:"legal_entity_group_id,omitempty"`
 	SignatureMethod     string                       `json:"signature_method"`
 	SignedBy            string                       `json:"signed_by,omitempty"`
 	SignatureDate       string                       `json:"signature_date,omitempty"`
@@ -139,19 +147,46 @@ type ActivityCategory struct {
 }
 
 type Entry struct {
-	ID           string                 `json:"id"`
-	CategoryCode string                 `json:"category_code"`
-	PartnerID    *string                `json:"partner_id,omitempty"`
-	AgreementID  string                 `json:"agreement_id"`
-	PeriodType   PeriodType             `json:"period_type"`
-	ReportYear   int                    `json:"report_year"`
-	Audience     Audience               `json:"audience"`
-	Payload      map[string]interface{} `json:"payload"`
-	AmountRub    money.Amount           `json:"amount_rub"`
-	CreatedBy    string                 `json:"created_by"`
-	UpdatedBy    *string                `json:"updated_by,omitempty"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
+	ID               string                 `json:"id"`
+	ITCompanyID      string                 `json:"it_company_id,omitempty"`
+	CategoryCode     string                 `json:"category_code"`
+	PartnerID        *string                `json:"partner_id,omitempty"`
+	AgreementID      string                 `json:"agreement_id"`
+	PeriodType       PeriodType             `json:"period_type"`
+	ReportYear       int                    `json:"report_year"`
+	Audience         Audience               `json:"audience"`
+	Payload          map[string]interface{} `json:"payload"`
+	AmountRub        money.Amount           `json:"amount_rub"`
+	FormulaAmountRub money.Amount           `json:"formula_amount_rub"`
+	ActualAmountRub  *money.Amount          `json:"actual_amount_rub,omitempty"`
+	CostMethod       string                 `json:"cost_method"`
+	CreatedBy        string                 `json:"created_by"`
+	UpdatedBy        *string                `json:"updated_by,omitempty"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
+}
+
+type LegalEntityGroupMember struct {
+	ID               string        `json:"id,omitempty"`
+	Name             string        `json:"name"`
+	INN              string        `json:"inn"`
+	OGRN             string        `json:"ogrn"`
+	IsITOrganization bool          `json:"is_it_organization"`
+	TargetAmountRub  *money.Amount `json:"target_amount_rub,omitempty"`
+}
+
+type LegalEntityGroup struct {
+	ID                         string                   `json:"id"`
+	ITCompanyID                string                   `json:"it_company_id"`
+	Name                       string                   `json:"name"`
+	InteractionAgreementNumber string                   `json:"interaction_agreement_number"`
+	InteractionAgreementDate   string                   `json:"interaction_agreement_date"`
+	AuthorizedEntityName       string                   `json:"authorized_entity_name"`
+	AuthorizedEntityINN        string                   `json:"authorized_entity_inn"`
+	AuthorizedEntityOGRN       string                   `json:"authorized_entity_ogrn"`
+	Members                    []LegalEntityGroupMember `json:"members"`
+	CreatedAt                  time.Time                `json:"created_at"`
+	UpdatedAt                  time.Time                `json:"updated_at"`
 }
 
 type Attachment struct {

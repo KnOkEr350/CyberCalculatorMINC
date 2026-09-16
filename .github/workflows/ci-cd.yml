@@ -175,6 +175,32 @@ jobs:
             --data '{"entity_type":"organization"}' \
             "${base_url}/api/auth/entity-type" > /dev/null
 
+          # Organization workspaces are isolated by accredited IT company.
+          # Bind the bootstrap administrator to a disposable tenant before
+          # creating partners, agreements and entries through the public API.
+          company_id="$(docker compose exec -T db psql \
+            --username cybercalc_ci \
+            --dbname cybercalc_ci \
+            --quiet \
+            --tuples-only \
+            --no-align \
+            --set ON_ERROR_STOP=1 \
+            --command "WITH company AS (
+              INSERT INTO accredited_it_companies(
+                name,inn,ogrn,accreditation_status,registry_record_id,
+                registry_updated_at,source_url,created_by
+              ) VALUES (
+                'CI tenant company','7736050003','1027700070518','active',
+                'ci-tenant-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',CURRENT_DATE,
+                'https://www.gosuslugi.ru/itorgs',
+                (SELECT id FROM users WHERE email='ci-admin@example.invalid')
+              ) RETURNING id
+            )
+            UPDATE users SET it_company_id=company.id
+            FROM company WHERE email='ci-admin@example.invalid'
+            RETURNING company.id;")"
+          [[ "$company_id" =~ ^[0-9a-f-]{36}$ ]]
+
           # Production forbids arbitrary partner names. Seed a verified registry
           # row into this disposable CI database, then exercise the public API.
           directory_id="$(docker compose exec -T db psql \

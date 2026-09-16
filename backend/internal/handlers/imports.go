@@ -46,6 +46,13 @@ func (h *EntryHandlers) ImportTemplate(w http.ResponseWriter, r *http.Request, u
 		}
 		info = append(info, []interface{}{f.Label, map[bool]string{true: "Да", false: "Нет"}[f.Required], strings.Join(options, ", ")})
 	}
+	if r.URL.Query().Get("period_type") == string(models.PeriodFact) {
+		headers = append(headers, "Метод расчёта", "Фактическая сумма, руб.")
+		info = append(info,
+			[]interface{}{"Метод расчёта", "Нет", "Средние значения / Фактические затраты"},
+			[]interface{}{"Фактическая сумма, руб.", "Для фактических затрат", "Положительное число; потребуется аудиторское заключение"},
+		)
+	}
 	wb := xlsx.New()
 	wb.AddSheet("Данные", headers, nil)
 	wb.AddSheet("Инструкция", []string{"Название столбца", "Обязательно", "Допустимые значения"}, info)
@@ -115,9 +122,12 @@ func uploadedWorkbook(w http.ResponseWriter, r *http.Request) ([]byte, [][]strin
 }
 
 type importRow struct {
-	Row     int                    `json:"row"`
-	Payload map[string]interface{} `json:"payload"`
-	Amount  money.Amount           `json:"amount_rub"`
+	Row           int                    `json:"row"`
+	Payload       map[string]interface{} `json:"payload"`
+	Amount        money.Amount           `json:"amount_rub"`
+	FormulaAmount money.Amount           `json:"formula_amount_rub"`
+	ActualAmount  *money.Amount          `json:"actual_amount_rub,omitempty"`
+	CostMethod    string                 `json:"cost_method"`
 }
 type importResult struct {
 	Rows      []importRow  `json:"rows"`
@@ -138,7 +148,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "укажите корректные год и план/факт")
 		return
 	}
-	if !requirePartner(w, u, partner) {
+	if !requirePartnerTenant(w, r, h.DB, u, partner) {
 		return
 	}
 	var audience string
@@ -170,6 +180,10 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		specs[f.Key] = f
 		labels[f.Label] = f.Key
 	}
+	specs["cost_method"] = calculators.FieldSpec{Key: "cost_method", Label: "Метод расчёта", Type: "select", Options: []string{"average", "actual"}}
+	specs["actual_amount_rub"] = calculators.FieldSpec{Key: "actual_amount_rub", Label: "Фактическая сумма, руб.", Type: "number"}
+	labels["Метод расчёта"] = "cost_method"
+	labels["Фактическая сумма, руб."] = "actual_amount_rub"
 	keys := []string{}
 	seen := map[string]bool{}
 	for _, header := range table[0] {
@@ -196,7 +210,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		if strings.TrimSpace(strings.Join(values, "")) == "" {
 			continue
 		}
-		row := importRow{Row: i + 2, Payload: map[string]interface{}{"org_name": partner}}
+		row := importRow{Row: i + 2, Payload: map[string]interface{}{"org_name": partner}, CostMethod: "average"}
 		rowErr := func() error {
 			if len(values) > len(keys) {
 				return fmt.Errorf("есть данные за пределами заголовков")
@@ -210,7 +224,24 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 				if value == "" && !f.Required {
 					continue
 				}
-				if f.Type == "number" {
+				if key == "cost_method" {
+					switch strings.ToLower(value) {
+					case "", "average", "средние значения":
+						row.CostMethod = "average"
+					case "actual", "фактические затраты":
+						row.CostMethod = "actual"
+					default:
+						return fmt.Errorf("метод расчёта: выберите средние значения или фактические затраты")
+					}
+				} else if key == "actual_amount_rub" {
+					if value != "" {
+						parsed, e := money.Parse(strings.ReplaceAll(value, ",", "."))
+						if e != nil {
+							return fmt.Errorf("фактическая сумма: %v", e)
+						}
+						row.ActualAmount = &parsed
+					}
+				} else if f.Type == "number" {
 					n := strings.ReplaceAll(value, ",", ".")
 					_, e := strconv.ParseFloat(n, 64)
 					if e != nil {
@@ -235,14 +266,21 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 			if err := calculators.ValidatePayload(calc, row.Payload); err != nil {
 				return err
 			}
-			amount, e := calculators.CalculateAmount(category, models.Audience(audience), row.Payload)
+			formulaAmount, e := calculators.CalculateAmount(category, models.Audience(audience), row.Payload)
 			if e != nil {
 				return e
 			}
-			if e := calculators.ValidateAmount(amount.Rubles()); e != nil {
+			if e := calculators.ValidateAmount(formulaAmount.Rubles()); e != nil {
 				return e
 			}
-			row.Amount = amount
+			row.FormulaAmount = formulaAmount
+			row.CostMethod, row.Amount, e = resolveEntryAmount(row.CostMethod, row.ActualAmount, formulaAmount)
+			if e != nil {
+				return e
+			}
+			if period != string(models.PeriodFact) && row.CostMethod == "actual" {
+				return fmt.Errorf("фактические затраты указываются только в отчёте «Факт»")
+			}
 			return nil
 		}()
 		if rowErr != nil {
@@ -262,6 +300,10 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	if q.Get("commit") != "1" || len(result.Errors) > 0 {
 		middleware.WriteJSON(w, 200, result)
+		return
+	}
+	companyID, ok := requireITCompanyForWrite(w, u)
+	if !ok {
 		return
 	}
 	context, _ := json.Marshal([]interface{}{u.ID, category, partner, agreementID, period, year})
@@ -290,7 +332,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	for _, row := range result.Rows {
 		payload, _ := json.Marshal(row.Payload)
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, category, partner, agreementID, period, year, audience, payload, row.Amount, u.ID).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, u.ID).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}

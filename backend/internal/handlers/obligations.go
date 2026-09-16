@@ -39,7 +39,7 @@ func (h *EntryHandlers) Obligations(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 400, "укажите партнёра, год и план/факт")
 		return
 	}
-	if !requirePartner(w, u, partner) {
+	if !requirePartnerTenant(w, r, h.DB, u, partner) {
 		return
 	}
 	var kind string

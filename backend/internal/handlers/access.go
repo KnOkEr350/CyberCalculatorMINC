@@ -7,6 +7,27 @@ import (
 	"net/http"
 )
 
+func itCompanyScope(u middleware.AuthUser) string {
+	if u.ITCompanyID != nil {
+		return *u.ITCompanyID
+	}
+	// An organization profile is a tenant, not an operator. If its assignment
+	// is incomplete, return a scope that cannot match a UUID instead of
+	// accidentally falling back to operator-wide access.
+	if u.EntityType == models.EntityOrganization {
+		return "unassigned"
+	}
+	return ""
+}
+
+func requireITCompanyForWrite(w http.ResponseWriter, u middleware.AuthUser) (string, bool) {
+	if u.ITCompanyID == nil || *u.ITCompanyID == "" {
+		middleware.WriteError(w, http.StatusForbidden, "для операции назначьте профилю действующую ИТ-компанию")
+		return "", false
+	}
+	return *u.ITCompanyID, true
+}
+
 // An organization profile represents the obligated IT organization and works
 // across its educational partners. Admin and moderator are operator roles.
 func isStaff(u middleware.AuthUser) bool {
@@ -73,6 +94,31 @@ func requirePartner(w http.ResponseWriter, u middleware.AuthUser, id string) boo
 	}
 	return true
 }
+
+// requirePartnerTenant adds tenant ownership to the role/partner check. An
+// unassigned administrator may inspect all tenants, but organization users can
+// never cross their assigned IT-company boundary.
+func requirePartnerTenant(w http.ResponseWriter, r *http.Request, db *sql.DB, u middleware.AuthUser, id string) bool {
+	if !requirePartner(w, u, id) {
+		return false
+	}
+	if u.EntityType == models.EntityEduInst || (u.EntityType == "" && u.ITCompanyID == nil && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)) {
+		return true
+	}
+	if u.ITCompanyID == nil {
+		middleware.WriteError(w, http.StatusForbidden, "профилю не назначена ИТ-компания")
+		return false
+	}
+	var allowed bool
+	if err := db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1 AND it_company_id::text=$2)`, id, *u.ITCompanyID).Scan(&allowed); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось проверить владельца учебного заведения")
+		return false
+	}
+	if !allowed {
+		middleware.WriteError(w, http.StatusForbidden, "учебное заведение относится к другой ИТ-компании")
+	}
+	return allowed
+}
 func requireEntry(w http.ResponseWriter, r *http.Request, db *sql.DB, u middleware.AuthUser, id string) bool {
 	var partner sql.NullString
 	err := db.QueryRowContext(r.Context(), `SELECT partner_id FROM entries WHERE id::text=$1`, id).Scan(&partner)
@@ -84,7 +130,7 @@ func requireEntry(w http.ResponseWriter, r *http.Request, db *sql.DB, u middlewa
 		middleware.WriteError(w, 500, "не удалось проверить доступ")
 		return false
 	}
-	return requirePartner(w, u, partner.String)
+	return requirePartnerTenant(w, r, db, u, partner.String)
 }
 func partnerScope(u middleware.AuthUser, requested string) string {
 	if u.EntityType == models.EntityEduInst && u.PartnerID != nil {

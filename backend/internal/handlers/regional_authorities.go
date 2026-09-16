@@ -58,10 +58,11 @@ func (h *RegionalAuthorityHandlers) List(w http.ResponseWriter, r *http.Request,
 		ra.created_at,ra.updated_at,count(DISTINCT ap.partner_id),count(DISTINCT e.id)
 		FROM regional_authorities ra
 		LEFT JOIN agreements a ON a.regional_authority_id=ra.id AND a.agreement_kind='roiv'
+			AND ($2='' OR a.it_company_id::text=$2)
 		LEFT JOIN agreement_partners ap ON ap.agreement_id=a.id
 		LEFT JOIN entries e ON e.agreement_id=a.id AND e.partner_id=ap.partner_id
 		WHERE ($1='' OR ap.partner_id::text=$1)
-		GROUP BY ra.id ORDER BY ra.region,ra.name,ra.id`+page, scope)
+		GROUP BY ra.id ORDER BY ra.region,ra.name,ra.id`+page, scope, itCompanyScope(u))
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка запроса справочника РОИВ")
 		return

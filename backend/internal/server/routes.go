@@ -30,6 +30,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	partnerH := &handlers.PartnerHandlers{DB: db}
 	itCompanyH := &handlers.ITCompanyHandlers{DB: db}
 	agreementH := &handlers.AgreementHandlers{DB: db}
+	groupH := &handlers.LegalEntityGroupHandlers{DB: db}
 	regionalAuthorityH := &handlers.RegionalAuthorityHandlers{DB: db}
 	entryH := &handlers.EntryHandlers{DB: db}
 	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir, ScannerAddress: cfg.ScannerAddress, QuotaBytes: cfg.UploadQuotaBytes}
@@ -65,6 +66,11 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("PUT /api/agreements/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		agreementH.Update(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("GET /api/legal-entity-groups", middleware.RequireAuth(db, groupH.List))
+	mux.HandleFunc("POST /api/legal-entity-groups", middleware.RequireAuth(db, groupH.Create))
+	mux.HandleFunc("PUT /api/legal-entity-groups/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		groupH.Update(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/regional-authorities", middleware.RequireAuth(db, regionalAuthorityH.List))
 	mux.HandleFunc("POST /api/regional-authorities", middleware.RequireAuth(db, regionalAuthorityH.Create))
 	mux.HandleFunc("PUT /api/regional-authorities/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -81,6 +87,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 
 	// План и факт.
 	mux.HandleFunc("GET /api/entries", middleware.RequireAuth(db, entryH.List))
+	mux.HandleFunc("GET /api/entries/summary", middleware.RequireAuth(db, entryH.Summary))
 	mux.HandleFunc("POST /api/entries", middleware.RequireAuth(db, entryH.Create))
 	mux.HandleFunc("PUT /api/entries/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		entryH.Update(w, r, u, r.PathValue("id"))

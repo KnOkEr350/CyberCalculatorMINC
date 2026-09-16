@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -26,6 +27,11 @@ type itCompanyWriteRequest struct {
 	RegistryUpdatedAt   string `json:"registry_updated_at"`
 	SourceURL           string `json:"source_url"`
 	Notes               string `json:"notes"`
+	LegalAddress        string `json:"legal_address"`
+	Phone               string `json:"phone"`
+	Email               string `json:"email"`
+	Website             string `json:"website"`
+	DirectorName        string `json:"director_name"`
 }
 
 func officialITRegistryURL(value string) bool {
@@ -51,6 +57,11 @@ func normalizeITCompany(req itCompanyWriteRequest) (itCompanyWriteRequest, error
 	req.RegistryUpdatedAt = strings.TrimSpace(req.RegistryUpdatedAt)
 	req.SourceURL = strings.TrimSpace(req.SourceURL)
 	req.Notes = strings.TrimSpace(req.Notes)
+	req.LegalAddress = strings.Join(strings.Fields(req.LegalAddress), " ")
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Website = strings.TrimSpace(req.Website)
+	req.DirectorName = strings.Join(strings.Fields(req.DirectorName), " ")
 	registryDate, dateErr := time.Parse("2006-01-02", req.RegistryUpdatedAt)
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 	if utf8.RuneCountInString(req.Name) < 2 || utf8.RuneCountInString(req.Name) > 1000 ||
@@ -58,8 +69,22 @@ func normalizeITCompany(req itCompanyWriteRequest) (itCompanyWriteRequest, error
 		utf8.RuneCountInString(req.AccreditationNumber) > 100 ||
 		req.RegistryRecordID == "" || utf8.RuneCountInString(req.RegistryRecordID) > 200 ||
 		dateErr != nil || registryDate.After(today) || !officialITRegistryURL(req.SourceURL) ||
-		utf8.RuneCountInString(req.Notes) > 1000 {
+		utf8.RuneCountInString(req.Notes) > 1000 || utf8.RuneCountInString(req.LegalAddress) > 1000 ||
+		utf8.RuneCountInString(req.Phone) > 100 || utf8.RuneCountInString(req.Email) > 254 ||
+		utf8.RuneCountInString(req.Website) > 1000 || utf8.RuneCountInString(req.DirectorName) > 300 {
 		return req, fmt.Errorf("проверьте название, ИНН/ОГРН, дату проверки и официальную HTTPS-ссылку на реестр")
+	}
+	if req.Email != "" {
+		address, err := mail.ParseAddress(req.Email)
+		if err != nil || address.Address != req.Email {
+			return req, fmt.Errorf("укажите корректный email ИТ-компании")
+		}
+	}
+	if req.Website != "" {
+		website, err := url.Parse(req.Website)
+		if err != nil || website.Scheme != "https" || website.Hostname() == "" || website.User != nil {
+			return req, fmt.Errorf("сайт ИТ-компании должен быть корректной HTTPS-ссылкой")
+		}
 	}
 	return req, nil
 }
@@ -79,7 +104,8 @@ func (h *ITCompanyHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,name,inn,ogrn,accreditation_number,
-		accreditation_status,registry_record_id,registry_updated_at::text,source_url,notes,created_at
+		accreditation_status,registry_record_id,registry_updated_at::text,source_url,notes,
+		legal_address,phone,email,website,director_name,created_at
 		FROM accredited_it_companies
 		WHERE accreditation_status='active'
 		AND ($1='' OR name ILIKE '%'||$1||'%' OR inn=$1 OR ogrn=$1 OR
@@ -95,7 +121,8 @@ func (h *ITCompanyHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 		var company models.ITCompany
 		if err := rows.Scan(&company.ID, &company.Name, &company.INN, &company.OGRN,
 			&company.AccreditationNumber, &company.AccreditationStatus, &company.RegistryRecordID,
-			&company.RegistryUpdatedAt, &company.SourceURL, &company.Notes, &company.CreatedAt); err != nil {
+			&company.RegistryUpdatedAt, &company.SourceURL, &company.Notes, &company.LegalAddress,
+			&company.Phone, &company.Email, &company.Website, &company.DirectorName, &company.CreatedAt); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "не удалось прочитать реестр ИТ-компаний")
 			return
 		}
@@ -131,9 +158,11 @@ func (h *ITCompanyHandlers) Create(w http.ResponseWriter, r *http.Request, u mid
 	defer tx.Rollback()
 	var id string
 	err = tx.QueryRowContext(r.Context(), `INSERT INTO accredited_it_companies(
-		name,inn,ogrn,accreditation_number,registry_record_id,registry_updated_at,source_url,notes,created_by)
-		VALUES($1,$2,$3,$4,$5,$6::date,$7,$8,$9) RETURNING id`, req.Name, req.INN, req.OGRN,
-		req.AccreditationNumber, req.RegistryRecordID, req.RegistryUpdatedAt, req.SourceURL, req.Notes, u.ID).Scan(&id)
+		name,inn,ogrn,accreditation_number,registry_record_id,registry_updated_at,source_url,notes,
+		legal_address,phone,email,website,director_name,created_by)
+		VALUES($1,$2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, req.Name, req.INN, req.OGRN,
+		req.AccreditationNumber, req.RegistryRecordID, req.RegistryUpdatedAt, req.SourceURL, req.Notes,
+		req.LegalAddress, req.Phone, req.Email, req.Website, req.DirectorName, u.ID).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusConflict, "компания с такими реквизитами или записью реестра уже существует")
 		return

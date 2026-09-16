@@ -61,7 +61,7 @@ function agreementFieldsMarkup(prefix, agreement = {}, withPartners = false) {
     <div class="field"><label>Действует с *</label><input type="date" id="${prefix}-valid-from" required value="${escapeHTML(agreement.valid_from || today)}"></div>
     <div class="field"><label>Действует до *</label><input type="date" id="${prefix}-valid-until" required value="${escapeHTML(agreement.valid_until || yearEnd)}"></div>
     <div class="field" id="${prefix}-roiv-box"><label>Региональный орган управления образованием *</label><select id="${prefix}-roiv-authority"><option value="">— Выберите РОИВ —</option>${state.regionalAuthorities.map((authority) => `<option value="${authority.id}" ${authority.id === agreement.regional_authority_id ? "selected" : ""} ${authority.status === "active" ? "" : "disabled"}>${escapeHTML(authority.region)} — ${escapeHTML(authority.name)}</option>`).join("")}</select><div class="field-hint">РОИВ ведётся отдельно и связывает соглашение со школами и их мероприятиями.</div></div>
-    <div class="field"><label>Группа юридических лиц</label><input id="${prefix}-group" maxlength="1000" value="${escapeHTML(agreement.legal_entity_group || "")}" placeholder="Название группы или периметра соглашения"></div>
+    <div class="field"><label>Группа юридических лиц</label><select id="${prefix}-group-id"><option value="">Без договора о взаимодействии</option>${(state.legalEntityGroups || []).map((group) => `<option value="${group.id}" ${group.id === agreement.legal_entity_group_id ? "selected" : ""}>${escapeHTML(group.name)} · договор № ${escapeHTML(group.interaction_agreement_number)}</option>`).join("")}</select>${agreement.legal_entity_group && !agreement.legal_entity_group_id ? `<div class="field-hint">Legacy-значение: ${escapeHTML(agreement.legal_entity_group)}</div>` : ""}</div>
     <div class="field"><label>Способ подписания *</label><select id="${prefix}-signature"><option value="unsigned">Не подписано</option><option value="paper">Бумажный документ</option><option value="qualified_electronic">УКЭП</option><option value="goskey">Госключ</option></select></div>
     <div class="field"><label>Подписант (обязательно для действующего)</label><input id="${prefix}-signed-by" maxlength="300" value="${escapeHTML(agreement.signed_by || "")}"></div>
     <div class="field"><label>Дата подписания (обязательно для действующего)</label><input type="date" id="${prefix}-signature-date" value="${escapeHTML(agreement.signature_date || "")}"></div>
@@ -158,7 +158,8 @@ function collectAgreement(root, prefix, partnerIDs) {
     regional_authority_id: root.querySelector(
       `#${prefix}-roiv-authority`,
     ).value,
-    legal_entity_group: root.querySelector(`#${prefix}-group`).value.trim(),
+    legal_entity_group: "",
+    legal_entity_group_id: root.querySelector(`#${prefix}-group-id`).value,
     signature_method: root.querySelector(`#${prefix}-signature`).value,
     signed_by: root.querySelector(`#${prefix}-signed-by`).value.trim(),
     signature_date: root.querySelector(`#${prefix}-signature-date`).value,
@@ -261,13 +262,30 @@ async function uploadFileBatch(id, files) {
   });
 }
 function workspaceQuery() {
-  return new URLSearchParams({
+  const query = new URLSearchParams({
     partner_id: state.partnerID,
     agreement_id: state.agreementID,
     category_code: state.categoryCode,
     period_type: state.period,
     report_year: state.year,
   });
+  Object.entries(state.entryFilters || {}).forEach(([key, value]) => {
+    if (String(value || "").trim()) query.set(key, String(value).trim());
+  });
+  return query;
+}
+
+function entryFiltersMarkup(category) {
+  const value = (key) => escapeHTML(state.entryFilters?.[key] || "");
+  const common = `<div class="field"><label>Поиск по реквизитам и ФИО</label><input data-entry-filter="q" value="${value("q")}" placeholder="Введите текст"></div><div class="field"><label>Метод стоимости</label><select data-entry-filter="cost_method"><option value="">Все методы</option><option value="average" ${value("cost_method") === "average" ? "selected" : ""}>Средние значения</option><option value="actual" ${value("cost_method") === "actual" ? "selected" : ""}>Фактические затраты</option></select></div>`;
+  const byCategory = {
+    teachers: `<div class="field"><label>ФИО преподавателя</label><input data-entry-filter="teacher_full_name" value="${value("teacher_full_name")}"></div><div class="field"><label>Направление подготовки</label><input data-entry-filter="training_direction" value="${value("training_direction")}"></div><div class="field"><label>Кафедра / институт / факультет</label><input data-entry-filter="structural_unit" value="${value("structural_unit")}"></div>`,
+    ood_rpd: `<div class="field"><label>Вид документа</label><select data-entry-filter="doc_type"><option value="">Все</option><option value="rpd" ${value("doc_type") === "rpd" ? "selected" : ""}>РПД</option><option value="oop" ${value("doc_type") === "oop" ? "selected" : ""}>ООП</option></select></div><div class="field"><label>Вид активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="development" ${value("activity_type") === "development" ? "selected" : ""}>Разработка</option><option value="update" ${value("activity_type") === "update" ? "selected" : ""}>Актуализация</option><option value="expertise" ${value("activity_type") === "expertise" ? "selected" : ""}>Экспертиза</option></select></div>`,
+    internship: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
+    employment_practice: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
+    top_it: `<div class="field"><label>Тип активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="assistance" ${value("activity_type") === "assistance" ? "selected" : ""}>Содействие</option><option value="cofinancing" ${value("activity_type") === "cofinancing" ? "selected" : ""}>Софинансирование</option></select></div><div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>Тип затрат</label><input data-entry-filter="cost_type" value="${value("cost_type")}"></div>`,
+  }[category] || "";
+  return `<div class="grid cols-3">${common}${byCategory}</div><div class="flex"><button class="btn secondary" id="entry-filter-apply">Применить фильтры</button><button class="btn secondary" id="entry-filter-reset">Сбросить</button></div>`;
 }
 async function renderPartnerEntries(root) {
   const generation = (root.workspaceGeneration || 0) + 1;
@@ -339,7 +357,7 @@ async function renderPartnerEntries(root) {
     <div class="field"><label>Режим</label>${canPrepare ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : '<input value="Просмотр и согласование" readonly>'}</div></div>
     <div class="flex">${canPrepare ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
-  <div class="card"><div class="field"><label for="entry-search">Поиск по реквизитам, студенту, наставнику, программе</label><input id="entry-search" placeholder="Введите текст"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
+  <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const partnerSelect = root.querySelector("#workspace-partner");
   if (partnerSelect) {
     const fillPartners = () => {
@@ -405,8 +423,16 @@ async function renderPartnerEntries(root) {
   };
   root.querySelector("#category").onchange = (e) => {
     state.categoryCode = e.target.value;
+    state.entryFilters = {};
     renderEntries(root);
   };
+  root.querySelector("#entry-filter-apply").onclick = () => {
+    state.entryFilters = {};
+    root.querySelectorAll("[data-entry-filter]").forEach((input) => { if (input.value.trim()) state.entryFilters[input.dataset.entryFilter] = input.value.trim(); });
+    state.entryPageOffset = 0;
+    renderEntries(root);
+  };
+  root.querySelector("#entry-filter-reset").onclick = () => { state.entryFilters = {}; state.entryPageOffset = 0; renderEntries(root); };
   const addEntry = root.querySelector("#add-entry");
   if (addEntry) addEntry.onclick = () => openEntryModal(null);
   const importEntries = root.querySelector("#import-entries");
@@ -430,9 +456,10 @@ async function renderPartnerEntries(root) {
     return;
   }
   const chosen = state.partnerID;
-  const [entries, workflow] = await Promise.all([
+  const [entries, workflow, summary] = await Promise.all([
     api(`/entries?${query}&offset=${state.entryPageOffset || 0}`),
     api(`/report-workflow?${new URLSearchParams({ agreement_id: state.agreementID, report_year: state.year, period_type: state.period })}`),
+    api(`/entries/summary?${query}`),
   ]);
   if (
     chosen !== state.partnerID ||
@@ -441,9 +468,19 @@ async function renderPartnerEntries(root) {
   )
     return;
   state.entries = entries;
+  const summaryBox = root.querySelector("#entries-summary");
+  const categoryTotals = {
+    teachers: `Партнёры: ${summary.partners_count} · курсы: ${summary.courses_count} · преподаватели: ${summary.teachers_count} · ак. часы: ${Number(summary.academic_hours || 0).toLocaleString("ru-RU")}`,
+    ood_rpd: `Партнёры: ${summary.partners_count} · программы: ${summary.programs_count}`,
+    internship: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · стажёры: ${summary.students_count}`,
+    employment_practice: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · практиканты: ${summary.students_count}`,
+  }[state.categoryCode] || `Партнёры: ${summary.partners_count}`;
+  const matrix = summary.ood_rpd_matrix?.length ? `<details><summary>Выжимка ООП/РПД</summary><div class="table-wrap"><table><thead><tr><th>Документ</th><th>Активность</th><th>Количество</th><th>Сумма</th></tr></thead><tbody>${summary.ood_rpd_matrix.map((item) => `<tr><td>${escapeHTML(valueLabel(item.document_type))}</td><td>${escapeHTML(valueLabel(item.activity_type))}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
+  const units = summary.structural_units?.length ? `<details><summary>Структурные подразделения</summary><div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Записи</th><th>Сумма</th></tr></thead><tbody>${summary.structural_units.map((item) => `<tr><td>${escapeHTML(item.unit)}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
+  summaryBox.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${Number(summary.count || 0).toLocaleString("ru-RU")}</div></div><div class="stat"><div class="label">Общая сумма</div><div class="value">${fmtMoney(summary.amount_rub)}</div></div><div class="stat"><div class="label">Итоговые показатели</div><div class="value" style="font-size:16px">${escapeHTML(categoryTotals)}</div></div></div>${matrix}${units}`;
   const obligation = root.querySelector("#obligation-box");
   const workflowLabels = { draft: "Черновик ИТ-организации", ready: state.period === "fact" ? "Направлено на рассмотрение" : "Готово", verified: state.period === "fact" ? "Согласовано ОО / РОИВ" : "Проверено", approved: "Утверждено" };
-  const automaticOK = workflow.automatic_checks.every((check) => check.complete);
+  const automaticOK = workflow.automatic_checks.every((check) => check.complete || check.code === "actual_costs");
   const confirmationsDisabled = workflow.status !== "draft" || !canPrepare;
   const reviewHint = !canPrepare && state.period === "fact"
     ? (workflow.status === "ready"
@@ -466,6 +503,7 @@ async function renderPartnerEntries(root) {
     <h3>Юридические подтверждения ИТ-организации</h3><label class="check-row"><input id="wf-scope" type="checkbox" ${workflow.scope_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Конкретный перечень, объём, сроки и условия соответствуют соглашению</label>
     <label class="check-row"><input id="wf-conditions" type="checkbox" ${workflow.conditions_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Выполнены условия реализации каждого вида из приложения № 1 приказа</label>
     <label class="check-row"><input id="wf-evidence" type="checkbox" ${workflow.evidence_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Подтверждающие документы имеются и позволяют установить факт мероприятия (загрузка в систему необязательна)</label>
+    ${workflow.uses_actual_costs && state.period === "fact" ? `<div class="notice"><b>Используются фактические затраты</b><div class="field"><label>Реквизиты аудиторского заключения *</label><input id="wf-auditor-reference" maxlength="1000" value="${escapeHTML(workflow.auditor_report_reference || "")}" ${confirmationsDisabled ? "disabled" : ""}></div><label class="check-row"><input id="wf-actual-costs" type="checkbox" ${workflow.actual_costs_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Аудиторское заключение подтверждает достоверность фактических затрат</label></div>` : ""}
     ${state.period === "fact" ? `<p class="${workflow.counterparty_confirmed ? "notice" : "muted"}">${workflow.counterparty_confirmed ? "✓ Перечень рассмотрен и согласован образовательной организацией / РОИВ" : "Рассмотрение образовательной организацией / РОИВ ещё не зафиксировано"}</p>` : ""}
     ${reviewHint}
     ${workflowControls}
@@ -476,7 +514,7 @@ async function renderPartnerEntries(root) {
     const button = obligation.querySelector(`#wf-${nextStatus === "ready" ? "ready" : nextStatus === "verified" ? "verify" : nextStatus === "approved" ? "approve" : "draft"}`);
     button.disabled = true;
     try {
-      await api(`/report-workflow/transition?${new URLSearchParams({ agreement_id: state.agreementID, report_year: state.year, period_type: state.period })}`, { method: "POST", body: JSON.stringify({ status: nextStatus, scope_confirmed: obligation.querySelector("#wf-scope")?.checked || false, conditions_confirmed: obligation.querySelector("#wf-conditions")?.checked || false, evidence_confirmed: obligation.querySelector("#wf-evidence")?.checked || false, counterparty_confirmed: obligation.querySelector("#wf-counterparty")?.checked || false, comment: obligation.querySelector("#wf-comment").value.trim() }) });
+      await api(`/report-workflow/transition?${new URLSearchParams({ agreement_id: state.agreementID, report_year: state.year, period_type: state.period })}`, { method: "POST", body: JSON.stringify({ status: nextStatus, scope_confirmed: obligation.querySelector("#wf-scope")?.checked || false, conditions_confirmed: obligation.querySelector("#wf-conditions")?.checked || false, evidence_confirmed: obligation.querySelector("#wf-evidence")?.checked || false, actual_costs_confirmed: obligation.querySelector("#wf-actual-costs")?.checked || false, auditor_report_reference: obligation.querySelector("#wf-auditor-reference")?.value.trim() || "", counterparty_confirmed: obligation.querySelector("#wf-counterparty")?.checked || false, comment: obligation.querySelector("#wf-comment").value.trim() }) });
       showToast(`Статус: ${workflowLabels[nextStatus]}`, "success");
       await renderEntries(root);
     } catch (error) { showToast(error.message); button.disabled = false; }
@@ -491,30 +529,24 @@ async function renderPartnerEntries(root) {
   if (draftButton) draftButton.onclick = () => transition("draft");
   const syncReady = () => {
     if (!readyButton) return;
-    const manualOK = obligation.querySelector("#wf-scope")?.checked && obligation.querySelector("#wf-conditions")?.checked && obligation.querySelector("#wf-evidence")?.checked;
+    const actualOK = !workflow.uses_actual_costs || state.period !== "fact" || (obligation.querySelector("#wf-actual-costs")?.checked && obligation.querySelector("#wf-auditor-reference")?.value.trim());
+    const manualOK = obligation.querySelector("#wf-scope")?.checked && obligation.querySelector("#wf-conditions")?.checked && obligation.querySelector("#wf-evidence")?.checked && actualOK;
     readyButton.disabled = !(canPrepare && workflow.status === "draft" && automaticOK && manualOK);
   };
   obligation.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", syncReady));
+  obligation.querySelector("#wf-auditor-reference")?.addEventListener("input", syncReady);
   syncReady();
   if (workflow.status !== "approved") {
     ["#export-link", "#export-all-link", "#export-word"].forEach((selector) => { const link = root.querySelector(selector); link.removeAttribute("href"); link.classList.add("disabled"); link.title = "Экспорт откроется после утверждения отчёта"; });
   }
   const paint = () => {
-    const term = root
-      .querySelector("#entry-search")
-      .value.toLocaleLowerCase("ru");
-    const list = entries.filter((e) =>
-      Object.values(e.payload || {})
-        .join(" ")
-        .toLocaleLowerCase("ru")
-        .includes(term),
-    );
+    const list = entries;
     const fields =
       currentCategory()?.fields.filter(
         (f) => !["org_name", "mentor_id"].includes(f.key),
       ) || [];
     root.querySelector("#entries-table").innerHTML =
-      `<p>Записей: ${list.length} · Сумма: <b>${fmtMoney(list.reduce((s, e) => s + Number(e.amount_rub), 0))}</b></p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canPrepare ? "Записей нет. Добавьте вручную или импортируйте Excel." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+      `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canPrepare ? "Записей нет. Добавьте вручную или импортируйте Excel." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(
@@ -523,9 +555,8 @@ async function renderPartnerEntries(root) {
             openEntryModal(entries.find((e) => e.id === b.dataset.edit), !writable)),
       );
   };
-  root.querySelector("#entry-search").oninput = paint;
   paint();
-  const paging = el(`<div class="actions"><button class="btn secondary" id="entries-prev">Назад</button><span>Страница ${Math.floor((state.entryPageOffset || 0) / 200) + 1}. Поиск и сумма — на этой странице.</span><button class="btn secondary" id="entries-next">Далее</button></div>`);
+  const paging = el(`<div class="actions"><button class="btn secondary" id="entries-prev">Назад</button><span>Страница ${Math.floor((state.entryPageOffset || 0) / 200) + 1}</span><button class="btn secondary" id="entries-next">Далее</button></div>`);
   root.querySelector("#entries-table").after(paging);
   paging.querySelector("#entries-prev").disabled = !state.entryPageOffset;
   paging.querySelector("#entries-next").disabled = entries.nextOffset == null;
@@ -708,7 +739,7 @@ async function renderITCompanies(root, embedded = false) {
       pagination.querySelector("[data-next]").onclick = () => { offset = companies.nextOffset; load(); };
       list.className = "";
       list.innerHTML = companies.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => `<tr><td><b>${escapeHTML(company.name)}</b>${!registry && company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn || "не предоставлен источником")}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>${registry ? "Запрос выполнен" : "Данные на"} ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть источник сведений</a></td></tr>`).join("")}</tbody></table></div>`
+        ? `<div class="table-wrap"><table><thead><tr><th>Компания</th><th>Реквизиты</th><th>Аккредитация</th><th>Источник</th></tr></thead><tbody>${companies.map((company) => `<tr><td><b>${escapeHTML(company.name)}</b>${company.director_name ? `<br><small>Руководитель: ${escapeHTML(company.director_name)}</small>` : ""}${company.legal_address ? `<br><small>${escapeHTML(company.legal_address)}</small>` : ""}${!registry && company.notes ? `<br><small>${escapeHTML(company.notes)}</small>` : ""}</td><td>ИНН ${escapeHTML(company.inn)}<br>ОГРН ${escapeHTML(company.ogrn || "не предоставлен источником")}${company.phone ? `<br>${escapeHTML(company.phone)}` : ""}${company.email ? `<br>${escapeHTML(company.email)}` : ""}</td><td><span class="status-badge active">Действует</span>${company.accreditation_number ? `<br>№ ${escapeHTML(company.accreditation_number)}` : ""}<br><small>${registry ? "Запрос выполнен" : "Данные на"} ${new Date(`${company.registry_updated_at}T00:00:00`).toLocaleDateString("ru-RU")}</small></td><td><a href="${escapeHTML(company.source_url)}" target="_blank" rel="noopener noreferrer">Открыть источник сведений</a>${company.website ? `<br><a href="${escapeHTML(company.website)}" target="_blank" rel="noopener noreferrer">Сайт компании</a>` : ""}</td></tr>`).join("")}</tbody></table></div>`
         : '<div class="empty-state"><b>Компании не найдены</b><span>Измените название, попробуйте поиск по ИНН или выберите другой источник поиска.</span></div>';
     } catch (error) {
       if (version !== generation) return;
@@ -756,7 +787,7 @@ async function renderITCompanies(root, embedded = false) {
   };
   if (writable) root.querySelector("#it-add").onclick = () => {
     const today = new Date().toISOString().slice(0, 10);
-    const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><span class="eyebrow">Новая запись</span><h2>Добавить аккредитованную ИТ-компанию</h2><p class="notice">Сначала <a href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">проверьте аккредитацию на Госуслугах</a>, затем перенесите реквизиты без изменений. ИНН и ОГРН будут проверены.</p><div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="1000"></div><div class="grid cols-2"><div class="field"><label>ИНН *</label><input name="inn" required inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="ogrn" required inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}"></div><div class="field"><label>Номер аккредитации, если указан</label><input name="accreditation_number" maxlength="100"></div><div class="field"><label>Дата проверки в реестре *</label><input name="registry_updated_at" type="date" max="${today}" value="${today}" required></div></div><div class="field"><label>Ссылка на официальный источник *</label><input name="source_url" type="url" required value="https://www.gosuslugi.ru/itorgs"></div><div class="field"><label>Примечание</label><textarea name="notes" maxlength="1000" rows="2"></textarea></div><p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Добавить компанию</button><button class="btn secondary" type="button">Отмена</button></div></form></div>`);
+    const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><span class="eyebrow">Новая запись</span><h2>Добавить аккредитованную ИТ-компанию</h2><p class="notice">Сначала <a href="https://www.gosuslugi.ru/itorgs" target="_blank" rel="noopener noreferrer">проверьте аккредитацию на Госуслугах</a>, затем перенесите реквизиты без изменений. ИНН и ОГРН будут проверены.</p><div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="1000"></div><div class="grid cols-2"><div class="field"><label>ИНН *</label><input name="inn" required inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="ogrn" required inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}"></div><div class="field"><label>Номер аккредитации, если указан</label><input name="accreditation_number" maxlength="100"></div><div class="field"><label>Дата проверки в реестре *</label><input name="registry_updated_at" type="date" max="${today}" value="${today}" required></div></div><div class="field"><label>Адрес в пределах места нахождения</label><input name="legal_address" maxlength="1000"></div><div class="grid cols-2"><div class="field"><label>Руководитель</label><input name="director_name" maxlength="300"></div><div class="field"><label>Телефон</label><input name="phone" maxlength="100"></div><div class="field"><label>Email</label><input name="email" type="email" maxlength="254"></div><div class="field"><label>Сайт</label><input name="website" type="url" placeholder="https://" maxlength="1000"></div></div><div class="field"><label>Ссылка на официальный источник *</label><input name="source_url" type="url" required value="https://www.gosuslugi.ru/itorgs"></div><div class="field"><label>Примечание</label><textarea name="notes" maxlength="1000" rows="2"></textarea></div><p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Добавить компанию</button><button class="btn secondary" type="button">Отмена</button></div></form></div>`);
     const form = modal.querySelector("form");
     form.querySelector('[type="button"]').onclick = () => modal.remove();
     form.onsubmit = async (event) => {
@@ -849,6 +880,48 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
   };
 }
 
+async function openLegalEntityGroups(onSaved) {
+  const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Группы юридических лиц</h2><button class="btn secondary" id="group-close">Закрыть</button></div><div id="group-list"></div><form id="group-form"><h3 id="group-title">Новая группа</h3><div class="grid cols-2"><div class="field"><label>Название группы *</label><input name="name" required maxlength="500"></div><div class="field"><label>Номер договора о взаимодействии *</label><input name="agreement_number" required maxlength="100"></div><div class="field"><label>Дата договора *</label><input name="agreement_date" type="date" required></div><div class="field"><label>Уполномоченное юридическое лицо *</label><input name="authorized_name" required maxlength="1000"></div><div class="field"><label>ИНН уполномоченного лица *</label><input name="authorized_inn" required inputmode="numeric" maxlength="12"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="authorized_ogrn" required inputmode="numeric" maxlength="15"></div></div><div class="field"><label>Участники группы *</label><textarea name="members" rows="6" required placeholder="Название | ИНН | ОГРН | ИТ или иное | целевой объём, руб."></textarea><div class="field-hint">Один участник на строку. Пример: ООО Компания | 7700000000 | 1027700000000 | ИТ | 1500000</div></div><div class="flex"><button class="btn" type="submit">Сохранить</button><button class="btn secondary" type="button" id="group-new">Новая группа</button></div><p class="error" role="alert"></p></form></div></div>`);
+  const form = modal.querySelector("#group-form");
+  let editingID = "";
+  const memberText = (members) => (members || []).map((member) => [member.name, member.inn, member.ogrn, member.is_it_organization ? "ИТ" : "иное", member.target_amount_rub || ""].join(" | ")).join("\n");
+  const fill = (group = {}) => {
+    editingID = group.id || "";
+    modal.querySelector("#group-title").textContent = editingID ? "Изменить группу" : "Новая группа";
+    form.elements.name.value = group.name || "";
+    form.elements.agreement_number.value = group.interaction_agreement_number || "";
+    form.elements.agreement_date.value = group.interaction_agreement_date || "";
+    form.elements.authorized_name.value = group.authorized_entity_name || "";
+    form.elements.authorized_inn.value = group.authorized_entity_inn || "";
+    form.elements.authorized_ogrn.value = group.authorized_entity_ogrn || "";
+    form.elements.members.value = memberText(group.members);
+  };
+  const load = async () => {
+    state.legalEntityGroups = await api("/legal-entity-groups");
+    modal.querySelector("#group-list").innerHTML = state.legalEntityGroups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа и договор</th><th>Уполномоченное лицо</th><th>Участники</th><th></th></tr></thead><tbody>${state.legalEntityGroups.map((group) => `<tr><td><b>${escapeHTML(group.name)}</b><br>№ ${escapeHTML(group.interaction_agreement_number)} от ${escapeHTML(group.interaction_agreement_date)}</td><td>${escapeHTML(group.authorized_entity_name)}<br>ИНН ${escapeHTML(group.authorized_entity_inn)}</td><td>${group.members.length}</td><td><button class="btn secondary" data-group-edit="${group.id}">Изменить</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Группы ещё не созданы.</p>';
+    modal.querySelectorAll("[data-group-edit]").forEach((button) => button.onclick = () => fill(state.legalEntityGroups.find((group) => group.id === button.dataset.groupEdit)));
+  };
+  modal.querySelector("#group-close").onclick = () => modal.remove();
+  modal.querySelector("#group-new").onclick = () => fill();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const error = form.querySelector('[role="alert"]');
+    error.textContent = "";
+    const members = form.elements.members.value.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [name = "", inn = "", ogrn = "", kind = "", target = ""] = line.split("|").map((value) => value.trim());
+      return { name, inn, ogrn, is_it_organization: kind.toLocaleLowerCase("ru").startsWith("ит"), target_amount_rub: target ? Number(target.replace(",", ".")) : null };
+    });
+    const button = form.querySelector('[type="submit"]'); button.disabled = true;
+    try {
+      await api(editingID ? `/legal-entity-groups/${editingID}` : "/legal-entity-groups", { method: editingID ? "PUT" : "POST", body: JSON.stringify({ name: form.elements.name.value.trim(), interaction_agreement_number: form.elements.agreement_number.value.trim(), interaction_agreement_date: form.elements.agreement_date.value, authorized_entity_name: form.elements.authorized_name.value.trim(), authorized_entity_inn: form.elements.authorized_inn.value.trim(), authorized_entity_ogrn: form.elements.authorized_ogrn.value.trim(), members }) });
+      await load(); fill(); if (onSaved) await onSaved(); showToast("Группа сохранена", "success");
+    } catch (err) { error.textContent = err.message; }
+    finally { button.disabled = false; }
+  };
+  document.body.appendChild(modal);
+  try { await load(); } catch (error) { modal.querySelector("#group-list").textContent = error.message; }
+}
+
 async function renderPartnerDirectory(root, embedded = false) {
   if (!canReviewEducationDirectory()) {
     root.innerHTML = '<div class="card error-state">Справочник учебных заведений недоступен для этого профиля</div>';
@@ -856,6 +929,7 @@ async function renderPartnerDirectory(root, embedded = false) {
   }
   state.regionalAuthorities = await api("/regional-authorities");
   root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Учебные заведения и соглашения</h2></div>' : '<section class="page-heading"><div><h1>Учебные заведения и соглашения</h1></div></section>'}
+  ${isStaffUser() && state.me?.it_company_id ? '<div class="card"><div class="flex between"><div><h2>Группа юридических лиц</h2><p class="muted">Договор взаимодействия, уполномоченное лицо и участники для консолидированного плана и отчёта.</p></div><button class="btn secondary" id="legal-groups">Управлять группами</button></div></div>' : ""}
   <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><details class="rules-note"><summary>Что требует проверки</summary><p>Для записей с жёлтым статусом сверьте ИНН и ОГРН, затем подтвердите реквизиты. Партнёром может стать организация с действующей лицензией.</p></details></div>
   <div class="card"><h2>Поиск в официальном справочнике</h2><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
     AUDIENCE_LABELS,
@@ -868,7 +942,7 @@ async function renderPartnerDirectory(root, embedded = false) {
       "",
     )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${canReviewEducationDirectory() ? '<button class="btn secondary" id="d-import">Редактировать и подтверждать через Excel</button>' : ""}</div>
   <div class="card"><div class="flex between"><h2>Региональные органы управления образованием</h2>${isStaffUser() ? '<button class="btn secondary" id="roiv-add">+ Добавить РОИВ</button>' : ""}</div><div id="roiv-list">${state.regionalAuthorities.length ? `<div class="table-wrap"><table><thead><tr><th>Регион и РОИВ</th><th>Реквизиты</th><th>Связи</th><th></th></tr></thead><tbody>${state.regionalAuthorities.map((authority) => `<tr><td>${escapeHTML(authority.region)}<br><b>${escapeHTML(authority.name)}</b></td><td>ИНН ${escapeHTML(authority.inn)}<br>ОГРН ${escapeHTML(authority.ogrn)}<br><a href="${escapeHTML(authority.source_url)}" target="_blank" rel="noopener noreferrer">Официальный источник</a></td><td><span class="status-badge ${authority.status === "active" ? "active" : "inactive"}">${authority.status === "active" ? "Действует" : "Не действует"}</span><br>Школ: ${authority.schools_count}<br>Мероприятий: ${authority.activities_count}</td><td>${isStaffUser() ? `<button class="btn secondary" data-edit-roiv="${authority.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>РОИВ ещё не добавлены. Сначала добавьте РОИВ, затем школьного партнёра.</p>"}</div></div>
-  <div class="card"><h2>Наши партнёры</h2><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
+  <div class="card"><div class="flex between"><h2>Наши партнёры</h2><span class="count-badge" id="partner-count"></span></div><div class="grid cols-3"><div class="field"><label>Вид учебного заведения</label><select id="partner-kind-filter"><option value="">Все виды</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div><div class="field"><label>Название или ИНН</label><input id="partner-name-filter" placeholder="Начните вводить название или ИНН"></div><button class="btn secondary" id="partner-filter-reset">Сбросить</button></div><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
   let generation = 0;
   const reviewFilter = el('<label class="muted"><input type="checkbox" id="d-review-all"> Показать также вузы без подтверждённого направления — для проверки</label>');
   root.querySelector("#d-results").before(reviewFilter);
@@ -926,6 +1000,9 @@ async function renderPartnerDirectory(root, embedded = false) {
     }
   };
   root.querySelector("#d-find").onclick = search;
+  root.querySelector("#legal-groups")?.addEventListener("click", () => openLegalEntityGroups(async () => {
+    state.legalEntityGroups = await api("/legal-entity-groups");
+  }));
   root.querySelector("#d-review-all").onchange = search;
   root.querySelector("#d-kind").onchange = () => {
     state.partnerKind = root.querySelector("#d-kind").value;
@@ -963,24 +1040,39 @@ async function renderPartnerDirectory(root, embedded = false) {
     });
   const refreshPartners = async () => {
     state.partners = await api("/partners");
-    root.querySelector("#partner-list").innerHTML =
-      `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Проверка</th><th>Соглашения</th><th></th></tr></thead><tbody>${state.partners.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</small></td><td><span class="status-badge ${p.verification_status === "verified" ? "active" : "inactive"}">${p.verification_status === "verified" ? "Реестр подтверждён" : "Историческая запись"}</span><br><small>${escapeHTML(p.inn || "ИНН не указан")}</small></td><td>Всего: ${p.agreements_count}<br>Действующих сейчас: ${p.active_agreements_count}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-agreements="${p.id}">Соглашения</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`;
-    root.querySelectorAll("[data-partner]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          state.partnerID = b.dataset.partner;
-          state.view = "entries";
-          render();
-        }),
+    paintPartners();
+  };
+  const paintPartners = () => {
+    const kind = root.querySelector("#partner-kind-filter").value;
+    const term = root.querySelector("#partner-name-filter").value.trim().toLocaleLowerCase("ru");
+    const partners = state.partners.filter((partner) =>
+      (!kind || partner.partner_kind === kind) &&
+      (!term || partner.name.toLocaleLowerCase("ru").includes(term) || String(partner.inn || "").includes(term)),
     );
-    root
-      .querySelectorAll("[data-mentors]")
-      .forEach((b) => (b.onclick = () => openMentors(b.dataset.mentors)));
-    root.querySelectorAll("[data-agreements]").forEach(
-      (button) =>
-        (button.onclick = () =>
-          openAgreements(button.dataset.agreements, refreshPartners)),
-    );
+    root.querySelector("#partner-count").textContent = `Показано: ${partners.length} из ${state.partners.length}`;
+    root.querySelector("#partner-list").innerHTML = partners.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Проверка</th><th>Соглашения</th><th></th></tr></thead><tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</small></td><td><span class="status-badge ${p.verification_status === "verified" ? "active" : "inactive"}">${p.verification_status === "verified" ? "Реестр подтверждён" : "Историческая запись"}</span><br><small>${escapeHTML(p.inn || "ИНН не указан")}</small></td><td>Всего: ${p.agreements_count}<br>Действующих сейчас: ${p.active_agreements_count}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-agreements="${p.id}">Соглашения</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="muted">Партнёры по выбранным условиям не найдены.</p>';
+    root.querySelectorAll("[data-partner]").forEach((button) => {
+      button.onclick = () => {
+        state.partnerID = button.dataset.partner;
+        state.view = "entries";
+        render();
+      };
+    });
+    root.querySelectorAll("[data-mentors]").forEach((button) => {
+      button.onclick = () => openMentors(button.dataset.mentors);
+    });
+    root.querySelectorAll("[data-agreements]").forEach((button) => {
+      button.onclick = () => openAgreements(button.dataset.agreements, refreshPartners);
+    });
+  };
+  root.querySelector("#partner-kind-filter").onchange = paintPartners;
+  root.querySelector("#partner-name-filter").oninput = paintPartners;
+  root.querySelector("#partner-filter-reset").onclick = () => {
+    root.querySelector("#partner-kind-filter").value = "";
+    root.querySelector("#partner-name-filter").value = "";
+    paintPartners();
   };
   if (isStaffUser()) {
     const box = root.querySelector("#partner-create");

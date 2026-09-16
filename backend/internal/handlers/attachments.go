@@ -135,8 +135,8 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	// Lock per uploader: unrelated users do not block one another.
 	var active bool
 	var role, entity string
-	var assigned sql.NullString
-	if tx.QueryRowContext(r.Context(), `SELECT is_active,role,COALESCE(entity_type,''),partner_id FROM users WHERE id=$1 FOR NO KEY UPDATE`, u.ID).Scan(&active, &role, &entity, &assigned) != nil || !active {
+	var assigned, assignedCompany sql.NullString
+	if tx.QueryRowContext(r.Context(), `SELECT is_active,role,COALESCE(entity_type,''),partner_id,it_company_id FROM users WHERE id=$1 FOR NO KEY UPDATE`, u.ID).Scan(&active, &role, &entity, &assigned, &assignedCompany) != nil || !active {
 		middleware.WriteError(w, 403, "учётная запись недоступна")
 		return
 	}
@@ -144,12 +144,15 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	if assigned.Valid {
 		current.PartnerID = &assigned.String
 	}
+	if assignedCompany.Valid {
+		current.ITCompanyID = &assignedCompany.String
+	}
 	var partner sql.NullString
 	if tx.QueryRowContext(r.Context(), `SELECT partner_id FROM entries WHERE id::text=$1 FOR SHARE`, entryID).Scan(&partner) != nil {
 		middleware.WriteError(w, 404, "запись не найдена")
 		return
 	}
-	if !requirePartner(w, current, partner.String) {
+	if !requirePartnerTenant(w, r, h.DB, current, partner.String) {
 		return
 	}
 	quota := h.QuotaBytes
