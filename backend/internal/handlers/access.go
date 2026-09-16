@@ -17,21 +17,26 @@ func isStaff(u middleware.AuthUser) bool {
 // organization. An educational organization is a counterparty: it may read its
 // own materials and review a submitted fact report, but it must not author it.
 func canPrepareReports(u middleware.AuthUser) bool {
-	return isStaff(u)
+	return u.EntityType != models.EntityEduInst && isStaff(u)
 }
 
 func isEducationRepresentative(u middleware.AuthUser) bool {
-	return u.Role == models.RoleUser && u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID != ""
+	return u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID != ""
 }
 
 func canReviewReport(u middleware.AuthUser, period string) bool {
 	if period != string(models.PeriodFact) {
-		return isStaff(u)
+		return canPrepareReports(u)
 	}
 	// Administrators and moderators may record deemed approval after the
 	// statutory response period. A regular IT-organization user cannot approve
 	// the counterparty's own review.
-	return isEducationRepresentative(u) || u.Role == models.RoleAdmin || u.Role == models.RoleModerator
+	return isEducationRepresentative(u) ||
+		(u.EntityType != models.EntityEduInst && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator))
+}
+
+func canApproveReports(u middleware.AuthUser) bool {
+	return u.EntityType != models.EntityEduInst && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
 }
 
 func canManageITCompanies(u middleware.AuthUser) bool {
@@ -56,7 +61,10 @@ func canReviewEducationDirectory(u middleware.AuthUser) bool {
 	return u.EntityType == models.EntityEduInst
 }
 func canAccessPartner(u middleware.AuthUser, id string) bool {
-	return isStaff(u) || (u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID == id && id != "")
+	if u.EntityType == models.EntityEduInst {
+		return u.PartnerID != nil && *u.PartnerID == id && id != ""
+	}
+	return isStaff(u)
 }
 func requirePartner(w http.ResponseWriter, u middleware.AuthUser, id string) bool {
 	if !canAccessPartner(u, id) {
@@ -79,11 +87,14 @@ func requireEntry(w http.ResponseWriter, r *http.Request, db *sql.DB, u middlewa
 	return requirePartner(w, u, partner.String)
 }
 func partnerScope(u middleware.AuthUser, requested string) string {
-	if isStaff(u) {
-		return requested
-	}
 	if u.EntityType == models.EntityEduInst && u.PartnerID != nil {
 		return *u.PartnerID
+	}
+	if u.EntityType == models.EntityEduInst {
+		return "unassigned"
+	}
+	if isStaff(u) {
+		return requested
 	}
 	return "unassigned"
 }

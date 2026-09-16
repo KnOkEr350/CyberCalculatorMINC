@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"cybercalc/internal/middleware"
-	"cybercalc/internal/models"
 )
 
 type ReportWorkflowHandlers struct{ DB *sql.DB }
@@ -275,8 +274,8 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 		reviewerAllowed = partnerCount == 1
 	}
 	resp.CanVerify = resp.Status == "ready" && reviewerAllowed
-	resp.CanApprove = resp.Status == "verified" && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
-	resp.CanReturnDraft = resp.Status != "draft" && (isStaff(u) || (period == "fact" && resp.Status == "ready" && reviewerAllowed && isEducationRepresentative(u)))
+	resp.CanApprove = resp.Status == "verified" && canApproveReports(u)
+	resp.CanReturnDraft = resp.Status != "draft" && (canPrepareReports(u) || (period == "fact" && resp.Status == "ready" && reviewerAllowed && isEducationRepresentative(u)))
 	historyRows, historyErr := q.QueryContext(ctx, `SELECT h.from_status,h.to_status,COALESCE(h.comment,''),users.full_name,h.changed_at
 		FROM agreement_report_history h JOIN users ON users.id=h.changed_by
 		WHERE h.agreement_id::text=$1 AND h.report_year=$2 AND h.period_type=$3
@@ -353,7 +352,7 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 		middleware.WriteError(w, 400, "некорректный статус отчёта")
 		return
 	}
-	if !isStaff(u) {
+	if isEducationRepresentative(u) {
 		var partnerCount int
 		if err = h.DB.QueryRowContext(r.Context(), `SELECT count(*) FROM agreement_partners WHERE agreement_id::text=$1`, id).Scan(&partnerCount); err != nil {
 			middleware.WriteError(w, 500, "ошибка проверки состава соглашения")
@@ -387,9 +386,9 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 	case "verified":
 		allowed = current == "ready" && canReviewReport(u, period)
 	case "approved":
-		allowed = current == "verified" && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
+		allowed = current == "verified" && canApproveReports(u)
 	case "draft":
-		allowed = current != "draft" && (isStaff(u) || (period == "fact" && current == "ready" && isEducationRepresentative(u)))
+		allowed = current != "draft" && (canPrepareReports(u) || (period == "fact" && current == "ready" && isEducationRepresentative(u)))
 	}
 	if !allowed {
 		middleware.WriteError(w, 409, "недопустимый переход статуса или недостаточно прав")

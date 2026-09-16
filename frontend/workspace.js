@@ -4,7 +4,7 @@ function isStaffUser() {
 }
 
 function isEducationReviewer() {
-  return state.me?.role === "user" && state.me?.entity_type === "edu_institution";
+  return state.me?.entity_type === "edu_institution";
 }
 
 function canManageITCompanies() {
@@ -276,8 +276,7 @@ async function renderPartnerEntries(root) {
     state.categories = await api("/categories");
     state.categories.forEach((c) => (CATEGORY_LABELS[c.code] = c.name));
   }
-  const fixedEducationPartner =
-    state.me.role === "user" && state.me.entity_type === "edu_institution";
+  const fixedEducationPartner = isEducationReviewer();
   if (fixedEducationPartner) state.partnerID = state.me.partner_id || "";
   let partner = state.partners.find((p) => p.id === state.partnerID);
   if (!partner && state.partners.length === 1) {

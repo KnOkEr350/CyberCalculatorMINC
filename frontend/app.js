@@ -211,12 +211,11 @@ function render() {
   }
   if (state.me.mfa_required) { app.appendChild(renderMFASetup()); return; }
   if (
-    state.me.role !== "admin" &&
-    (!state.me.entity_type ||
-      (state.me.entity_type === "edu_institution" && !state.me.partner_id) ||
-      (state.me.role === "user" &&
-        state.me.entity_type === "organization" &&
-        !state.me.it_company_id))
+    !state.me.entity_type ||
+    (state.me.entity_type === "edu_institution" && !state.me.partner_id) ||
+    (state.me.role === "user" &&
+      state.me.entity_type === "organization" &&
+      !state.me.it_company_id)
   ) {
     app.appendChild(
       el(
@@ -380,8 +379,7 @@ function openPasswordDialog() {
 
 async function renderDashboard(root) {
   root.appendChild(el(`<div class="muted">Загрузка дашборда…</div>`));
-  const fixedEducationPartner =
-    state.me.role === "user" && state.me.entity_type === "edu_institution";
+  const fixedEducationPartner = isEducationReviewer();
   if (fixedEducationPartner) state.partnerID = state.me.partner_id || "";
   let d;
   try {

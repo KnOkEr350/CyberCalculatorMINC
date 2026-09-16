@@ -11,6 +11,7 @@ import (
 func TestPartnerAccess(t *testing.T) {
 	p := "partner-a"
 	own := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst, PartnerID: &p}
+	educationAdmin := middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst, PartnerID: &p}
 	tests := []struct {
 		u    middleware.AuthUser
 		p    string
@@ -20,6 +21,7 @@ func TestPartnerAccess(t *testing.T) {
 		{middleware.AuthUser{Role: models.RoleModerator}, "partner-b", true},
 		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, "partner-b", true},
 		{own, p, true}, {own, "partner-b", false}, {middleware.AuthUser{Role: models.RoleUser}, p, false},
+		{educationAdmin, p, true}, {educationAdmin, "partner-b", false},
 		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, p, false},
 	}
 	for _, tt := range tests {
@@ -30,22 +32,32 @@ func TestPartnerAccess(t *testing.T) {
 	if partnerScope(own, "partner-b") != p {
 		t.Fatal("query must not expand partner scope")
 	}
+	if partnerScope(educationAdmin, "partner-b") != p {
+		t.Fatal("education admin query must remain scoped to the assigned institution")
+	}
 }
 
 func TestOrderBasedReportRoles(t *testing.T) {
 	partner := "partner-a"
 	education := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst, PartnerID: &partner}
+	educationAdmin := middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst, PartnerID: &partner}
+	educationModerator := middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst, PartnerID: &partner}
 	organization := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}
 	admin := middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}
 
 	if !canPrepareReports(organization) || !canPrepareReports(admin) {
 		t.Fatal("the IT organization and operators must be able to prepare reports")
 	}
-	if canPrepareReports(education) {
-		t.Fatal("an educational organization must review, not author, reports")
-	}
-	if !canReviewReport(education, "fact") || canReviewReport(education, "plan") {
-		t.Fatal("an educational organization reviews only a submitted fact report")
+	for _, user := range []middleware.AuthUser{education, educationAdmin, educationModerator} {
+		if canPrepareReports(user) {
+			t.Fatalf("an educational profile must review, not author, reports: %+v", user)
+		}
+		if !canReviewReport(user, "fact") || canReviewReport(user, "plan") {
+			t.Fatalf("an educational profile reviews only a submitted fact report: %+v", user)
+		}
+		if canApproveReports(user) {
+			t.Fatalf("an educational profile must not perform the IT organization's final approval: %+v", user)
+		}
 	}
 	if canReviewReport(organization, "fact") {
 		t.Fatal("a regular IT-organization user must not confirm its own counterparty review")
@@ -61,26 +73,28 @@ func TestOrderBasedReportRoles(t *testing.T) {
 
 func TestEducationRepresentativeCannotWriteReportData(t *testing.T) {
 	partner := "partner-a"
-	u := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst, PartnerID: &partner}
-	entryHandlers := &EntryHandlers{}
-	attachmentHandlers := &AttachmentHandlers{}
-	tests := []struct {
-		name   string
-		handle func(http.ResponseWriter, *http.Request)
-	}{
-		{"create entry", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Create(w, r, u) }},
-		{"update entry", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Update(w, r, u, "entry") }},
-		{"import entries", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Import(w, r, u) }},
-		{"upload attachment", func(w http.ResponseWriter, r *http.Request) { attachmentHandlers.Upload(w, r, u, "entry") }},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			test.handle(w, httptest.NewRequest(http.MethodPost, "/", nil))
-			if w.Code != http.StatusForbidden {
-				t.Fatalf("status=%d, want 403", w.Code)
-			}
-		})
+	for _, role := range []models.Role{models.RoleUser, models.RoleModerator, models.RoleAdmin} {
+		u := middleware.AuthUser{Role: role, EntityType: models.EntityEduInst, PartnerID: &partner}
+		entryHandlers := &EntryHandlers{}
+		attachmentHandlers := &AttachmentHandlers{}
+		tests := []struct {
+			name   string
+			handle func(http.ResponseWriter, *http.Request)
+		}{
+			{"create entry", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Create(w, r, u) }},
+			{"update entry", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Update(w, r, u, "entry") }},
+			{"import entries", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Import(w, r, u) }},
+			{"upload attachment", func(w http.ResponseWriter, r *http.Request) { attachmentHandlers.Upload(w, r, u, "entry") }},
+		}
+		for _, test := range tests {
+			t.Run(string(role)+"/"+test.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				test.handle(w, httptest.NewRequest(http.MethodPost, "/", nil))
+				if w.Code != http.StatusForbidden {
+					t.Fatalf("status=%d, want 403", w.Code)
+				}
+			})
+		}
 	}
 }
 
