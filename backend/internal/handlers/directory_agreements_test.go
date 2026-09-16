@@ -25,6 +25,9 @@ func TestRussianRegistryIdentifiers(t *testing.T) {
 	if !officialRegistryURL("https://egrul.nalog.ru/index.html") {
 		t.Fatal("official EGRUL URL rejected")
 	}
+	if !officialRegistryURL(ministryEducationDirectoryURL) {
+		t.Fatal("official Ministry education directory URL rejected")
+	}
 	for _, value := range []string{"http://islod.obrnadzor.gov.ru/file.xlsx", "https://obrnadzor.gov.ru.evil.test/file.xlsx", "https://user@obrnadzor.gov.ru/file.xlsx"} {
 		if officialRegistryURL(value) {
 			t.Fatalf("untrusted registry URL accepted: %s", value)

@@ -123,6 +123,31 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 	}
 }
 
+func TestEducationDirectoryProposalPermissions(t *testing.T) {
+	tests := []struct {
+		name    string
+		user    middleware.AuthUser
+		propose bool
+		approve bool
+	}{
+		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, false, true},
+		{"IT organization moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}, true, false},
+		{"IT organization user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, false, false},
+		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, false, false},
+		{"education moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst}, false, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := canProposeEducationDirectory(test.user); got != test.propose {
+				t.Fatalf("canProposeEducationDirectory=%v, want %v", got, test.propose)
+			}
+			if got := canApproveEducationDirectory(test.user); got != test.approve {
+				t.Fatalf("canApproveEducationDirectory=%v, want %v", got, test.approve)
+			}
+		})
+	}
+}
+
 func TestEducationDirectoryHandlersRejectEducationManagers(t *testing.T) {
 	h := PartnerHandlers{}
 	for _, role := range []models.Role{models.RoleAdmin, models.RoleModerator} {

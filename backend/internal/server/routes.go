@@ -58,6 +58,11 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/it-companies/import", middleware.RequireAuth(db, itCompanyH.Import))
 	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
 	mux.HandleFunc("GET /api/directory/stats", middleware.RequireAuth(db, partnerH.DirectoryStats))
+	mux.HandleFunc("POST /api/directory", middleware.RequireAuth(db, partnerH.CreateDirectory))
+	mux.HandleFunc("GET /api/directory/proposals", middleware.RequireAuth(db, partnerH.DirectoryProposals))
+	mux.HandleFunc("POST /api/directory/{id}/decision", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		partnerH.DecideDirectoryProposal(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("PUT /api/directory/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		partnerH.UpdateDirectory(w, r, u, r.PathValue("id"))
 	}))

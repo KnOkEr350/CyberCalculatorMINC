@@ -24,6 +24,14 @@ function canReviewEducationDirectory() {
   return state.me?.entity_type === "edu_institution";
 }
 
+function canProposeEducationDirectory() {
+  return state.me?.role === "moderator" && state.me?.entity_type === "organization";
+}
+
+function canApproveEducationDirectory() {
+  return state.me?.role === "admin" && state.me?.entity_type === "organization";
+}
+
 function agreementIsUsable(agreement, year = state.year) {
   return Boolean(
     agreement &&
@@ -865,7 +873,7 @@ function directoryStatusLabel(value) {
 }
 
 async function openDirectoryReview(item, onSaved = async () => {}) {
-  if (!item || !canReviewEducationDirectory()) return;
+  if (!item || !canApproveEducationDirectory()) return;
   const today = new Date().toISOString().slice(0, 10);
   const option = (value, label, selected) =>
     `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`;
@@ -969,16 +977,124 @@ async function openLegalEntityGroups(onSaved) {
   try { await load(); } catch (error) { modal.querySelector("#group-list").textContent = error.message; }
 }
 
+const MINISTRY_EDUCATION_DIRECTORY_URL = "https://adm.digital.gov.ru/app/uploads/2026/05/6027f0_perechen-oo-vo-realizuyushhih-it-speczialnosti.pdf";
+
+async function openDirectoryCreate(onSaved = async () => {}) {
+  if (!canProposeEducationDirectory() && !canApproveEducationDirectory()) return;
+  const admin = canApproveEducationDirectory();
+  const today = new Date().toISOString().slice(0, 10);
+  const modal = el(`<div class="modal-backdrop"><form class="modal modal-wide" role="dialog" aria-modal="true">
+    <div class="flex between"><div><span class="eyebrow">${admin ? "Новая запись" : "Предложение модератора"}</span><h2>Добавить учебное заведение</h2></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
+    <p class="notice">Основание — официальный перечень образовательных организаций Минцифры. Для подтверждения администратором дополнительно нужны актуальные реквизиты и действующая лицензия.</p>
+    <div class="grid cols-2">
+      <div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="1000"></div>
+      <div class="field"><label>Тип организации *</label><select name="partner_kind"><option value="vuz">Вуз</option><option value="kolledj">Колледж / СПО</option><option value="school">Школа</option></select></div>
+      <div class="field"><label>Регион *</label><input name="region" required minlength="2" maxlength="200"></div>
+      <div class="field"><label>Дата проверки источника *</label><input name="registry_updated_at" type="date" max="${today}" value="${today}" required></div>
+      <div class="field"><label>ИНН</label><input name="inn" inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}"></div>
+      <div class="field"><label>ОГРН / ОГРНИП</label><input name="ogrn" inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}"></div>
+      <div class="field"><label>Номер лицензии</label><input name="license_number" maxlength="100"></div>
+      <div class="field"><label>Статус лицензии</label><select name="license_status"><option value="unknown">Требует проверки</option><option value="active">Действует</option><option value="suspended">Приостановлена</option><option value="expired">Истекла</option><option value="revoked">Аннулирована</option></select></div>
+      <div class="field"><label>Статус организации</label><select name="institution_status"><option value="unknown">Требует проверки</option><option value="active">Действует</option><option value="inactive">Не действует</option><option value="reorganized">Реорганизована</option><option value="liquidated">Ликвидирована</option></select></div>
+      <div class="field"><label>Коды ИТ-направлений *</label><input name="program_codes" required placeholder="09.03.01, 10.05.01"></div>
+      <div class="field"><label>Официальный перечень *</label><input name="source_url" type="url" required value="${MINISTRY_EDUCATION_DIRECTORY_URL}"></div>
+      <div class="field"><label>Источник направлений *</label><input name="programs_source_url" type="url" required value="${MINISTRY_EDUCATION_DIRECTORY_URL}"></div>
+    </div>
+    <div class="field"><label>${admin ? "Комментарий" : "Почему организацию нужно добавить *"}</label><textarea name="proposal_comment" rows="2" maxlength="1000" ${admin ? "" : "required minlength=5"} placeholder="Укажите строку или сведения из официального перечня"></textarea></div>
+    <p class="error" role="alert"></p>
+    <div class="flex">${admin ? '<button class="btn secondary" type="submit" data-mode="save">Создать для проверки</button><button class="btn" type="submit" data-mode="confirm">Создать и подтвердить</button>' : '<button class="btn" type="submit" data-mode="propose">Отправить администратору</button>'}</div>
+  </form></div>`);
+  document.body.appendChild(modal);
+  const form = modal.querySelector("form");
+  modal.querySelector("[data-close]").onclick = () => modal.remove();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const buttons = form.querySelectorAll("button");
+    buttons.forEach((button) => (button.disabled = true));
+    form.querySelector(".error").textContent = "";
+    try {
+      const payload = Object.fromEntries(new FormData(form));
+      payload.confirm = event.submitter?.dataset.mode === "confirm";
+      payload.program_codes = payload.program_codes.split(/[,;\s]+/).filter(Boolean);
+      await api("/directory", { method: "POST", body: JSON.stringify(payload) });
+      modal.remove();
+      await onSaved();
+      showToast(admin ? (payload.confirm ? "Учебное заведение добавлено и подтверждено" : "Учебное заведение добавлено для проверки") : "Предложение отправлено администратору", "success");
+    } catch (error) {
+      form.querySelector(".error").textContent = error.message;
+      buttons.forEach((button) => (button.disabled = false));
+    }
+  };
+}
+
+function openDirectoryProposalRejection(item, onSaved) {
+  const modal = el(`<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><span class="eyebrow">Решение администратора</span><h2>Отклонить предложение</h2><p><b>${escapeHTML(item.name)}</b></p><div class="field"><label>Причина отклонения *</label><textarea name="comment" required minlength="5" maxlength="1000" rows="3"></textarea></div><p class="error" role="alert"></p><div class="flex"><button class="btn danger" type="submit">Отклонить</button><button class="btn secondary" type="button">Отмена</button></div></form></div>`);
+  document.body.appendChild(modal);
+  const form = modal.querySelector("form");
+  form.querySelector('[type="button"]').onclick = () => modal.remove();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const button = form.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      await api(`/directory/${encodeURIComponent(item.id)}/decision`, { method: "POST", body: JSON.stringify({ decision: "reject", comment: form.elements.comment.value.trim() }) });
+      modal.remove();
+      await onSaved();
+      showToast("Предложение отклонено", "success");
+    } catch (error) {
+      form.querySelector(".error").textContent = error.message;
+      button.disabled = false;
+    }
+  };
+}
+
+async function loadDirectoryProposals(root, onSaved) {
+  const box = root.querySelector("#directory-proposals");
+  if (!box) return;
+  const proposals = await api("/directory/proposals");
+  const pending = proposals.filter((item) => item.verification_status === "pending");
+  const visible = canApproveEducationDirectory() ? pending : proposals.slice(0, 20);
+  box.className = `card proposal-center${pending.length ? " has-pending" : ""}`;
+  box.innerHTML = `<div class="flex between"><div><span class="eyebrow">${canApproveEducationDirectory() ? "Требуют решения" : "Мои предложения"}</span><h2>${pending.length ? `${pending.length} ${canApproveEducationDirectory() ? "новых предложений" : "ожидают проверки"}` : "Новых предложений нет"}</h2></div><span class="proposal-count">${pending.length}</span></div>${visible.length ? `<div class="proposal-list">${visible.map((item) => `<article class="proposal-item"><div><b>${escapeHTML(item.name)}</b><span>${escapeHTML(AUDIENCE_LABELS[item.partner_kind] || item.partner_kind)} · ${escapeHTML(item.region)}</span><small>${escapeHTML(item.submitter_name)} · ${new Date(item.proposed_at).toLocaleString("ru-RU")}</small><p>${escapeHTML(item.proposal_comment || "Без комментария")}</p></div><div><span class="status-badge ${item.verification_status === "verified" ? "active" : item.verification_status === "rejected" ? "inactive" : "pending"}">${item.verification_status === "verified" ? "Принято" : item.verification_status === "rejected" ? "Отклонено" : "На рассмотрении"}</span>${canApproveEducationDirectory() && item.verification_status === "pending" ? `<button class="btn" data-proposal-review="${item.id}">Проверить и принять</button><button class="btn secondary" data-proposal-reject="${item.id}">Отклонить</button>` : ""}${item.review_comment ? `<small>${escapeHTML(item.review_comment)}</small>` : ""}</div></article>`).join("")}</div>` : '<p class="muted">Здесь появятся организации, которые модераторы отправят на подтверждение.</p>'}`;
+  box.querySelectorAll("[data-proposal-review]").forEach((button) => {
+    button.onclick = () => openDirectoryReview(proposals.find((item) => item.id === button.dataset.proposalReview), onSaved);
+  });
+  box.querySelectorAll("[data-proposal-reject]").forEach((button) => {
+    button.onclick = () => openDirectoryProposalRejection(proposals.find((item) => item.id === button.dataset.proposalReject), onSaved);
+  });
+}
+
+async function refreshDirectoryProposalBadge(root = document) {
+  const badge = root.querySelector("#directory-proposal-nav-count");
+  if (!badge || (!canProposeEducationDirectory() && !canApproveEducationDirectory())) return;
+  try {
+    const stats = await api("/directory/stats");
+    const count = canApproveEducationDirectory()
+      ? Number(stats.pending_proposals || 0)
+      : Number(stats.own_pending_proposals || 0);
+    badge.textContent = count;
+    badge.hidden = count === 0;
+    badge.setAttribute("aria-label", `${count} предложений ожидают решения`);
+  } catch (_) {
+    badge.hidden = true;
+  }
+}
+
 async function renderPartnerDirectory(root, embedded = false) {
   if (!canReviewEducationDirectory()) {
     root.innerHTML = '<div class="card error-state">Справочник учебных заведений недоступен для этого профиля</div>';
     return;
   }
+  const canSuggest = canProposeEducationDirectory();
+  const canApprove = canApproveEducationDirectory();
   state.regionalAuthorities = await api("/regional-authorities");
   root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Учебные заведения и соглашения</h2></div>' : '<section class="page-heading"><div><h1>Учебные заведения и соглашения</h1></div></section>'}
   ${isStaffUser() && state.me?.it_company_id ? '<div class="card"><div class="flex between"><div><h2>Группа юридических лиц</h2><p class="muted">Договор взаимодействия, уполномоченное лицо и участники для консолидированного плана и отчёта.</p></div><button class="btn secondary" id="legal-groups">Управлять группами</button></div></div>' : ""}
+  ${canSuggest || canApprove ? '<div id="directory-proposals" class="card proposal-center"><div class="loading-state"><span class="spinner"></span>Загрузка предложений…</div></div>' : ""}
   <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><details class="rules-note"><summary>Что требует проверки</summary><p>Для записей с жёлтым статусом сверьте ИНН и ОГРН, затем подтвердите реквизиты. Партнёром может стать организация с действующей лицензией.</p></details></div>
-  <div class="card"><h2>Поиск в официальном справочнике</h2><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
+  <div class="card"><div class="flex between directory-heading"><div><h2>Поиск в официальном справочнике</h2><p class="muted">Официальный источник для проверки — опубликованный Минцифры перечень образовательных организаций.</p></div>${canSuggest || canApprove ? `<button class="btn" id="directory-add">+ ${canApprove ? "Добавить ОО" : "Предложить ОО"}</button>` : ""}</div><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
     AUDIENCE_LABELS,
   )
     .map(
@@ -987,7 +1103,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     )
     .join(
       "",
-    )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${canReviewEducationDirectory() ? '<button class="btn secondary" id="d-import">Редактировать и подтверждать через Excel</button>' : ""}</div>
+    )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${canApprove ? '<button class="btn secondary" id="d-import">Редактировать и подтверждать через Excel</button>' : ""}</div>
   <div class="card"><div class="flex between"><h2>Региональные органы управления образованием</h2>${isStaffUser() ? '<button class="btn secondary" id="roiv-add">+ Добавить РОИВ</button>' : ""}</div><div id="roiv-list">${state.regionalAuthorities.length ? `<div class="table-wrap"><table><thead><tr><th>Регион и РОИВ</th><th>Реквизиты</th><th>Связи</th><th></th></tr></thead><tbody>${state.regionalAuthorities.map((authority) => `<tr><td>${escapeHTML(authority.region)}<br><b>${escapeHTML(authority.name)}</b></td><td>ИНН ${escapeHTML(authority.inn)}<br>ОГРН ${escapeHTML(authority.ogrn)}<br><a href="${escapeHTML(authority.source_url)}" target="_blank" rel="noopener noreferrer">Официальный источник</a></td><td><span class="status-badge ${authority.status === "active" ? "active" : "inactive"}">${authority.status === "active" ? "Действует" : "Не действует"}</span><br>Школ: ${authority.schools_count}<br>Мероприятий: ${authority.activities_count}</td><td>${isStaffUser() ? `<button class="btn secondary" data-edit-roiv="${authority.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>РОИВ ещё не добавлены. Сначала добавьте РОИВ, затем школьного партнёра.</p>"}</div></div>
   <div class="card"><div class="flex between"><h2>Наши партнёры</h2><span class="count-badge" id="partner-count"></span></div><div class="grid cols-3"><div class="field"><label>Вид учебного заведения</label><select id="partner-kind-filter"><option value="">Все виды</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div><div class="field"><label>Название или ИНН</label><input id="partner-name-filter" placeholder="Начните вводить название или ИНН"></div><button class="btn secondary" id="partner-filter-reset">Сбросить</button></div><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
   let generation = 0;
@@ -1014,7 +1130,7 @@ async function renderPartnerDirectory(root, embedded = false) {
           const verifier = !pending && (p.verifier_name || p.verifier_email)
             ? `<br><small>${escapeHTML(p.verifier_name || p.verifier_email)}${p.verified_at ? ` · ${new Date(p.verified_at).toLocaleString("ru-RU")}` : ""}</small>`
             : "";
-          return `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(p.region)}</small>${p.partner_kind === "vuz" ? `<br><small>${p.matches_order ? `Подходящие направления: ${escapeHTML((p.matching_program_codes || []).join(", "))}` : (p.program_codes || []).length ? "Подходящих направлений по приказу нет" : "Направления ещё не получены"}</small>${p.programs_source_url ? `<br><a href="${escapeHTML(p.programs_source_url)}" target="_blank" rel="noopener noreferrer">Образовательные программы</a>` : ""}` : ""}</td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td><button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
+          return `<tr><td>${escapeHTML(p.name)}${p.listed_in_mincifry_order_27 ? ' <span class="status-badge active">Перечень № 27</span>' : ""}<br><small>${escapeHTML(p.region)}</small>${p.partner_kind === "vuz" ? `<br><small>${p.matches_order ? `Подходящие направления: ${escapeHTML((p.matching_program_codes || []).join(", "))}` : (p.program_codes || []).length ? "Подходящих направлений по приказу нет" : "Направления ещё не получены"}</small>${p.programs_source_url ? `<br><a href="${escapeHTML(p.programs_source_url)}" target="_blank" rel="noopener noreferrer">Образовательные программы</a>` : ""}` : ""}</td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td>${canApprove ? `<button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>` : ""}${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
         }).join("")}</tbody></table></div>`
         : `<p>${root.querySelector("#d-kind").value === "vuz" ? "Вузы с найденными подходящими направлениями не найдены. Для проверки записи включите «Показать также вузы без подтверждённого направления» или измените запрос." : "Совпадений нет. Измените запрос или загрузите сведения в справочник."}</p>`;
 	  box.querySelectorAll("[data-review-directory]").forEach((button) => {
@@ -1047,6 +1163,12 @@ async function renderPartnerDirectory(root, embedded = false) {
     }
   };
   root.querySelector("#d-find").onclick = search;
+  root.querySelector("#directory-add")?.addEventListener("click", () =>
+    openDirectoryCreate(async () => {
+      await Promise.all([search(), loadDirectoryProposals(root, () => renderPartnerDirectory(root, embedded))]);
+      await refreshDirectoryProposalBadge(document);
+    }),
+  );
   root.querySelector("#legal-groups")?.addEventListener("click", () => openLegalEntityGroups(async () => {
     state.legalEntityGroups = await api("/legal-entity-groups");
   }));
@@ -1075,11 +1197,20 @@ async function renderPartnerDirectory(root, embedded = false) {
         () => renderPartnerDirectory(root, embedded),
       );
   });
+  if (canSuggest || canApprove) {
+    loadDirectoryProposals(root, async () => {
+      await renderPartnerDirectory(root, embedded);
+      await refreshDirectoryProposalBadge(document);
+    }).catch((error) => {
+      const box = root.querySelector("#directory-proposals");
+      if (box) box.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+    });
+  }
   api("/directory/stats")
     .then((stats) => {
       const box = root.querySelector("#directory-stats");
       if (!box) return;
-      box.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Всего записей в справочнике</div><div class="value">${stats.all_total}</div></div><div class="stat warning-stat"><div class="label">Подходят, требуют проверки</div><div class="value">${stats.pending || 0}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">С подходящими направлениями</div><div class="value">${stats.total}</div></div></div><p class="muted">Вузов в справочнике: ${stats.all_universities}. Направления ещё не получены: ${stats.programs_unknown}. Последнее подтверждение: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "записей пока нет"}. ${stats.sync_status ? `Обогащение/обновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автоматическое обогащение ещё не запускалось."}</p>`;
+      box.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Организации из перечня</div><div class="value">${stats.all_total}</div></div><div class="stat warning-stat"><div class="label">Требуют проверки реквизитов</div><div class="value">${stats.pending || 0}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">С подходящими направлениями</div><div class="value">${stats.total}</div></div></div><p class="muted">Вузов из перечня Минцифры № 27: ${stats.all_universities}. Направления ещё не получены: ${stats.programs_unknown}. Последнее подтверждение: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "записей пока нет"}. ${stats.sync_status ? `Обогащение/обновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автоматическое обогащение ещё не запускалось."}</p>`;
     })
     .catch((error) => {
       const box = root.querySelector("#directory-stats");

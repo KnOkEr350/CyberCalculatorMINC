@@ -153,13 +153,15 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		COALESCE(d.verified_at::text,''),d.verification_status,COALESCE(d.verified_by::text,''),
 		COALESCE(verifier.full_name,''),COALESCE(verifier.email,''),d.program_codes,d.programs_source_url,
 		ARRAY(SELECT code FROM unnest(d.program_codes) AS code WHERE education_matches_order('vuz',ARRAY[code])),
-		education_matches_order(d.partner_kind,d.program_codes),
+		education_matches_order(d.partner_kind,d.program_codes),d.listed_in_mincifry_order_27,
 		(d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
 		 AND education_matches_order(d.partner_kind,d.program_codes)
 		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE)
 		FROM education_directory d LEFT JOIN users verifier ON verifier.id=d.verified_by
 		WHERE ($1='' OR d.partner_kind=$1)
 		AND ($4 OR education_matches_order(d.partner_kind,d.program_codes))
+		AND ($4 OR d.partner_kind<>'vuz' OR d.listed_in_mincifry_order_27)
+		AND ($4 OR d.verification_status<>'rejected')
 		AND ($2='' OR d.name ILIKE '%'||$2||'%' OR d.region ILIKE '%'||$2||'%' OR d.inn=$2 OR d.ogrn=$2 OR d.license_number ILIKE '%'||$2||'%')
 		AND ($3<>'1' OR (d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
 		 AND education_matches_order(d.partner_kind,d.program_codes)
@@ -179,11 +181,11 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		var programCodes pq.StringArray
 		var matchingCodes pq.StringArray
 		var programsSource string
-		var matchesOrder bool
+		var matchesOrder, listedInOrder bool
 		var selectable bool
 		if rows.Scan(&id, &name, &kind, &region, &source, &inn, &ogrn, &licenseNumber, &licenseStatus,
 			&institutionStatus, &recordID, &sourceURL, &registryUpdatedAt, &verifiedAt, &verificationStatus,
-			&verifiedBy, &verifierName, &verifierEmail, &programCodes, &programsSource, &matchingCodes, &matchesOrder, &selectable) != nil {
+			&verifiedBy, &verifierName, &verifierEmail, &programCodes, &programsSource, &matchingCodes, &matchesOrder, &listedInOrder, &selectable) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
@@ -195,7 +197,7 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 			"verified_by": verifiedBy, "verifier_name": verifierName, "verifier_email": verifierEmail,
 			"selectable":    selectable,
 			"program_codes": programCodes, "programs_source_url": programsSource, "matches_order": matchesOrder,
-			"matching_program_codes": matchingCodes,
+			"matching_program_codes": matchingCodes, "listed_in_mincifry_order_27": listedInOrder,
 		})
 	}
 	if rows.Err() != nil {
@@ -218,15 +220,27 @@ func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request,
 		count(*) FILTER(WHERE partner_kind='vuz' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days' AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE),
 		count(*) FILTER(WHERE partner_kind='kolledj' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days' AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE),
 		count(*) FILTER(WHERE partner_kind='school' AND verification_status='verified' AND license_status='active' AND institution_status='active' AND verified_at>=now()-interval '35 days' AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE),
-		max(verified_at) FROM education_directory WHERE education_matches_order(partner_kind,program_codes)`).Scan(&total, &verified, &pending, &universities, &colleges, &schools, &lastVerified)
+		max(verified_at) FROM education_directory
+		WHERE verification_status<>'rejected'
+		AND education_matches_order(partner_kind,program_codes)
+		AND (partner_kind<>'vuz' OR listed_in_mincifry_order_27)`).Scan(&total, &verified, &pending, &universities, &colleges, &schools, &lastVerified)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка статистики справочника")
 		return
 	}
 	var allTotal, allUniversities, programsUnknown int
 	if err := h.DB.QueryRowContext(r.Context(), `SELECT count(*),count(*) FILTER(WHERE partner_kind='vuz'),
-		count(*) FILTER(WHERE partner_kind='vuz' AND programs_checked_at IS NULL) FROM education_directory`).Scan(&allTotal, &allUniversities, &programsUnknown); err != nil {
+		count(*) FILTER(WHERE partner_kind='vuz' AND programs_checked_at IS NULL) FROM education_directory
+		WHERE partner_kind='vuz' AND verification_status<>'rejected' AND listed_in_mincifry_order_27`).Scan(&allTotal, &allUniversities, &programsUnknown); err != nil {
 		middleware.WriteError(w, 500, "ошибка статистики направлений")
+		return
+	}
+	var pendingProposals, ownPendingProposals int
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT
+		count(*) FILTER(WHERE proposed_by IS NOT NULL AND verification_status='pending'),
+		count(*) FILTER(WHERE proposed_by::text=$1 AND verification_status='pending')
+		FROM education_directory`, u.ID).Scan(&pendingProposals, &ownPendingProposals); err != nil {
+		middleware.WriteError(w, 500, "ошибка статистики предложений")
 		return
 	}
 	last := ""
@@ -248,6 +262,7 @@ func (h *PartnerHandlers) DirectoryStats(w http.ResponseWriter, r *http.Request,
 	middleware.WriteJSON(w, 200, map[string]interface{}{
 		"total": total, "verified_active": verified, "pending": pending, "universities": universities,
 		"all_total": allTotal, "all_universities": allUniversities, "programs_unknown": programsUnknown,
+		"pending_proposals": pendingProposals, "own_pending_proposals": ownPendingProposals,
 		"colleges": colleges, "schools": schools, "last_verified_at": last,
 		"sync_status": syncStatus, "sync_source": syncSource, "sync_error": syncError, "sync_finished_at": syncFinishedAt,
 	})

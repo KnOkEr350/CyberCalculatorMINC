@@ -81,6 +81,14 @@ func canReviewEducationDirectory(u middleware.AuthUser) bool {
 	}
 	return u.EntityType == models.EntityEduInst
 }
+
+func canProposeEducationDirectory(u middleware.AuthUser) bool {
+	return u.Role == models.RoleModerator && u.EntityType == models.EntityOrganization
+}
+
+func canApproveEducationDirectory(u middleware.AuthUser) bool {
+	return u.Role == models.RoleAdmin && u.EntityType == models.EntityOrganization
+}
 func canAccessPartner(u middleware.AuthUser, id string) bool {
 	if u.EntityType == models.EntityEduInst {
 		return u.PartnerID != nil && *u.PartnerID == id && id != ""

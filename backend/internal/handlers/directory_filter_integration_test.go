@@ -30,14 +30,15 @@ func TestDirectoryPaginationKeepsExactProgramFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	prefix := "Pagination-" + time.Now().Format("150405.000000000")
-	_, err = db.Exec(`INSERT INTO education_directory(name,partner_kind,region,source,program_codes)
-		SELECT $1||n,'vuz','Тестовый регион','test',ARRAY['09.03.01','38.03.01'] FROM generate_series(1,501) n`, prefix)
+	_, err = db.Exec(`INSERT INTO education_directory(name,partner_kind,region,source,program_codes,listed_in_mincifry_order_27)
+		SELECT $1||n,'vuz','Тестовый регион','test',ARRAY['09.03.01','38.03.01'],TRUE FROM generate_series(1,501) n`, prefix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Exec(`INSERT INTO education_directory(name,partner_kind,region,source,program_codes)
-		VALUES($1||'excluded','vuz','Тестовый регион','test',ARRAY['38.03.01']),
-		($1||'unknown','vuz','Тестовый регион','test','{}')`, prefix)
+	_, err = db.Exec(`INSERT INTO education_directory(name,partner_kind,region,source,program_codes,listed_in_mincifry_order_27)
+		VALUES($1||'excluded','vuz','Тестовый регион','test',ARRAY['38.03.01'],TRUE),
+		($1||'unknown','vuz','Тестовый регион','test','{}',TRUE),
+		($1||'not-listed','vuz','Тестовый регион','test',ARRAY['09.03.01'],FALSE)`, prefix)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -84,6 +84,10 @@ const VALUE_LABELS = {
   directory_programs: "Обновление направлений подготовки",
   directory_update: "Изменение реквизитов",
   directory_confirm: "Подтверждение учебного заведения",
+  directory_create: "Добавление учебного заведения",
+  directory_propose: "Предложение учебного заведения",
+  directory_proposal_approve: "Принятие предложения",
+  directory_proposal_reject: "Отклонение предложения",
 };
 
 function valueLabel(value) {
@@ -1144,7 +1148,7 @@ async function renderAdmin(root) {
   root.innerHTML = `<section class="page-heading"><div><h1>Управление</h1></div></section>
   <div class="admin-layout">
     <nav class="admin-nav" aria-label="Разделы административной панели">
-      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО</b></button>` : ""}
+      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО <span class="nav-count" id="directory-proposal-nav-count" hidden></span></b></button>` : ""}
       ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b></button>` : ""}
       ${isAdmin ? '<button data-t="users"><b>Пользователи</b></button><button data-t="settings"><b>Настройки</b></button><button data-t="logs"><b>Журнал изменений</b></button>' : ""}
     </nav>
@@ -1160,6 +1164,7 @@ async function renderAdmin(root) {
       renderAdminTab(box, b.dataset.t);
     };
   });
+  refreshDirectoryProposalBadge(root);
   renderAdminTab(box, initialDirectoryTab);
 }
 

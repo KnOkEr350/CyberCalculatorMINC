@@ -428,6 +428,10 @@ func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request
 	}
 	valid, errors := validateDirectoryRows(rows)
 	commit := r.URL.Query().Get("commit") == "1" && len(errors) == 0
+	if commit && !canApproveEducationDirectory(u) {
+		middleware.WriteError(w, http.StatusForbidden, "подтверждать массовую загрузку справочника может только администратор")
+		return
+	}
 	if commit {
 		tx, e := h.DB.BeginTx(r.Context(), nil)
 		if e != nil {

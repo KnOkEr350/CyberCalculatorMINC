@@ -210,6 +210,34 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
 .warning-stat { border-color: #f0d99f; background: linear-gradient(145deg, #fff, #fff9e8); }
 .warning-stat::after { background: #e2a72e; }
 .warning-stat .value { color: var(--warn); }
+.nav-count {
+  display: inline-grid; min-width: 20px; height: 20px; margin-left: 7px; padding: 0 6px;
+  place-items: center; border-radius: 999px; background: var(--bad); color: #fff;
+  font-size: 10px; line-height: 1;
+}
+.nav-count[hidden] { display: none; }
+.proposal-center { position: relative; overflow: hidden; border-color: #c9dbef; }
+.proposal-center::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--accent); }
+.proposal-center.has-pending { border-color: #efd899; background: linear-gradient(135deg, #fff 0%, #fffaf0 100%); }
+.proposal-center.has-pending::before { background: #e2a72e; }
+.proposal-count {
+  display: grid; min-width: 42px; height: 42px; padding: 0 10px; place-items: center;
+  border-radius: 50%; background: var(--blue-soft); color: var(--accent-2); font-size: 18px; font-weight: 800;
+}
+.has-pending .proposal-count { background: #fff0c5; color: var(--warn); }
+.proposal-list { display: grid; gap: 10px; margin-top: 16px; }
+.proposal-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center;
+  padding: 15px 16px; border: 1px solid var(--border); background: #fff;
+}
+.proposal-item > div { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.proposal-item > div:last-child { align-items: flex-end; }
+.proposal-item b { color: var(--navy); }
+.proposal-item span:not(.status-badge), .proposal-item small { color: var(--muted); font-size: 12px; }
+.proposal-item p { margin: 4px 0 0; color: var(--text); font-size: 13px; }
+.proposal-item .btn { margin-top: 4px; }
+.directory-heading { margin-bottom: 12px; }
+.directory-heading p { margin: 4px 0 0; }
 .role-badge { background: var(--blue-soft); color: var(--accent-2); }
 
 .auth-shell { display: grid; grid-template-columns: minmax(390px, .86fr) minmax(460px, 1.14fr); min-height: 100vh; background: white; }
@@ -335,6 +363,8 @@ td .btn { min-height: 32px; padding: 5px 10px; font-size: 11px; }
   .bar-row .bar-value { width: auto; }
   .modal { padding: 20px 16px; }
   .file-row { align-items: stretch; flex-direction: column; }
+  .proposal-item { grid-template-columns: 1fr; }
+  .proposal-item > div:last-child { align-items: flex-start; }
 }
 @media (max-width: 420px) {
   .auth-brand-panel { min-height: 100px; }
