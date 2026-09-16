@@ -37,6 +37,10 @@ func randomHex(n int) (string, error) {
 
 // Optional attachments for plan and fact. One batch is all-or-nothing.
 func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
+	if !canPrepareReports(u) {
+		middleware.WriteError(w, http.StatusForbidden, "вложения к плану и отчёту загружает ИТ-организация")
+		return
+	}
 	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}

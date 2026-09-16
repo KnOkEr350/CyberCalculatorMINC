@@ -13,6 +13,27 @@ func isStaff(u middleware.AuthUser) bool {
 	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityOrganization
 }
 
+// The Order assigns preparation of the plan and reports to the obligated IT
+// organization. An educational organization is a counterparty: it may read its
+// own materials and review a submitted fact report, but it must not author it.
+func canPrepareReports(u middleware.AuthUser) bool {
+	return isStaff(u)
+}
+
+func isEducationRepresentative(u middleware.AuthUser) bool {
+	return u.Role == models.RoleUser && u.EntityType == models.EntityEduInst && u.PartnerID != nil && *u.PartnerID != ""
+}
+
+func canReviewReport(u middleware.AuthUser, period string) bool {
+	if period != string(models.PeriodFact) {
+		return isStaff(u)
+	}
+	// Administrators and moderators may record deemed approval after the
+	// statutory response period. A regular IT-organization user cannot approve
+	// the counterparty's own review.
+	return isEducationRepresentative(u) || u.Role == models.RoleAdmin || u.Role == models.RoleModerator
+}
+
 func canManageITCompanies(u middleware.AuthUser) bool {
 	if u.Role == models.RoleAdmin || u.Role == models.RoleModerator {
 		return u.EntityType == models.EntityEduInst

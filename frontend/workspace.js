@@ -3,6 +3,10 @@ function isStaffUser() {
   return state.me?.role === "admin" || state.me?.role === "moderator" || state.me?.entity_type === "organization";
 }
 
+function isEducationReviewer() {
+  return state.me?.role === "user" && state.me?.entity_type === "edu_institution";
+}
+
 function canManageITCompanies() {
   if (state.me?.role === "admin" || state.me?.role === "moderator")
     return state.me?.entity_type === "edu_institution";
@@ -304,7 +308,8 @@ async function renderPartnerEntries(root) {
   const selectedAgreement = state.agreements.find(
     (agreement) => agreement.id === state.agreementID,
   );
-  const writable = agreementIsUsable(selectedAgreement);
+  const canPrepare = !isEducationReviewer();
+  const writable = agreementIsUsable(selectedAgreement) && canPrepare;
   const available = state.categories.filter(
     (category) =>
       category.audience_scope.includes(partner?.partner_kind || state.partnerKind) &&
@@ -324,16 +329,16 @@ async function renderPartnerEntries(root) {
         .join("")}</select></div>
     <div class="field"><label for="partner-search">Поиск учебного заведения</label><input id="partner-search" placeholder="Введите часть названия"></div>
     <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>`;
-  root.innerHTML = `<section class="page-heading"><div><h1>План и факт</h1></div></section>
+  root.innerHTML = `<section class="page-heading"><div><h1>${canPrepare ? "План и факт" : "Рассмотрение плана и отчёта"}</h1>${canPrepare ? "" : "<p>План и отчёт формирует ИТ-организация. Здесь образовательная организация просматривает направленный перечень и согласовывает факт либо возвращает замечания.</p>"}</div></section>
   <div class="card"><div class="grid cols-3">
     ${educationSelector}
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
-  </div>${canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения"}` : "Выберите учебное заведение и соглашение"}</p></div>
+  </div>${canPrepare && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     <div class="field"><label>4. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
-    <div class="field"><label>Действия</label><button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button></div></div>
-    <div class="flex"><button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button><a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="field"><label>Режим</label>${canPrepare ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : '<input value="Просмотр и согласование" readonly>'}</div></div>
+    <div class="flex">${canPrepare ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><div class="field"><label for="entry-search">Поиск по реквизитам, студенту, наставнику, программе</label><input id="entry-search" placeholder="Введите текст"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const partnerSelect = root.querySelector("#workspace-partner");
@@ -403,8 +408,10 @@ async function renderPartnerEntries(root) {
     state.categoryCode = e.target.value;
     renderEntries(root);
   };
-  root.querySelector("#add-entry").onclick = () => openEntryModal(null);
-  root.querySelector("#import-entries").onclick = () => openImportDialog(false);
+  const addEntry = root.querySelector("#add-entry");
+  if (addEntry) addEntry.onclick = () => openEntryModal(null);
+  const importEntries = root.querySelector("#import-entries");
+  if (importEntries) importEntries.onclick = () => openImportDialog(false);
   const query = workspaceQuery();
   const pageKey = String(query);
   if (state.entryPageKey !== pageKey) { state.entryPageKey = pageKey; state.entryPageOffset = 0; }
@@ -436,18 +443,33 @@ async function renderPartnerEntries(root) {
     return;
   state.entries = entries;
   const obligation = root.querySelector("#obligation-box");
-  const workflowLabels = { draft: "Черновик", ready: "Готово", verified: "Проверено", approved: "Утверждено" };
+  const workflowLabels = { draft: "Черновик ИТ-организации", ready: state.period === "fact" ? "Направлено на рассмотрение" : "Готово", verified: state.period === "fact" ? "Согласовано ОО / РОИВ" : "Проверено", approved: "Утверждено" };
   const automaticOK = workflow.automatic_checks.every((check) => check.complete);
+  const confirmationsDisabled = workflow.status !== "draft" || !canPrepare;
+  const reviewHint = !canPrepare && state.period === "fact"
+    ? (workflow.status === "ready"
+      ? (workflow.can_verify || workflow.can_return_draft
+        ? '<p class="notice">Проверьте перечень. При согласии нажмите «Согласовать перечень»; при наличии замечаний верните его ИТ-организации с комментарием.</p>'
+        : '<p class="notice">Соглашение охватывает несколько ОО. Итог рассмотрения фиксирует оператор, чтобы один представитель не согласовал данные за остальных.</p>')
+      : '<p class="muted">Согласование станет доступно после направления перечня ИТ-организацией.</p>')
+    : "";
+  const workflowControls = canPrepare
+    ? `<div class="field"><label>Комментарий к смене статуса</label><textarea id="wf-comment" maxlength="1000" rows="2" placeholder="Основание проверки или возврата"></textarea></div>
+      <div class="flex"><button class="btn" id="wf-ready" ${workflow.can_mark_ready ? "" : "disabled"}>${state.period === "fact" ? "Направить на рассмотрение" : "Передать: Готово"}</button><button class="btn" id="wf-verify" ${workflow.can_verify ? "" : "disabled"}>${state.period === "fact" ? "Зафиксировать согласование" : "Проверено"}</button><button class="btn" id="wf-approve" ${workflow.can_approve ? "" : "disabled"}>Утверждено</button><button class="btn secondary" id="wf-draft" ${workflow.can_return_draft ? "" : "disabled"}>Вернуть в черновик</button></div>`
+    : state.period === "fact" && workflow.status === "ready" && (workflow.can_verify || workflow.can_return_draft)
+      ? `<div class="field"><label>Комментарий к решению *</label><textarea id="wf-comment" maxlength="1000" rows="2" placeholder="Основание согласования или замечания к перечню"></textarea></div>
+        <div class="flex"><button class="btn" id="wf-verify" ${workflow.can_verify ? "" : "disabled"}>Согласовать перечень</button><button class="btn secondary" id="wf-draft" ${workflow.can_return_draft ? "" : "disabled"}>Вернуть с замечаниями</button></div>`
+      : '<p class="muted">Действий со стороны образовательной организации на этом этапе нет.</p>';
   obligation.innerHTML = `<div class="card"><div class="flex between"><div><h2>Комплектность отчёта по соглашению</h2><p>Статус: <span class="status-badge ${workflow.status === "approved" ? "active" : workflow.status === "draft" ? "inactive" : ""}">${escapeHTML(workflowLabels[workflow.status] || workflow.status)}</span></p></div><small>Контроль ведётся отдельно для ${state.period === "plan" ? "плана" : "факта"} ${state.year} года</small></div>
     <h3>Автоматические проверки</h3><ul>${workflow.automatic_checks.map((check) => `<li>${check.complete ? "✓" : "✕"} ${escapeHTML(check.label)}</li>`).join("")}</ul>
     <h3>Виды мероприятий соглашения</h3><div class="grid cols-2">${workflow.activities.map((activity) => `<button class="btn secondary" data-required="${activity.code}">${activity.complete ? "✓" : "＋"} ${escapeHTML(activity.name)}</button>`).join("")}</div>
     ${workflow.top_it_exception ? '<p class="notice">Применено исключение ТОП ИТ/ИИ: остальные виды подтверждены в другой утверждённой образовательной организации.</p>' : ""}
-    <h3>Юридические подтверждения</h3><label class="check-row"><input id="wf-scope" type="checkbox" ${workflow.scope_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Конкретный перечень, объём, сроки и условия соответствуют соглашению</label>
-    <label class="check-row"><input id="wf-conditions" type="checkbox" ${workflow.conditions_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Выполнены условия реализации каждого вида из приложения № 1 приказа</label>
-    <label class="check-row"><input id="wf-evidence" type="checkbox" ${workflow.evidence_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Подтверждающие документы имеются и позволяют установить факт мероприятия (загрузка в систему необязательна)</label>
-    ${state.period === "fact" ? `<label class="check-row"><input id="wf-counterparty" type="checkbox" ${workflow.counterparty_confirmed ? "checked" : ""} ${workflow.status !== "draft" ? "disabled" : ""}> Перечень направлен контрагенту и согласован/считается согласованным по сроку приказа</label>` : ""}
-    <div class="field"><label>Комментарий к смене статуса</label><textarea id="wf-comment" maxlength="1000" rows="2" placeholder="Основание проверки или возврата"></textarea></div>
-    <div class="flex"><button class="btn" id="wf-ready" ${workflow.status === "draft" && automaticOK ? "" : "disabled"}>Передать: Готово</button><button class="btn" id="wf-verify" ${workflow.can_verify ? "" : "disabled"}>Проверено</button><button class="btn" id="wf-approve" ${workflow.can_approve ? "" : "disabled"}>Утверждено</button><button class="btn secondary" id="wf-draft" ${workflow.can_return_draft ? "" : "disabled"}>Вернуть в черновик</button></div>
+    <h3>Юридические подтверждения ИТ-организации</h3><label class="check-row"><input id="wf-scope" type="checkbox" ${workflow.scope_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Конкретный перечень, объём, сроки и условия соответствуют соглашению</label>
+    <label class="check-row"><input id="wf-conditions" type="checkbox" ${workflow.conditions_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Выполнены условия реализации каждого вида из приложения № 1 приказа</label>
+    <label class="check-row"><input id="wf-evidence" type="checkbox" ${workflow.evidence_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Подтверждающие документы имеются и позволяют установить факт мероприятия (загрузка в систему необязательна)</label>
+    ${state.period === "fact" ? `<p class="${workflow.counterparty_confirmed ? "notice" : "muted"}">${workflow.counterparty_confirmed ? "✓ Перечень рассмотрен и согласован образовательной организацией / РОИВ" : "Рассмотрение образовательной организацией / РОИВ ещё не зафиксировано"}</p>` : ""}
+    ${reviewHint}
+    ${workflowControls}
     ${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : ""}
     ${workflow.history.length ? `<details><summary>История согласования (${workflow.history.length})</summary><ul>${workflow.history.map((item) => `<li>${new Date(item.changed_at).toLocaleString("ru-RU")} · ${escapeHTML(item.changed_by)}: ${escapeHTML(workflowLabels[item.from_status] || item.from_status)} → ${escapeHTML(workflowLabels[item.to_status] || item.to_status)} — ${escapeHTML(item.comment)}</li>`).join("")}</ul></details>` : ""}<p class="muted">Любое изменение соглашения, перечня или записи автоматически возвращает этот отчёт в черновик. Экспорт разрешён только после утверждения.</p></div>`;
   obligation.querySelectorAll("[data-required]").forEach((button) => button.onclick = () => { state.categoryCode = button.dataset.required; renderEntries(root); });
@@ -460,13 +482,18 @@ async function renderPartnerEntries(root) {
       await renderEntries(root);
     } catch (error) { showToast(error.message); button.disabled = false; }
   };
-  obligation.querySelector("#wf-ready").onclick = () => transition("ready");
-  obligation.querySelector("#wf-verify").onclick = () => transition("verified");
-  obligation.querySelector("#wf-approve").onclick = () => transition("approved");
-  obligation.querySelector("#wf-draft").onclick = () => transition("draft");
+  const readyButton = obligation.querySelector("#wf-ready");
+  const verifyButton = obligation.querySelector("#wf-verify");
+  const approveButton = obligation.querySelector("#wf-approve");
+  const draftButton = obligation.querySelector("#wf-draft");
+  if (readyButton) readyButton.onclick = () => transition("ready");
+  if (verifyButton) verifyButton.onclick = () => transition("verified");
+  if (approveButton) approveButton.onclick = () => transition("approved");
+  if (draftButton) draftButton.onclick = () => transition("draft");
   const syncReady = () => {
-    const manualOK = obligation.querySelector("#wf-scope")?.checked && obligation.querySelector("#wf-conditions")?.checked && obligation.querySelector("#wf-evidence")?.checked && (state.period === "plan" || obligation.querySelector("#wf-counterparty")?.checked);
-    obligation.querySelector("#wf-ready").disabled = !(workflow.status === "draft" && automaticOK && manualOK);
+    if (!readyButton) return;
+    const manualOK = obligation.querySelector("#wf-scope")?.checked && obligation.querySelector("#wf-conditions")?.checked && obligation.querySelector("#wf-evidence")?.checked;
+    readyButton.disabled = !(canPrepare && workflow.status === "draft" && automaticOK && manualOK);
   };
   obligation.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", syncReady));
   syncReady();
@@ -488,13 +515,13 @@ async function renderPartnerEntries(root) {
         (f) => !["org_name", "mentor_id"].includes(f.key),
       ) || [];
     root.querySelector("#entries-table").innerHTML =
-      `<p>Записей: ${list.length} · Сумма: <b>${fmtMoney(list.reduce((s, e) => s + Number(e.amount_rub), 0))}</b></p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">Открыть</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? '<p class="muted">Записей нет. Добавьте вручную или импортируйте Excel.</p>' : ""}`;
+      `<p>Записей: ${list.length} · Сумма: <b>${fmtMoney(list.reduce((s, e) => s + Number(e.amount_rub), 0))}</b></p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canPrepare ? "Записей нет. Добавьте вручную или импортируйте Excel." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(
         (b) =>
           (b.onclick = () =>
-            openEntryModal(entries.find((e) => e.id === b.dataset.edit))),
+            openEntryModal(entries.find((e) => e.id === b.dataset.edit), !writable)),
       );
   };
   root.querySelector("#entry-search").oninput = paint;

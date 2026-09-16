@@ -304,7 +304,7 @@ function renderLayout() {
       ${brandMarkup()}
       <nav>
         <button data-view="dashboard">Сводка</button>
-        <button data-view="entries">План / Факт</button>
+        <button data-view="entries">${isEducationReviewer() ? "Рассмотрение" : "План / Факт"}</button>
         ${!isManager && canReviewEducationDirectory() ? '<button data-view="partners">Учебные заведения</button>' : ""}
         ${!isManager && canViewITCompanies() ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
         ${isManager ? '<button data-view="admin">Управление</button>' : ""}
@@ -806,7 +806,7 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
   return { payload, valid: !firstInvalid };
 }
 
-async function openEntryModal(entry) {
+async function openEntryModal(entry, readOnly = false) {
   const cat = currentCategory();
   if (!cat) {
     alert("Категория не загружена. Обновите страницу и повторите попытку.");
@@ -853,14 +853,14 @@ async function openEntryModal(entry) {
   const backdrop =
     el(`<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true">
     <form id="m-form" novalidate>
-    <h2 style="margin-top:0">${isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
+    <h2 style="margin-top:0">${readOnly ? "Просмотр записи" : isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
     <div class="field"><label>Аудитория</label>
       <select id="m-audience" disabled><option value="${escapeHTML(audience)}">${escapeHTML(AUDIENCE_LABELS[audience])}</option></select>
     </div>
     <div class="field"><label>Соглашение</label><input value="${escapeHTML(agreementLabel(agreement))}" disabled></div>
     <div id="m-fields"></div>
     ${
-      isEdit
+      isEdit && !readOnly
         ? `<div class="field"><label>Комментарий к изменению (обязателен)</label><textarea id="m-comment" rows="2"></textarea></div>`
         : ""
     }
@@ -868,11 +868,11 @@ async function openEntryModal(entry) {
     <div class="flex between" style="margin-top:14px">
       <div>${entry ? `<span class="muted">Текущая сумма: ${fmtMoney(entry.amount_rub)}</span>` : ""}</div>
       <div class="flex">
-        <button type="button" class="btn secondary" id="m-cancel">Отмена</button>
-        <button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>
+        <button type="button" class="btn secondary" id="m-cancel">${readOnly ? "Закрыть" : "Отмена"}</button>
+        ${readOnly ? "" : `<button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>`}
       </div>
     </div>
-    ${renderAttachSection()}
+    ${renderAttachSection(readOnly)}
     </form>
   </div></div>`);
 
@@ -896,7 +896,7 @@ async function openEntryModal(entry) {
       );
     }
     fieldsBox.appendChild(row);
-    if (f.key === "org_name") row.querySelector("select").disabled = true;
+    if (f.key === "org_name" || readOnly) row.querySelector("input,select").disabled = true;
     if (f.key === "mentor_full_name") row.hidden = true;
     if (f.key === "mentor_id") {
       const select = row.querySelector("select");
@@ -904,10 +904,10 @@ async function openEntryModal(entry) {
         fieldsBox.querySelector('[data-key="mentor_full_name"]').value =
           state.mentors.find((m) => m.id === select.value)?.full_name || "";
       };
-      const add = el(
+      const add = readOnly ? null : el(
         '<button type="button" class="btn secondary">+ Наставник</button>',
       );
-      add.onclick = async () => {
+      if (add) add.onclick = async () => {
         const name = prompt("Фамилия, имя, отчество наставника (при наличии)");
         if (!name) return;
         add.disabled = true;
@@ -926,7 +926,7 @@ async function openEntryModal(entry) {
           add.disabled = false;
         }
       };
-      row.appendChild(add);
+      if (add) row.appendChild(add);
     }
   });
 
@@ -943,7 +943,7 @@ async function openEntryModal(entry) {
     if (event.target === backdrop) closeModal();
   };
   document.addEventListener("keydown", closeOnEscape);
-  backdrop.querySelector("#m-form").onsubmit = async (event) => {
+  if (!readOnly) backdrop.querySelector("#m-form").onsubmit = async (event) => {
     event.preventDefault();
     if (busy) return;
     const validation = collectAndValidateEntryPayload(fieldsBox, cat);
@@ -1042,7 +1042,7 @@ async function openEntryModal(entry) {
   document.body.appendChild(backdrop);
 
   if (isEdit) {
-    wireAttachSection(backdrop, entry.id);
+    wireAttachSection(backdrop, entry.id, readOnly);
   } else {
     backdrop.querySelector("#attach-list").textContent =
       "Файлы необязательны. Выбранные файлы загрузятся после создания записи.";
@@ -1050,18 +1050,18 @@ async function openEntryModal(entry) {
   }
 }
 
-function renderAttachSection() {
+function renderAttachSection(readOnly = false) {
   return `<div class="card" style="margin-top:14px;background:transparent;padding:0;border:none">
-    <h2>Вложения — необязательно</h2><p class="muted">До 20 файлов за раз, суммарно до 64 МБ. Можно сохранить запись без файлов.</p>
+    <h2>Вложения</h2><p class="muted">${readOnly ? "Документы, приложенные ИТ-организацией к перечню мероприятий." : "Необязательно: до 20 файлов за раз, суммарно до 64 МБ."}</p>
     <div id="attach-list" class="attach-list muted">Загрузка…</div>
-    <div class="field" style="margin-top:8px">
+    ${readOnly ? "" : `<div class="field" style="margin-top:8px">
       <input type="file" id="attach-file" multiple aria-label="Необязательные вложения">
       <button type="button" class="btn secondary" id="attach-upload">Загрузить</button>
-    </div>
+    </div>`}
   </div>`;
 }
 
-async function wireAttachSection(root, entryId) {
+async function wireAttachSection(root, entryId, readOnly = false) {
   const list = root.querySelector("#attach-list");
   const refresh = async () => {
     try {
@@ -1080,7 +1080,8 @@ async function wireAttachSection(root, entryId) {
       list.innerHTML = `<span class="error">${escapeHTML(e.message)}</span>`;
     }
   };
-  root.querySelector("#attach-upload").onclick = async () => {
+  const upload = root.querySelector("#attach-upload");
+  if (upload && !readOnly) upload.onclick = async () => {
     const fileInput = root.querySelector("#attach-file");
     const uploadButton = root.querySelector("#attach-upload");
     if (!fileInput.files.length) {

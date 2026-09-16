@@ -65,6 +65,10 @@ type createEntryRequest struct {
 }
 
 func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	if !canPrepareReports(u) {
+		middleware.WriteError(w, http.StatusForbidden, "план и отчёт формирует ИТ-организация; образовательная организация рассматривает направленный перечень")
+		return
+	}
 	var req createEntryRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
@@ -247,6 +251,10 @@ type updateEntryRequest struct {
 }
 
 func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
+	if !canPrepareReports(u) {
+		middleware.WriteError(w, http.StatusForbidden, "образовательная организация не может изменять план или отчёт ИТ-организации")
+		return
+	}
 	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}

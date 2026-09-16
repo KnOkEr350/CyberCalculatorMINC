@@ -32,6 +32,58 @@ func TestPartnerAccess(t *testing.T) {
 	}
 }
 
+func TestOrderBasedReportRoles(t *testing.T) {
+	partner := "partner-a"
+	education := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst, PartnerID: &partner}
+	organization := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}
+	admin := middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}
+
+	if !canPrepareReports(organization) || !canPrepareReports(admin) {
+		t.Fatal("the IT organization and operators must be able to prepare reports")
+	}
+	if canPrepareReports(education) {
+		t.Fatal("an educational organization must review, not author, reports")
+	}
+	if !canReviewReport(education, "fact") || canReviewReport(education, "plan") {
+		t.Fatal("an educational organization reviews only a submitted fact report")
+	}
+	if canReviewReport(organization, "fact") {
+		t.Fatal("a regular IT-organization user must not confirm its own counterparty review")
+	}
+	if !canReviewReport(admin, "fact") {
+		t.Fatal("an operator must be able to record deemed counterparty approval")
+	}
+	unassigned := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}
+	if isEducationRepresentative(unassigned) || canReviewReport(unassigned, "fact") {
+		t.Fatal("an unassigned educational profile must not review a report")
+	}
+}
+
+func TestEducationRepresentativeCannotWriteReportData(t *testing.T) {
+	partner := "partner-a"
+	u := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst, PartnerID: &partner}
+	entryHandlers := &EntryHandlers{}
+	attachmentHandlers := &AttachmentHandlers{}
+	tests := []struct {
+		name   string
+		handle func(http.ResponseWriter, *http.Request)
+	}{
+		{"create entry", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Create(w, r, u) }},
+		{"update entry", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Update(w, r, u, "entry") }},
+		{"import entries", func(w http.ResponseWriter, r *http.Request) { entryHandlers.Import(w, r, u) }},
+		{"upload attachment", func(w http.ResponseWriter, r *http.Request) { attachmentHandlers.Upload(w, r, u, "entry") }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			test.handle(w, httptest.NewRequest(http.MethodPost, "/", nil))
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("status=%d, want 403", w.Code)
+			}
+		})
+	}
+}
+
 func TestEducationDirectoryReviewAccess(t *testing.T) {
 	tests := []struct {
 		name string

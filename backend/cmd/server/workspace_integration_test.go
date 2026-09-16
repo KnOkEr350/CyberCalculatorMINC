@@ -259,13 +259,14 @@ func TestWorkspaceIntegration(t *testing.T) {
 	create := func(client *http.Client, p, agreementID, category, period string, payload map[string]interface{}, want int) []byte {
 		return call(client, "POST", "/entries", map[string]interface{}{"partner_id": p, "agreement_id": agreementID, "category_code": category, "period_type": period, "report_year": 2026, "audience": "vuz", "payload": payload}, want)
 	}
-	first := object(create(partnerClient, p1, agreement1, "teachers", "plan", teacher(p1), 201))
+	create(partnerClient, p1, agreement1, "teachers", "plan", teacher(p1), 403)
+	first := object(create(companyClient, p1, agreement1, "teachers", "plan", teacher(p1), 201))
 	id := first["id"].(string)
 	if first["amount_rub"].(float64) != 8280 {
 		t.Fatal("wrong teacher formula")
 	}
-	create(partnerClient, p1, agreement2, "teachers", "plan", teacher(p1), 400)
-	create(partnerClient, p1, groupID, "teachers", "plan", teacher(p1), 400)
+	create(companyClient, p1, agreement2, "teachers", "plan", teacher(p1), 400)
+	create(companyClient, p1, groupID, "teachers", "plan", teacher(p1), 400)
 	foreign := object(create(admin, p2, agreement2, "teachers", "fact", teacher(p2), 201))["id"].(string)
 	shared := object(create(admin, p1, agreement1, "teachers", "plan", teacher(p1), 201))["id"].(string)
 	create(partnerClient, p2, agreement2, "teachers", "plan", teacher(p2), 403)
@@ -281,7 +282,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(partnerClient, "GET", "/entries?report_year=oops", nil, 400)
 	internship := map[string]interface{}{"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор", "duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3}
-	trainee := object(create(partnerClient, p1, agreement1, "internship", "fact", internship, 201))
+	trainee := object(create(companyClient, p1, agreement1, "internship", "fact", internship, 201))
 	traineeID := trainee["id"].(string)
 	if trainee["amount_rub"].(float64) != 30340 {
 		t.Fatal("wrong internship formula")
@@ -291,13 +292,13 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal("mentor snapshot forged")
 	}
 	internship["mentor_id"] = "wrong"
-	create(partnerClient, p1, agreement1, "internship", "fact", internship, 400)
+	create(companyClient, p1, agreement1, "internship", "fact", internship, 400)
 	statusPath := "/obligations?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&report_year=2026&period_type=plan"
 	status := object(call(partnerClient, "GET", statusPath, nil, 200))
 	if !status["required"].(bool) || !status["teachers"].(bool) || status["ood_rpd"].(bool) {
 		t.Fatal("wrong obligations")
 	}
-	create(partnerClient, p1, agreement1, "top_it", "plan", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт 01", "cofinancing_amount_rub": 1000}, 201)
+	create(companyClient, p1, agreement1, "top_it", "plan", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт 01", "cofinancing_amount_rub": 1000}, 201)
 	status = object(call(partnerClient, "GET", statusPath, nil, 200))
 	if !status["required"].(bool) || !status["top_it"].(bool) || status["top_it_exception"].(bool) {
 		t.Fatal("TOP exemption was granted without an approved second educational organization")
@@ -356,7 +357,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		}
 		return b
 	}
-	attachments := object(upload(partnerClient, "/entries/"+id+"/attachments", map[string][]byte{"Акт 1.txt": []byte("one"), "Акт 2.txt": []byte("two")}, 201))
+	attachments := object(upload(companyClient, "/entries/"+id+"/attachments", map[string][]byte{"Акт 1.txt": []byte("one"), "Акт 2.txt": []byte("two")}, 201))
 	if len(attachments["files"].([]interface{})) != 2 {
 		t.Fatal("batch not saved")
 	}
@@ -364,7 +365,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "GET", "/attachments/"+attachID+"/download", nil, 200)
 	foreignAttach := object(upload(admin, "/entries/"+foreign+"/attachments", map[string][]byte{"private.txt": []byte("secret")}, 201))["id"].(string)
 	call(partnerClient, "GET", "/attachments/"+foreignAttach+"/download", nil, 403)
-	upload(partnerClient, "/entries/"+id+"/attachments", map[string][]byte{"empty.txt": {}}, 400)
+	upload(companyClient, "/entries/"+id+"/attachments", map[string][]byte{"empty.txt": {}}, 400)
 	db.Exec(`UPDATE attachments SET retention_expires_at=now()-interval '1 second' WHERE id=$1`, attachID)
 	call(partnerClient, "GET", "/attachments/"+attachID+"/download", nil, 410)
 	// Excel: preview doesn't insert; commit recalculates; same batch cannot duplicate.
@@ -372,20 +373,21 @@ func TestWorkspaceIntegration(t *testing.T) {
 	wb.AddSheet("Данные", []string{"course_name", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"Импорт", "Петров Пётр", "ГПХ", 3}})
 	book, _ := wb.Bytes()
 	importPath := "/entries/import?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&category_code=teachers&period_type=fact&report_year=2026"
-	preview := object(upload(partnerClient, importPath, map[string][]byte{"data.xlsx": book}, 200))
+	upload(partnerClient, importPath, map[string][]byte{"data.xlsx": book}, 403)
+	preview := object(upload(companyClient, importPath, map[string][]byte{"data.xlsx": book}, 200))
 	if preview["committed"].(bool) || preview["total_rub"].(float64) != 12420 {
 		t.Fatal("bad preview")
 	}
-	committed := object(upload(partnerClient, importPath+"&commit=1", map[string][]byte{"data.xlsx": book}, 201))
+	committed := object(upload(companyClient, importPath+"&commit=1", map[string][]byte{"data.xlsx": book}, 201))
 	if !committed["committed"].(bool) {
 		t.Fatal("not committed")
 	}
-	upload(partnerClient, importPath+"&commit=1", map[string][]byte{"data.xlsx": book}, 409)
+	upload(companyClient, importPath+"&commit=1", map[string][]byte{"data.xlsx": book}, 409)
 	before := call(partnerClient, "GET", "/entries?category_code=teachers&period_type=fact", nil, 200)
 	bad := xlsx.New()
 	bad.AddSheet("Данные", []string{"course_name", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"ok", "Петров Пётр", "ГПХ", 3}, {"bad", "Петров Пётр", "ГПХ", -1}})
 	badBook, _ := bad.Bytes()
-	badResult := object(upload(partnerClient, importPath+"&commit=1", map[string][]byte{"bad.xlsx": badBook}, 200))
+	badResult := object(upload(companyClient, importPath+"&commit=1", map[string][]byte{"bad.xlsx": badBook}, 200))
 	if len(badResult["errors"].([]interface{})) != 1 {
 		t.Fatal("invalid row accepted")
 	}
@@ -400,13 +402,17 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	transitionPath := "/report-workflow/transition?agreement_id=" + agreement1 + "&report_year=2026&period_type=fact"
 	confirmations := map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "counterparty_confirmed": true, "comment": "Комплект проверен"}
-	call(partnerClient, "POST", transitionPath, confirmations, 422)
+	call(companyClient, "POST", transitionPath, confirmations, 422)
 	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
-	create(partnerClient, p1, agreement1, "ood_rpd", "fact", map[string]interface{}{"org_name": p1, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Безопасность"}, 201)
-	create(partnerClient, p1, agreement1, "top_it", "fact", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт факт", "cofinancing_amount_rub": 1000}, 201)
-	call(partnerClient, "POST", transitionPath, confirmations, 200)
-	call(partnerClient, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Попытка самопроверки"}, 409)
-	call(admin, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Проверено сотрудником"}, 200)
+	create(companyClient, p1, agreement1, "ood_rpd", "fact", map[string]interface{}{"org_name": p1, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Безопасность"}, 201)
+	create(companyClient, p1, agreement1, "top_it", "fact", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт факт", "cofinancing_amount_rub": 1000}, 201)
+	call(companyClient, "POST", transitionPath, confirmations, 200)
+	workflow = object(call(companyClient, "GET", workflowPath, nil, 200))
+	if workflow["counterparty_confirmed"].(bool) {
+		t.Fatal("the IT organization confirmed its own counterparty review")
+	}
+	call(companyClient, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Попытка самопроверки"}, 409)
+	call(partnerClient, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Перечень рассмотрен и согласован"}, 200)
 	call(admin, "POST", transitionPath, map[string]interface{}{"status": "approved", "comment": "Утверждено администратором"}, 200)
 	report := call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 200)
 	reportRows, e := xlsx.ReadFirst(report)
@@ -424,7 +430,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatalf("dashboard scope/formulas wrong: %v", dash)
 	}
 	internship["mentor_id"] = mentor
-	call(partnerClient, "PUT", "/entries/"+traineeID, map[string]interface{}{"payload": internship, "comment": "Уточнение данных после утверждения"}, 200)
+	call(companyClient, "PUT", "/entries/"+traineeID, map[string]interface{}{"payload": internship, "comment": "Уточнение данных после утверждения"}, 200)
 	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
 	dash = object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
 	if dash["eligible_fact_total_rub"].(float64) != 0 {

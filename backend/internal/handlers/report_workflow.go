@@ -243,7 +243,10 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 			}
 		}
 	}
-	manualComplete := resp.ScopeConfirmed && resp.ConditionsConfirmed && resp.EvidenceConfirmed && (period == "plan" || resp.CounterpartyConfirmed)
+	// Counterparty review happens only after the IT organization has prepared
+	// and submitted the fact report. It therefore cannot be a prerequisite for
+	// moving the organization's draft to ready.
+	manualComplete := resp.ScopeConfirmed && resp.ConditionsConfirmed && resp.EvidenceConfirmed
 	if !resp.ScopeConfirmed {
 		resp.Missing = append(resp.Missing, "Не подтверждено соответствие конкретному перечню, объёму, срокам и условиям соглашения")
 	}
@@ -253,17 +256,27 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	if !resp.EvidenceConfirmed {
 		resp.Missing = append(resp.Missing, "Не подтверждено наличие однозначных подтверждающих документов")
 	}
-	if period == "fact" && !resp.CounterpartyConfirmed {
-		resp.Missing = append(resp.Missing, "Не подтверждено рассмотрение перечня образовательной организацией или РОИВ")
+	if period == "fact" && resp.Status != "draft" && !resp.CounterpartyConfirmed {
+		resp.Missing = append(resp.Missing, "Ожидается рассмотрение перечня образовательной организацией или РОИВ")
 	}
 	automaticComplete := true
 	for _, check := range resp.AutomaticChecks {
 		automaticComplete = automaticComplete && check.Complete
 	}
-	resp.CanMarkReady = resp.Status == "draft" && automaticComplete && manualComplete
-	resp.CanVerify = resp.Status == "ready" && isStaff(u)
+	resp.CanMarkReady = resp.Status == "draft" && automaticComplete && manualComplete && canPrepareReports(u)
+	reviewerAllowed := canReviewReport(u, period)
+	if reviewerAllowed && period == "fact" && isEducationRepresentative(u) {
+		var partnerCount int
+		if err = q.QueryRowContext(ctx, `SELECT count(*) FROM agreement_partners WHERE agreement_id::text=$1`, agreementID).Scan(&partnerCount); err != nil {
+			return resp, err
+		}
+		// One representative must not accept a combined list on behalf of the
+		// other educational organizations covered by the same agreement.
+		reviewerAllowed = partnerCount == 1
+	}
+	resp.CanVerify = resp.Status == "ready" && reviewerAllowed
 	resp.CanApprove = resp.Status == "verified" && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
-	resp.CanReturnDraft = resp.Status != "draft" && (isStaff(u) || resp.Status == "ready")
+	resp.CanReturnDraft = resp.Status != "draft" && (isStaff(u) || (period == "fact" && resp.Status == "ready" && reviewerAllowed && isEducationRepresentative(u)))
 	historyRows, historyErr := q.QueryContext(ctx, `SELECT h.from_status,h.to_status,COALESCE(h.comment,''),users.full_name,h.changed_at
 		FROM agreement_report_history h JOIN users ON users.id=h.changed_by
 		WHERE h.agreement_id::text=$1 AND h.report_year=$2 AND h.period_type=$3
@@ -370,20 +383,20 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 	allowed := false
 	switch req.Status {
 	case "ready":
-		allowed = current == "draft"
+		allowed = current == "draft" && canPrepareReports(u)
 	case "verified":
-		allowed = current == "ready" && isStaff(u)
+		allowed = current == "ready" && canReviewReport(u, period)
 	case "approved":
 		allowed = current == "verified" && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
 	case "draft":
-		allowed = current != "draft" && (isStaff(u) || current == "ready")
+		allowed = current != "draft" && (isStaff(u) || (period == "fact" && current == "ready" && isEducationRepresentative(u)))
 	}
 	if !allowed {
 		middleware.WriteError(w, 409, "недопустимый переход статуса или недостаточно прав")
 		return
 	}
 	if req.Status == "ready" {
-		_, err = tx.ExecContext(r.Context(), `UPDATE agreement_reports SET scope_confirmed=$4,conditions_confirmed=$5,evidence_confirmed=$6,counterparty_confirmed=$7,comment=NULLIF($8,''),updated_by=$9,updated_at=now() WHERE agreement_id=$1 AND report_year=$2 AND period_type=$3`, id, year, period, req.ScopeConfirmed, req.ConditionsConfirmed, req.EvidenceConfirmed, req.CounterpartyConfirmed, req.Comment, u.ID)
+		_, err = tx.ExecContext(r.Context(), `UPDATE agreement_reports SET scope_confirmed=$4,conditions_confirmed=$5,evidence_confirmed=$6,counterparty_confirmed=FALSE,comment=NULLIF($7,''),updated_by=$8,updated_at=now() WHERE agreement_id=$1 AND report_year=$2 AND period_type=$3`, id, year, period, req.ScopeConfirmed, req.ConditionsConfirmed, req.EvidenceConfirmed, req.Comment, u.ID)
 		if err != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения подтверждений")
 			return
@@ -398,6 +411,15 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else if req.Status != "draft" {
+		if req.Status == "verified" && period == "fact" {
+			// A regular educational representative records actual acceptance;
+			// an administrator/moderator may record deemed acceptance after the
+			// response period. In both cases the actor and basis remain in history.
+			if _, err = tx.ExecContext(r.Context(), `UPDATE agreement_reports SET counterparty_confirmed=TRUE,updated_by=$4,updated_at=now() WHERE agreement_id=$1 AND report_year=$2 AND period_type=$3`, id, year, period, u.ID); err != nil {
+				middleware.WriteError(w, 500, "ошибка сохранения рассмотрения контрагентом")
+				return
+			}
+		}
 		check, checkErr := buildWorkflow(r.Context(), tx, u, id, year, period)
 		if checkErr != nil {
 			middleware.WriteError(w, 500, "ошибка повторной проверки отчёта")

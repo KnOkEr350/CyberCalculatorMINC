@@ -127,6 +127,10 @@ type importResult struct {
 }
 
 func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	if !canPrepareReports(u) {
+		middleware.WriteError(w, http.StatusForbidden, "импорт плана и отчёта доступен только ИТ-организации")
+		return
+	}
 	q := r.URL.Query()
 	category, partner, agreementID, period := q.Get("category_code"), q.Get("partner_id"), q.Get("agreement_id"), q.Get("period_type")
 	year, err := strconv.Atoi(q.Get("report_year"))
