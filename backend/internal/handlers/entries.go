@@ -373,6 +373,8 @@ func (h *EntryHandlers) Summary(w http.ResponseWriter, r *http.Request, u middle
 	var count, partners, teachers, mentors, students, courses, programs int
 	var total money.Amount
 	var academicHours float64
+	// where contains fixed SQL fragments and $N placeholders; request values are in args.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	err := h.DB.QueryRowContext(r.Context(), `SELECT count(*),COALESCE(sum(amount_rub),0),count(DISTINCT partner_id),
 		count(DISTINCT NULLIF(payload->>'teacher_full_name','')),count(DISTINCT NULLIF(payload->>'mentor_id','')),
 		count(DISTINCT NULLIF(payload->>'student_full_name','')),count(DISTINCT NULLIF(payload->>'course_name','')),
@@ -389,6 +391,8 @@ func (h *EntryHandlers) Summary(w http.ResponseWriter, r *http.Request, u middle
 		Amount       money.Amount `json:"amount_rub"`
 	}
 	matrix := []matrixItem{}
+	// where contains fixed SQL fragments and $N placeholders; request values are in args.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	matrixRows, err := h.DB.QueryContext(r.Context(), `SELECT payload->>'doc_type',payload->>'activity_type',count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='ood_rpd' GROUP BY 1,2 ORDER BY 1,2`, args...)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка сводки ООП/РПД")
@@ -415,6 +419,8 @@ func (h *EntryHandlers) Summary(w http.ResponseWriter, r *http.Request, u middle
 		Amount money.Amount `json:"amount_rub"`
 	}
 	units := []unitItem{}
+	// where contains fixed SQL fragments and $N placeholders; request values are in args.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	unitRows, err := h.DB.QueryContext(r.Context(), `SELECT COALESCE(NULLIF(concat_ws(' / ',NULLIF(payload->>'institute',''),NULLIF(payload->>'faculty',''),NULLIF(payload->>'department','')),''),'Не указано'),count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='teachers' GROUP BY 1 ORDER BY 1`, args...)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка отчётности по подразделениям")

@@ -70,10 +70,14 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	args := []interface{}{periodType, year}
 	if company := itCompanyScope(u); company != "" {
 		args = append(args, company)
+		// Only the positional parameter number is formatted; the company ID stays in args.
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		query += fmt.Sprintf(" AND e.it_company_id::text=$%d", len(args))
 	}
 	if categoryFilter != "" {
 		args = append(args, categoryFilter)
+		// Only the positional parameter number is formatted; the category stays in args.
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		query += fmt.Sprintf(" AND e.category_code=$%d", len(args))
 	}
 	if scope := partnerScope(u, q.Get("partner_id")); scope != "" {

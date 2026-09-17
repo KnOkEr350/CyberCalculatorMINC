@@ -16,5 +16,6 @@ COPY migrations /app/migrations
 
 USER nonroot:nonroot
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 CMD ["/app/server", "healthcheck"]
+# The HTTP healthcheck is configured on the backend Compose service; this
+# image is also used for the non-HTTP worker and one-shot migration command.
 ENTRYPOINT ["/app/server"]
