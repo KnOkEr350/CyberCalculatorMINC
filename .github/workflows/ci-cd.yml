@@ -214,14 +214,15 @@ jobs:
               name,partner_kind,region,source,inn,ogrn,license_number,
               license_status,institution_status,registry_record_id,source_url,
               registry_updated_at,verified_at,verification_status,
-              program_codes,programs_source_url,programs_checked_at
+              program_codes,programs_source_url,programs_checked_at,
+              listed_in_mincifry_order_27
             ) VALUES (
               'CI test university','vuz','г. Москва','CI verified fixture',
               '7707083893','1027700132195','CI-LICENSE-1','active','active',
               'ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',
               'https://islod.obrnadzor.gov.ru/rlic/details/ci-fixture',
               CURRENT_DATE,now(),'verified',ARRAY['09.03.01'],
-              'https://ci.example.invalid/sveden/education/',now()
+              'https://ci.example.invalid/sveden/education/',now(),TRUE
             ) RETURNING id;")"
           [[ "$directory_id" =~ ^[0-9a-f-]{36}$ ]]
 
