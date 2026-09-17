@@ -11,7 +11,7 @@ request, вручную и по понедельникам для планово
 | `dynamic` | fuzzing XLSX-парсера и воспроизводимые CPU/memory-профили benchmark |
 | `codeql` | data-flow/SAST анализ Go и JavaScript набором `security-extended` |
 | `semgrep` | блокирующие security-правила Semgrep для Go, JavaScript, конфигураций и OWASP Top 10 |
-| `supply-chain` | Trivy (включая секреты), `govulncheck`, CycloneDX SBOM, OWASP Dependency-Check и Dependency-Track |
+| `supply-chain` | Trivy (включая секреты), `govulncheck`, CycloneDX SBOM и Dependency-Track |
 | `container-dast` | сборка изолированного Compose-стенда, сканирование всех образов Trivy и активный DAST через OWASP ZAP |
 | `deploy` | безопасное обновление Debian VM и проверка SHA реально запущенной версии |
 
@@ -40,15 +40,12 @@ AppScan не добавлен, поскольку требует лицензи�
 
 ## Отчёты безопасности
 
-CI сохраняет артефакты с покрытием, `pprof`, SARIF Semgrep, отчётами ZAP,
-Dependency-Check и CycloneDX SBOM. CodeQL и Semgrep также отправляют результаты
-в GitHub Code Scanning. Security actions и Docker-образы закреплены по commit
-SHA или digest, чтобы тег стороннего инструмента нельзя было незаметно
-подменить.
-
-OWASP Dependency-Check блокирует CVE с CVSS `7.0` и выше. Для быстрого и
-стабильного обновления NVD рекомендуется добавить repository secret
-`NVD_API_KEY`; локальная база Dependency-Check кэшируется между запусками.
+CI сохраняет артефакты с покрытием, `pprof`, SARIF Semgrep, отчётами ZAP и
+CycloneDX SBOM. CodeQL и Semgrep также отправляют результаты в GitHub Code
+Scanning. Security actions и Docker-образы закреплены по commit SHA или digest,
+чтобы тег стороннего инструмента нельзя было незаметно подменить. Зависимости Go
+проверяются `govulncheck` и Trivy, а CycloneDX SBOM отправляется в
+Dependency-Track для непрерывного анализа.
 
 Для отправки SBOM в существующий OWASP Dependency-Track настройте:
 

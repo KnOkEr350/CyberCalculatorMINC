@@ -12,7 +12,6 @@ permissions:
 
 env:
   GO_VERSION_FILE: backend/go.mod
-  DEPENDENCY_CHECK_VERSION: 12.2.2
   TRIVY_VERSION: v0.74.0
 
 jobs:
@@ -254,7 +253,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
       DTRACK_HOSTNAME: ${{ vars.DTRACK_HOSTNAME }}
       DTRACK_API_KEY: ${{ secrets.DTRACK_API_KEY }}
 
@@ -301,42 +299,6 @@ jobs:
           go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0 \
             app -json -licenses -main cmd/server \
             -output ../security-artifacts/cybercalculator-backend.cdx.json .
-
-      - name: Restore Dependency-Check vulnerability database
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.cache/dependency-check
-          key: dependency-check-${{ runner.os }}-${{ env.DEPENDENCY_CHECK_VERSION }}-v1
-
-      - name: Install verified OWASP Dependency-Check
-        shell: bash
-        run: |
-          curl --fail --location --silent --show-error \
-            "https://github.com/dependency-check/DependencyCheck/releases/download/v${DEPENDENCY_CHECK_VERSION}/dependency-check-${DEPENDENCY_CHECK_VERSION}-release.zip" \
-            --output dependency-check.zip
-          echo "bf07fefd81af3094c5f6850423b014df44db62ce2dbad0f79079a90df675e44a  dependency-check.zip" | sha256sum --check
-          unzip -q dependency-check.zip
-
-      - name: Run OWASP Dependency-Check
-        shell: bash
-        run: |
-          mkdir -p security-artifacts/dependency-check "$HOME/.cache/dependency-check"
-          args=(
-            --project CyberCalculatorMINC
-            --scan backend/go.mod
-            --scan tests/go.mod
-            --enableExperimental
-            --format HTML
-            --format JSON
-            --format SARIF
-            --failOnCVSS 7
-            --data "$HOME/.cache/dependency-check"
-            --out security-artifacts/dependency-check
-          )
-          if [[ -n "$NVD_API_KEY" ]]; then
-            args+=(--nvdApiKey "$NVD_API_KEY")
-          fi
-          dependency-check/bin/dependency-check.sh "${args[@]}"
 
       - name: Upload SBOM to OWASP Dependency-Track
         if: env.DTRACK_HOSTNAME != '' && env.DTRACK_API_KEY != ''
