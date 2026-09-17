@@ -362,6 +362,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Go for Compose smoke tests
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
+
       - name: Create isolated CI configuration
         shell: bash
         run: |
@@ -383,51 +391,13 @@ jobs:
         run: docker compose up --detach --build --wait --wait-timeout 180
 
       - name: Verify isolated application boundary
+        working-directory: tests
         shell: bash
+        env:
+          COMPOSE_SMOKE_URL: http://127.0.0.1:${{ env.CI_HTTP_PORT }}
         run: |
-          set -Eeuo pipefail
-          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
-
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error "${base_url}/" | grep -q "Калькулятор затрат"; then
-              break
-            fi
-            if [[ "$attempt" == "30" ]]; then
-              echo "Frontend did not become ready"
-              exit 1
-            fi
-            sleep 2
-          done
-
-          curl --fail --silent --show-error "${base_url}/app.js" > /dev/null
-          curl --fail --silent --show-error "${base_url}/style.css" > /dev/null
-          curl --fail --silent --show-error "${base_url}/api/live" | grep -q '"status":"ok"'
-          curl --fail --silent --show-error "${base_url}/api/ready" | grep -q '"status":"ok"'
-          docker compose ps --status running worker | grep -q worker
-          served_version="$(curl --fail --silent --show-error "${base_url}/version.txt" | tr -d '\r\n')"
-          [[ "$served_version" == "$APP_VERSION" ]]
-          anonymous_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/api/auth/me")"
-          [[ "$anonymous_status" == "401" ]]
-
-          logged_in=false
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error \
-              --cookie-jar /tmp/cybercalc-ci-cookies \
-              --header "X-Cybercalc-Request: 1" \
-              --header "Content-Type: application/json" \
-              --data '{"email":"ci-admin@example.invalid","password":"ci-only-admin-password"}' \
-              "${base_url}/api/auth/login" > /dev/null; then
-              logged_in=true
-              break
-            fi
-            sleep 2
-          done
-          [[ "$logged_in" == "true" ]]
-
-          curl --fail --silent --show-error \
-            --cookie /tmp/cybercalc-ci-cookies \
-            "${base_url}/api/auth/me" \
-            | grep -q '"email":"ci-admin@example.invalid"'
+          mkdir -p ../security-artifacts
+          go test -count=1 -v -timeout 3m -run '^TestComposeBoundary$' . 2>&1 | tee ../security-artifacts/compose-boundary.log
 
       - name: Set up Trivy
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
@@ -458,254 +428,21 @@ jobs:
           jq --exit-status '[.site[]?.alerts[]? | select((.riskcode | tonumber) >= 3)] | length == 0' \
             security-artifacts/zap-report.json > /dev/null
 
-      - name: Verify creating, editing and attaching files
+      - name: Verify workspace and moderator scenarios through nginx
+        working-directory: tests
         shell: bash
+        env:
+          COMPOSE_SMOKE_URL: http://127.0.0.1:${{ env.CI_HTTP_PORT }}
         run: |
-          set -Eeuo pipefail
-          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
-          cookie_file="/tmp/cybercalc-ci-cookies"
+          mkdir -p ../security-artifacts
+          go test -count=1 -v -timeout 3m -run '^TestComposeWorkspace$' . 2>&1 | tee ../security-artifacts/compose-workspace.log
 
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"entity_type":"organization"}' \
-            "${base_url}/api/auth/entity-type" > /dev/null
-
-          # Organization workspaces are isolated by accredited IT company.
-          # Bind the bootstrap administrator to a disposable tenant before
-          # creating partners, agreements and entries through the public API.
-          company_id="$(docker compose exec -T db psql \
-            --username cybercalc_ci \
-            --dbname cybercalc_ci \
-            --quiet \
-            --tuples-only \
-            --no-align \
-            --set ON_ERROR_STOP=1 \
-            --command "WITH company AS (
-              INSERT INTO accredited_it_companies(
-                name,inn,ogrn,accreditation_status,registry_record_id,
-                registry_updated_at,source_url,created_by
-              ) VALUES (
-                'CI tenant company','7736050003','1027700070518','active',
-                'ci-tenant-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',CURRENT_DATE,
-                'https://www.gosuslugi.ru/itorgs',
-                (SELECT id FROM users WHERE email='ci-admin@example.invalid')
-              ) RETURNING id
-            )
-            UPDATE users SET it_company_id=company.id
-            FROM company WHERE email='ci-admin@example.invalid'
-            RETURNING company.id;")"
-          [[ "$company_id" =~ ^[0-9a-f-]{36}$ ]]
-
-          # Production forbids arbitrary partner names. Seed a verified registry
-          # row into this disposable CI database, then exercise the public API.
-          directory_id="$(docker compose exec -T db psql \
-            --username cybercalc_ci \
-            --dbname cybercalc_ci \
-            --quiet \
-            --tuples-only \
-            --no-align \
-            --set ON_ERROR_STOP=1 \
-            --command "INSERT INTO education_directory(
-              name,partner_kind,region,source,inn,ogrn,license_number,
-              license_status,institution_status,registry_record_id,source_url,
-              registry_updated_at,verified_at,verification_status,
-              program_codes,programs_source_url,programs_checked_at,
-              listed_in_mincifry_order_27
-            ) VALUES (
-              'CI test university','vuz','г. Москва','CI verified fixture',
-              '7707083893','1027700132195','CI-LICENSE-1','active','active',
-              'ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',
-              'https://islod.obrnadzor.gov.ru/rlic/details/ci-fixture',
-              CURRENT_DATE,now(),'verified',ARRAY['09.03.01'],
-              'https://ci.example.invalid/sveden/education/',now(),TRUE
-            ) RETURNING id;")"
-          [[ "$directory_id" =~ ^[0-9a-f-]{36}$ ]]
-
-          partner_response="$(curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$(jq --compact-output --null-input --arg directory "$directory_id" '{
-              directory_id: $directory,
-              initial_agreement: {
-                partner_ids: [],
-                agreement_kind: "education_organization",
-                number: "CI-1",
-                status: "active",
-                signed_on: "2026-01-01",
-                valid_from: "2020-01-01",
-                valid_until: "2100-12-31",
-                signature_method: "qualified_electronic",
-                signed_by: "CI Signer",
-                signature_date: "2026-01-01",
-                document_reference: "CI smoke test",
-                responsible_people: [
-                  {party: "cyberprotect", full_name: "CI Administrator"},
-                  {party: "counterparty", full_name: "CI Partner"}
-                ]
-              }
-            }')" \
-            "${base_url}/api/partners")"
-          partner_id="$(jq --exit-status --raw-output '.id' <<< "$partner_response")"
-          agreement_id="$(jq --exit-status --raw-output '.agreement_id' <<< "$partner_response")"
-
-          entry_payload="$(jq --compact-output --null-input \
-            --arg partner "$partner_id" \
-            --arg agreement "$agreement_id" '{
-            category_code: "teachers",
-            partner_id: $partner,
-            agreement_id: $agreement,
-            period_type: "fact",
-            report_year: 2026,
-            audience: "vuz",
-            payload: {
-              org_name: $partner,
-              course_name: "CI course",
-              teacher_full_name: "CI teacher",
-              employment_form: "ГПХ",
-              academic_hours: 2
-            }
-          }')"
-          printf 'created with entry\n' > /tmp/cybercalc-first-attachment.txt
-          entry_response="$(curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$entry_payload" \
-            "${base_url}/api/entries")"
-          entry_id="$(jq --exit-status --raw-output '.id' <<< "$entry_response")"
-
-          # Fact can be created and edited without attachments.
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --form 'files=@/tmp/cybercalc-first-attachment.txt;filename=first.txt' \
-            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
-
-          update_payload="$(jq --compact-output --null-input \
-            --arg partner "$partner_id" \
-            --arg agreement "$agreement_id" '{
-            audience: "vuz",
-            agreement_id: $agreement,
-            comment: "CI attachment edit check",
-            payload: {
-              org_name: $partner,
-              course_name: "Updated CI course",
-              teacher_full_name: "CI teacher",
-              employment_form: "ГПХ",
-              academic_hours: 3
-            }
-          }')"
-          curl --fail --silent --show-error --request PUT \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$update_payload" \
-            "${base_url}/api/entries/${entry_id}" > /dev/null
-
-          printf 'attached after edit\n' > /tmp/cybercalc-second-attachment.txt
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            --header "X-Cybercalc-Request: 1" \
-            --form 'file=@/tmp/cybercalc-second-attachment.txt;filename=second.txt' \
-            "${base_url}/api/entries/${entry_id}/attachments" > /dev/null
-
-          attachments="$(curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            "${base_url}/api/entries/${entry_id}/attachments")"
-          [[ "$(jq 'length' <<< "$attachments")" == "2" ]]
-          first_attachment_id="$(jq --exit-status --raw-output '.[] | select(.file_name == "first.txt") | .id' <<< "$attachments")"
-          curl --fail --silent --show-error \
-            --cookie "$cookie_file" \
-            "${base_url}/api/attachments/${first_attachment_id}/download" \
-            --output /tmp/cybercalc-downloaded-attachment.txt
-          cmp /tmp/cybercalc-first-attachment.txt /tmp/cybercalc-downloaded-attachment.txt
-
-      - name: Verify moderator boundaries and IT-company registry
-        shell: bash
+      - name: Save Compose diagnostics on failure
+        if: failure()
         run: |
-          set -Eeuo pipefail
-          base_url="http://127.0.0.1:${CI_HTTP_PORT}"
-          admin_cookie="/tmp/cybercalc-ci-cookies"
-          moderator_cookie="/tmp/cybercalc-ci-moderator-cookies"
-          education_cookie="/tmp/cybercalc-ci-education-moderator-cookies"
-
-          curl --fail --silent --show-error \
-            --cookie "$admin_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!","full_name":"CI Moderator","role":"moderator","entity_type":"organization"}' \
-            "${base_url}/api/admin/users" > /dev/null
-
-          curl --fail --silent --show-error \
-            --cookie-jar "$moderator_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"email":"ci-moderator@example.invalid","password":"ModeratorPass1!"}' \
-            "${base_url}/api/auth/login" > /dev/null
-
-          expect_forbidden() {
-            local cookie="$1" method="$2" path="$3" status
-            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              --cookie "$cookie" --request "$method" --header "X-Cybercalc-Request: 1" \
-              "${base_url}/api/${path}")"
-            [[ "$status" == "403" ]] || {
-              echo "Expected 403 for ${method} ${path}, got ${status}"
-              return 1
-            }
-          }
-
-          # IT-organization moderators cannot access the IT-company directory.
-          for path in it-companies it-companies/registry-search it-companies/template; do
-            expect_forbidden "$moderator_cookie" GET "$path"
-          done
-          for path in it-companies it-companies/import; do
-            expect_forbidden "$moderator_cookie" POST "$path"
-          done
-
-          curl --fail --silent --show-error \
-            --cookie "$moderator_cookie" \
-            "${base_url}/api/admin/directory-template" \
-            --output /tmp/cybercalc-directory-template.xlsx
-
-          # Registry management belongs to the educational-organization profile.
-          partner_id="$(curl --fail --silent --show-error --cookie "$admin_cookie" \
-            "${base_url}/api/partners" \
-            | jq --exit-status --raw-output '.[] | select(.name == "CI test university") | .id')"
-          [[ "$partner_id" =~ ^[0-9a-f-]{36}$ ]]
-          curl --fail --silent --show-error \
-            --cookie "$admin_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$(jq --compact-output --null-input --arg partner "$partner_id" '{email:"ci-education-moderator@example.invalid",password:"ModeratorPass1!",full_name:"CI Education Moderator",role:"moderator",entity_type:"edu_institution",partner_id:$partner}')" \
-            "${base_url}/api/admin/users" > /dev/null
-          curl --fail --silent --show-error \
-            --cookie-jar "$education_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data '{"email":"ci-education-moderator@example.invalid","password":"ModeratorPass1!"}' \
-            "${base_url}/api/auth/login" > /dev/null
-
-          for cookie in "$moderator_cookie" "$education_cookie"; do
-            for path in admin/users admin/settings admin/logs; do
-              expect_forbidden "$cookie" GET "$path"
-            done
-          done
-
-          registry_date="$(date -u +%F)"
-          curl --fail --silent --show-error \
-            --cookie "$education_cookie" \
-            --header "X-Cybercalc-Request: 1" \
-            --header "Content-Type: application/json" \
-            --data "$(jq --compact-output --null-input --arg date "$registry_date" '{name:"CI accredited IT company",inn:"7707083893",ogrn:"1027700132195",accreditation_number:"CI-ACCREDITATION-1",registry_record_id:"ci-it-company-1",registry_updated_at:$date,source_url:"https://digital.gov.ru/ru/activity/govservices/1/"}')" \
-            "${base_url}/api/it-companies" > /dev/null
-
-          curl --fail --silent --show-error \
-            --cookie "$education_cookie" \
-            "${base_url}/api/it-companies?q=CI%20accredited" \
-            | jq --exit-status 'length == 1 and .[0].accreditation_status == "active"' > /dev/null
+          mkdir -p security-artifacts
+          docker compose ps --all | tee security-artifacts/compose-ps.log
+          docker compose logs --no-color --tail=200 > security-artifacts/compose.log 2>&1
 
       - name: Upload container and DAST reports
         if: always()
@@ -715,12 +452,6 @@ jobs:
           path: security-artifacts
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Print Compose diagnostics on failure
-        if: failure()
-        run: |
-          docker compose ps --all
-          docker compose logs --no-color --tail=200
 
       - name: Remove CI containers and volumes
         if: always()

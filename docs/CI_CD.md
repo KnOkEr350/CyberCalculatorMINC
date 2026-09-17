@@ -21,6 +21,34 @@ request, вручную и по понедельникам для планово
 границы nginx и контейнеров, readiness API и worker, tenant-изоляцию, права
 модераторов, создание факта и работу вложений в полностью собранном стенде.
 
+Эти проверки реализованы в `tests/compose_smoke*_test.go`: `TestComposeBoundary`
+проверяет frontend, API, SHA версии, worker и вход до сканирования ZAP;
+`TestComposeWorkspace` после сканирования проверяет создание/редактирование факта,
+оба варианта multipart-поля (`files` и `file`), скачивание вложений и права
+модераторов. HTTP-запросы идут через опубликованный nginx с отдельными cookie jar
+для пользователей. Фикстуры создаются функциями из
+`compose_smoke_fixtures_test.go` через `docker compose exec db psql`; порт БД
+наружу не открывается.
+
+Обычный `go test ./...` пропускает Compose-тесты. Для запуска на уже поднятом
+одноразовом CI-стенде из каталога `tests`:
+
+```bash
+COMPOSE_PROJECT_NAME=cybercalc-ci-local \
+COMPOSE_SMOKE_URL=http://127.0.0.1:18080 \
+APP_VERSION=EXPECTED_BUILT_REVISION \
+go test -count=1 -v -timeout 3m -run '^TestCompose' .
+```
+
+Стенд должен использовать свежую БД `cybercalc_ci`, владельца `cybercalc_ci` и
+bootstrap-пользователя `ci-admin@example.invalid` с паролем
+`ci-only-admin-password`, как в job `container-dast`. Перед повторным запуском
+сценария workspace пересоздайте только этот одноразовый стенд с чистыми томами:
+фикстуры рассчитаны на один прогон. Тесты требуют имя проекта `cybercalc-ci-*`
+и сверяют локальный HTTP-порт с опубликованным портом nginx этого проекта.
+В артефакт `container-and-zap-reports` входят журналы Go-тестов, а при ошибке —
+также состояние контейнеров и их логи, снятые до удаления CI-стенда.
+
 ## Почему выбраны именно эти динамические инструменты
 
 Backend написан на чистом Go и production-бинарник собирается с
