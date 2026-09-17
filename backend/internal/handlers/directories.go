@@ -156,6 +156,7 @@ func (h *PartnerHandlers) Directory(w http.ResponseWriter, r *http.Request, u mi
 		education_matches_order(d.partner_kind,d.program_codes),d.listed_in_mincifry_order_27,
 		(d.verification_status='verified' AND d.license_status='active' AND d.institution_status='active'
 		 AND education_matches_order(d.partner_kind,d.program_codes)
+		 AND (d.partner_kind<>'vuz' OR d.listed_in_mincifry_order_27)
 		 AND d.verified_at>=now()-interval '35 days' AND d.registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE)
 		FROM education_directory d LEFT JOIN users verifier ON verifier.id=d.verified_by
 		WHERE ($1='' OR d.partner_kind=$1)

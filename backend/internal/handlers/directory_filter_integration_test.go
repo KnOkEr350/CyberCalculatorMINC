@@ -42,6 +42,12 @@ func TestDirectoryPaginationKeepsExactProgramFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = db.Exec(`UPDATE education_directory SET verification_status='verified',license_status='active',
+		institution_status='active',verified_at=now(),registry_updated_at=CURRENT_DATE
+		WHERE name=$1||'not-listed'`, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := PartnerHandlers{DB: db}
 	u := middleware.AuthUser{Role: "admin", EntityType: "organization"}
 	for _, page := range []struct {
@@ -62,5 +68,17 @@ func TestDirectoryPaginationKeepsExactProgramFilter(t *testing.T) {
 				t.Fatalf("incorrect program filter: %+v", item)
 			}
 		}
+	}
+	w := httptest.NewRecorder()
+	h.Directory(w, httptest.NewRequest("GET", "/directory?partner_kind=vuz&review_all=1&q="+prefix+"not-listed", nil), u)
+	var reviewItems []struct {
+		Name       string `json:"name"`
+		Selectable bool   `json:"selectable"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &reviewItems); err != nil || w.Code != 200 || len(reviewItems) != 1 {
+		t.Fatalf("review list: status=%d rows=%d body=%s", w.Code, len(reviewItems), w.Body.String())
+	}
+	if reviewItems[0].Selectable {
+		t.Fatal("a university outside Order 27 must never be selectable")
 	}
 }
