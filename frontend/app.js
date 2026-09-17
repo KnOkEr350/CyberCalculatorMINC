@@ -320,7 +320,7 @@ function renderLayout() {
         <button data-view="entries">${isEducationReviewer() ? "Рассмотрение" : "План / Факт"}</button>
         ${!isManager && canReviewEducationDirectory() ? '<button data-view="partners">Учебные заведения</button>' : ""}
         ${!isManager && canViewITCompanies() ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
-        ${isManager ? '<button data-view="admin">Управление</button>' : ""}
+        ${isManager ? '<button data-view="admin">Управление <span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span></button>' : ""}
       </nav>
       <div class="who">
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
@@ -363,6 +363,7 @@ function renderLayout() {
     state.view = "dashboard";
     renderDashboard(content);
   }
+  refreshDirectoryProposalBadge(wrap);
   return wrap;
 }
 
@@ -405,19 +406,6 @@ async function renderDashboard(root) {
     return;
   }
   state.dashboard = d;
-
-  const breakdownList = (arr) =>
-    arr && arr.length
-      ? arr
-          .map(
-            (b) => `<div class="bar-row">
-        <div class="name">${escapeHTML(CATEGORY_LABELS[b.category_code] || b.category_code)} · ${escapeHTML(AUDIENCE_LABELS[b.audience] || b.audience)}<small>${b.obligation === "mandatory" ? "Обязательная" : "Вариативная"} · записей: ${Number(b.entry_count || 0).toLocaleString("ru-RU")} · единиц: ${Number(b.unit_count || 0).toLocaleString("ru-RU")}</small></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${clampPercent(b.share_percent)}%"></div></div>
-        <div class="bar-value">${escapeHTML(fmtMoney(b.amount_rub))}</div>
-      </div>`,
-          )
-          .join("")
-      : `<div class="muted">Нет данных за ${state.year} год</div>`;
 
   const groupedChart = (plan, fact) => {
     const amounts = (items) => (items || []).reduce((map, item) => map.set(item.category_code, (map.get(item.category_code) || 0) + Number(item.amount_rub || 0)), new Map());
@@ -492,7 +480,6 @@ async function renderDashboard(root) {
   const selectedPartner = state.partners.find(
     (partner) => partner.id === state.partnerID,
   );
-  const aggregateDashboard = isStaffUser() && !state.partnerID;
   const partnerFilter = fixedEducationPartner
     ? `<div class="field"><label>Учебное заведение</label><input value="${escapeHTML(selectedPartner?.name || "Назначенное учебное заведение")}" readonly></div>`
     : `<div class="field"><label for="dash-partner">Учебное заведение</label><select id="dash-partner"><option value="">Все учебные заведения</option>${state.partners.map((p) => `<option value="${p.id}" ${p.id === state.partnerID ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select></div>`;
@@ -502,54 +489,34 @@ async function renderDashboard(root) {
       <div><h1>Сводка</h1></div>
       <span class="year-badge">${state.year}</span>
     </section>
-    <div class="card">
+    <div class="card dashboard-filter-card">
       <div class="dashboard-toolbar">
-        <h2 style="margin:0">Показатели</h2>
+        <h2 style="margin:0">Фильтры аналитики</h2>
         <div class="dashboard-filters">
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
-          ${
-            aggregateDashboard
-              ? `<div class="field"><label>Целевая сумма</label><button class="btn secondary" id="set-target">Задать сумму (3%)</button></div>`
-              : ""
-          }
         </div>
       </div>
-      <div class="grid cols-3" style="margin-top:14px">
-        ${
-          aggregateDashboard
-            ? `<div class="stat"><div class="label">Общая целевая сумма (3% от льгот)</div><div class="value">${d.target_amount_rub != null ? fmtMoney(d.target_amount_rub) : "не задана"}</div></div>`
-            : `<div class="stat"><div class="label">Учебное заведение</div><div class="value">${escapeHTML(selectedPartner?.name || "не выбрано")}</div></div>`
-        }
-        <div class="stat"><div class="label">План: все расчёты, руб.</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
-        <div class="stat"><div class="label">Факт: все расчёты, руб.</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
-      </div>
-      <div class="progress-card" style="margin-top:10px">
-        <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
-        ${
-          d.target_amount_rub
-            ? `<div class="progress-header target"><span>Выполнение минимального объёма (3%)</span><strong>${
-                Math.round(
-                  (Number(d.fact_total_rub) / Number(d.target_amount_rub)) *
-                    10000,
-                ) / 100
-              }%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>`
-            : ""
-        }
-      </div>
+    </div>
+    <div class="grid cols-3 dashboard-kpis">
+      <div class="stat"><div class="label">План, всего</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
+      <div class="stat"><div class="label">Факт, всего</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
+      <div class="stat"><div class="label">Реализация плана</div><div class="value">${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</div></div>
+      <div class="stat"><div class="label">Утверждённый план</div><div class="value">${fmtMoney(d.eligible_plan_total_rub)}</div></div>
+      <div class="stat"><div class="label">Утверждённый факт</div><div class="value">${fmtMoney(d.eligible_fact_total_rub)}</div></div>
+      <div class="stat ${Number(d.incomplete_entries || 0) ? "warning-stat" : ""}"><div class="label">Не учтено записей</div><div class="value">${Number(d.incomplete_entries || 0).toLocaleString("ru-RU")}</div></div>
+    </div>
+    <div class="progress-card dashboard-progress">
+      <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
+      ${d.target_amount_rub ? `<div class="progress-header target"><span>Выполнение минимального объёма 3% · цель ${fmtMoney(d.target_amount_rub)}</span><strong>${Math.round((Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 10000) / 100}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
-      <div class="card approved-summary"><h2>После утверждения</h2><div class="approved-values"><div><span>План</span><strong>${fmtMoney(d.eligible_plan_total_rub)}</strong></div><div><span>Факт</span><strong>${fmtMoney(d.eligible_fact_total_rub)}</strong></div></div><p class="muted">Не учтено записей: ${Number(d.incomplete_entries || 0)}</p><details class="rules-note"><summary>Как учитываются суммы</summary><p>Сумма учитывается после проверки и утверждения полного комплекта по соглашению. Для ТОП ИТ/ИИ действует предусмотренное приказом исключение.</p></details></div>
       <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
       <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
-    </div>
-    <div class="grid cols-2">
-      <div class="card"><h2>Детализация — План</h2>${breakdownList(d.plan_by_category)}</div>
-      <div class="card"><h2>Детализация — Факт</h2>${breakdownList(d.fact_by_category)}</div>
     </div>
   `;
   root.querySelector("#dash-year").onchange = (e) => {
@@ -576,37 +543,33 @@ async function renderDashboard(root) {
     state.dashboardAudience = event.target.value;
     renderDashboard(root);
   };
-  const targetBtn = root.querySelector("#set-target");
-  if (targetBtn) {
-    targetBtn.onclick = async () => {
-      const val = prompt(
-        "Целевая сумма затрат на " +
-          state.year +
-          " год, руб. (3% от сэкономленных льгот):",
-        d.target_amount_rub || "",
-      );
-      if (val == null) return;
-      const amount = Number(String(val).replace(",", "."));
-      if (!Number.isFinite(amount) || amount <= 0) {
-        alert("Введите положительную целевую сумму.");
-        return;
-      }
-      targetBtn.disabled = true;
-      try {
-        await api("/dashboard/target", {
-          method: "POST",
-          body: JSON.stringify({
-            report_year: state.year,
-            target_amount_rub: amount,
-          }),
-        });
-        showToast("Целевая сумма сохранена", "success");
-        render();
-      } catch (e) {
-        showToast(e.message);
-        targetBtn.disabled = false;
-      }
-    };
+}
+
+async function openBudgetTargetDialog(button) {
+  button.disabled = true;
+  try {
+    const dashboard = await api(
+      `/dashboard?${new URLSearchParams({ report_year: state.year })}`,
+    );
+    const value = prompt(
+      `Целевая сумма затрат на ${state.year} год, руб. (3% от сэкономленных льгот):`,
+      dashboard.target_amount_rub || "",
+    );
+    if (value == null) return;
+    const amount = Number(String(value).replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Введите положительную целевую сумму.");
+      return;
+    }
+    await api("/dashboard/target", {
+      method: "POST",
+      body: JSON.stringify({ report_year: state.year, target_amount_rub: amount }),
+    });
+    showToast("Целевая сумма сохранена", "success");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -1148,7 +1111,7 @@ async function renderAdmin(root) {
   root.innerHTML = `<section class="page-heading"><div><h1>Управление</h1></div></section>
   <div class="admin-layout">
     <nav class="admin-nav" aria-label="Разделы административной панели">
-      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО <span class="nav-count" id="directory-proposal-nav-count" hidden></span></b></button>` : ""}
+      ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО <span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span></b></button>` : ""}
       ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b></button>` : ""}
       ${isAdmin ? '<button data-t="users"><b>Пользователи</b></button><button data-t="settings"><b>Настройки</b></button><button data-t="logs"><b>Журнал изменений</b></button>' : ""}
     </nav>
@@ -1164,7 +1127,6 @@ async function renderAdmin(root) {
       renderAdminTab(box, b.dataset.t);
     };
   });
-  refreshDirectoryProposalBadge(root);
   renderAdminTab(box, initialDirectoryTab);
 }
 

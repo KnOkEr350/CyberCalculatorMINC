@@ -358,7 +358,7 @@ async function renderPartnerEntries(root) {
   <div class="card"><div class="grid cols-3">
     ${educationSelector}
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
-  </div>${canPrepare && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}<p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
+  </div><div class="flex workspace-actions">${canPrepare && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}${canPrepare && isStaffUser() ? '<button class="btn secondary" id="edit-budget-target">Целевая сумма (3%)</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     <div class="field"><label>4. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
@@ -366,6 +366,9 @@ async function renderPartnerEntries(root) {
     <div class="flex">${canPrepare ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
+  const budgetTargetButton = root.querySelector("#edit-budget-target");
+  if (budgetTargetButton)
+    budgetTargetButton.onclick = () => openBudgetTargetDialog(budgetTargetButton);
   const partnerSelect = root.querySelector("#workspace-partner");
   if (partnerSelect) {
     const fillPartners = () => {
@@ -1067,18 +1070,21 @@ async function loadDirectoryProposals(root, onSaved) {
 }
 
 async function refreshDirectoryProposalBadge(root = document) {
-  const badge = root.querySelector("#directory-proposal-nav-count");
-  if (!badge || (!canProposeEducationDirectory() && !canApproveEducationDirectory())) return;
+  const badges = [...root.querySelectorAll("[data-directory-proposal-count]")];
+  if (!badges.length || (!canProposeEducationDirectory() && !canApproveEducationDirectory())) return;
   try {
     const stats = await api("/directory/stats");
     const count = canApproveEducationDirectory()
       ? Number(stats.pending_proposals || 0)
       : Number(stats.own_pending_proposals || 0);
-    badge.textContent = count;
-    badge.hidden = count === 0;
-    badge.setAttribute("aria-label", `${count} предложений ожидают решения`);
+    badges.forEach((badge) => {
+      badge.textContent = count;
+      badge.hidden = count === 0;
+      badge.setAttribute("aria-label", `${count} предложений ожидают решения`);
+      badge.title = `${count} предложений ожидают решения`;
+    });
   } catch (_) {
-    badge.hidden = true;
+    badges.forEach((badge) => { badge.hidden = true; });
   }
 }
 
