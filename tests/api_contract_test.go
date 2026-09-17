@@ -55,3 +55,33 @@ func TestLoginEndpointRequiresRequestProtectionAndMethod(t *testing.T) {
 		t.Fatalf("GET login got %d, want %d", res.Code, http.StatusMethodNotAllowed)
 	}
 }
+
+func TestLivenessDoesNotDependOnDatabase(t *testing.T) {
+	h := appserver.BuildRoutes(nil, config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/live", nil)
+	res := httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("liveness got %d, want %d", res.Code, http.StatusOK)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil || body["status"] != "ok" {
+		t.Fatalf("unexpected liveness body %q: %v", res.Body.String(), err)
+	}
+}
+
+func TestReadinessRequiresDatabase(t *testing.T) {
+	h := appserver.BuildRoutes(nil, config.Config{})
+	for _, path := range []string{"/api/ready", "/api/health"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			res := httptest.NewRecorder()
+			h.ServeHTTP(res, req)
+
+			if res.Code != http.StatusServiceUnavailable {
+				t.Fatalf("got %d, want %d", res.Code, http.StatusServiceUnavailable)
+			}
+		})
+	}
+}

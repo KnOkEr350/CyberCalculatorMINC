@@ -35,8 +35,13 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
       else if (url.pathname === '/api/dashboard') { status = 500; body = { error: 'unused fixture' }; }
       else if (url.pathname === '/api/directory/stats') body = {};
       else if (url.pathname === '/api/it-companies/registry-search') {
-        searches.push(url.searchParams.get('q'));
-        status = 502; body = { error: 'Сервис проверки реестра временно недоступен' };
+        const q = url.searchParams.get('q');
+        searches.push(q);
+        if (q === '7736207543') {
+          body = { items: [{ name: 'ООО «ЯНДЕКС»', inn: q, ogrn: '', accreditation_status: 'active', registry_updated_at: '2026-09-16', source_url: 'https://www.proreestr.ru/it-akkreditaciya/?q=7736207543' }], may_have_more: false };
+        } else {
+          status = 502; body = { error: 'Сервис проверки реестра временно недоступен' };
+        }
       } else if (['/api/it-companies', '/api/admin/it-company-options'].includes(url.pathname)) {
         const q = url.searchParams.get('q') || '';
         const filtered = companies.filter(c => c.name.includes(q) || c.inn === q);
@@ -61,16 +66,22 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     await page.locator('#it-search').fill('7700000001');
     await page.locator('#it-find').click();
     await page.waitForFunction(() => document.querySelectorAll('#it-list tbody tr').length === 1);
+    assert.match(await page.locator('#it-scope-note').textContent(), /Внешний реестр временно недоступен/);
+    await page.locator('#it-search').fill('7736207543');
+    await page.locator('#it-find').click();
+    await page.waitForFunction(() => document.querySelector('#it-list tbody tr')?.textContent.includes('ООО «ЯНДЕКС»'));
+    assert.equal(await page.locator('#it-list tbody tr').count(), 1);
+    assert.match(await page.locator('#it-list tbody tr').textContent(), /Внешний реестр/);
     await page.locator('#it-search').fill('');
     await page.locator('#it-scope').selectOption('registry');
     await page.getByText('Введите название или ИНН и нажмите «Найти».', { exact: true }).waitFor();
-    assert.deepEqual(searches, []);
+    assert.deepEqual(searches, ['7700000001', '7736207543']);
     await page.locator('#it-search').fill('Киберпротект');
     await page.locator('#it-find').click();
     await page.locator('[data-it-saved]').waitFor();
     await page.locator('[data-it-saved]').click();
     await page.waitForFunction(() => document.querySelectorAll('#it-list tbody tr').length === 500);
-    assert.deepEqual(searches, ['Киберпротект']);
+    assert.deepEqual(searches, ['7700000001', '7736207543', 'Киберпротект']);
     for (const role of ['admin', 'moderator']) {
       requests.length = 0;
       await page.evaluate(role => { state.me.role = role; state.view = 'admin'; render(); }, role);
@@ -88,14 +99,14 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
       await page.evaluate(role => { state.me.role = role; state.me.entity_type = 'organization'; state.view = 'admin'; render(); }, role);
       assert.equal(await page.locator('.admin-nav [data-t="it-companies"]').count(), 0);
       assert.equal(await page.locator('.admin-nav [data-t="partners"].active').count(), 1);
-      await page.locator('#partner-list table').waitFor();
+      await page.locator('#partner-list .muted').waitFor();
       await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'it-companies'));
       await page.getByText('Реестр ИТ-компаний недоступен для этого профиля', { exact: true }).waitFor();
       await page.evaluate(() => renderITCompanies(document.querySelector('#admin-content')));
       assert.equal(requests.some(p => p.startsWith('/api/it-companies')), false);
     }
     await page.evaluate(() => { state.me.role = 'admin'; state.view = 'admin'; render(); });
-    await page.locator('#partner-list table').waitFor();
+    await page.locator('#partner-list .muted').waitFor();
     await page.locator('.admin-nav [data-t="users"]').click();
     await page.locator('#u-company').waitFor();
     assert.equal(await page.locator('#u-company option').count(), 651);
@@ -105,7 +116,7 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     assert.equal(await page.locator('#u-company-field').isVisible(), false);
     assert.equal(await page.locator('#u-partner-field').isVisible(), true);
     assert.deepEqual(errors, []);
-    console.log('PASS: education read access, counterparty directories for all admin/moderator profiles, blocked direct views without API requests, 650-row pagination, INN filter, registry outage recovery');
+    console.log('PASS: combined IT-company search, external INN result, registry outage fallback, pagination and role boundaries');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,48 @@ import (
 
 type EntryHandlers struct {
 	DB *sql.DB
+}
+
+func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{}) string) {
+	if value := strings.TrimSpace(q.Get("q")); value != "" {
+		*conds = append(*conds, "payload::text ILIKE '%'||"+arg(value)+"||'%'")
+	}
+	likeFields := map[string]string{
+		"teacher_full_name":  "teacher_full_name",
+		"teaching_area":      "teaching_area",
+		"training_direction": "training_direction",
+		"mentor_name":        "mentor_full_name",
+		"structural_unit":    "department",
+		"cost_type":          "cost_type",
+	}
+	for parameter, field := range likeFields {
+		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
+			if parameter == "structural_unit" {
+				placeholder := arg(value)
+				*conds = append(*conds, "(payload->>'department' ILIKE '%'||"+placeholder+"||'%' OR payload->>'institute' ILIKE '%'||"+placeholder+"||'%' OR payload->>'faculty' ILIKE '%'||"+placeholder+"||'%')")
+			} else {
+				*conds = append(*conds, "payload->>'"+field+"' ILIKE '%'||"+arg(value)+"||'%'")
+			}
+		}
+	}
+	exactFields := map[string]string{"doc_type": "doc_type", "activity_type": "activity_type", "mentor_id": "mentor_id", "cost_method": "cost_method"}
+	for parameter, field := range exactFields {
+		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
+			if parameter == "cost_method" {
+				*conds = append(*conds, "cost_method="+arg(value))
+			} else if parameter == "activity_type" {
+				placeholder := arg(value)
+				*conds = append(*conds, "(payload->>'activity_type'="+placeholder+" OR payload->>'top_activity_type'="+placeholder+")")
+			} else {
+				*conds = append(*conds, "payload->>'"+field+"'="+arg(value))
+			}
+		}
+	}
+	if value := strings.TrimSpace(q.Get("duration_months")); value != "" {
+		if number, err := strconv.ParseFloat(strings.ReplaceAll(value, ",", "."), 64); err == nil && number >= 0 {
+			*conds = append(*conds, "COALESCE((payload->>'duration_months')::numeric,0)="+arg(number))
+		}
+	}
 }
 
 // Categories возвращает справочник категорий вместе с полями формы и
@@ -55,13 +98,34 @@ func (h *EntryHandlers) Categories(w http.ResponseWriter, r *http.Request, u mid
 }
 
 type createEntryRequest struct {
-	CategoryCode string                 `json:"category_code"`
-	PartnerID    *string                `json:"partner_id"`
-	AgreementID  string                 `json:"agreement_id"`
-	PeriodType   string                 `json:"period_type"`
-	ReportYear   int                    `json:"report_year"`
-	Audience     string                 `json:"audience"`
-	Payload      map[string]interface{} `json:"payload"`
+	CategoryCode    string                 `json:"category_code"`
+	PartnerID       *string                `json:"partner_id"`
+	AgreementID     string                 `json:"agreement_id"`
+	PeriodType      string                 `json:"period_type"`
+	ReportYear      int                    `json:"report_year"`
+	Audience        string                 `json:"audience"`
+	Payload         map[string]interface{} `json:"payload"`
+	CostMethod      string                 `json:"cost_method"`
+	ActualAmountRub *money.Amount          `json:"actual_amount_rub,omitempty"`
+}
+
+func resolveEntryAmount(method string, actual *money.Amount, formula money.Amount) (string, money.Amount, error) {
+	if method == "" {
+		method = "average"
+	}
+	if method == "average" {
+		if actual != nil {
+			return "", 0, fmt.Errorf("фактическая сумма указывается только для метода «Фактические затраты»")
+		}
+		return method, formula, nil
+	}
+	if method != "actual" || actual == nil || *actual <= 0 {
+		return "", 0, fmt.Errorf("для фактических затрат укажите положительную фактическую сумму")
+	}
+	if err := calculators.ValidateAmount(actual.Rubles()); err != nil {
+		return "", 0, err
+	}
+	return method, *actual, nil
 }
 
 func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -101,7 +165,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !requirePartner(w, u, partnerID) {
+	if !requirePartnerTenant(w, r, h.DB, u, partnerID) {
 		return
 	}
 	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, req.CategoryCode, req.ReportYear); err != nil {
@@ -116,13 +180,27 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	amount, err := calculators.CalculateAmount(req.CategoryCode, models.Audience(req.Audience), req.Payload)
+	formulaAmount, err := calculators.CalculateAmount(req.CategoryCode, models.Audience(req.Audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
 	}
-	if err := calculators.ValidateAmount(amount.Rubles()); err != nil {
+	if err := calculators.ValidateAmount(formulaAmount.Rubles()); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
+		return
+	}
+	costMethod, amount, err := resolveEntryAmount(req.CostMethod, req.ActualAmountRub, formulaAmount)
+	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
+		return
+	}
+	req.CostMethod = costMethod
+	if req.PeriodType != string(models.PeriodFact) && req.CostMethod == "actual" {
+		middleware.WriteError(w, http.StatusBadRequest, "фактические затраты указываются только в отчёте «Факт»")
+		return
+	}
+	companyID, ok := requireITCompanyForWrite(w, u)
+	if !ok {
 		return
 	}
 
@@ -136,9 +214,9 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 
 	var id string
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, u.ID,
+		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, u.ID,
 	).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
@@ -192,6 +270,10 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	if v := q.Get("audience"); v != "" {
 		conds = append(conds, "audience = "+arg(v))
 	}
+	if company := itCompanyScope(u); company != "" {
+		conds = append(conds, "it_company_id::text = "+arg(company))
+	}
+	appendEntryDetailFilters(q, &conds, arg)
 
 	offset := 0
 	if raw := q.Get("offset"); raw != "" {
@@ -204,7 +286,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	}
 	// SQL structure comes only from fixed fragments; values remain positional parameters.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	query := `SELECT id, category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,
+	query := `SELECT id,COALESCE(it_company_id::text,''), category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,
 		created_by, updated_by, created_at, updated_at FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
@@ -217,9 +299,10 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	for rows.Next() {
 		var e models.Entry
 		var partnerID, updatedBy sql.NullString
+		var actualAmount sql.NullString
 		var payloadRaw []byte
-		if err := rows.Scan(&e.ID, &e.CategoryCode, &partnerID, &e.AgreementID, &e.PeriodType, &e.ReportYear, &e.Audience,
-			&payloadRaw, &e.AmountRub, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.ITCompanyID, &e.CategoryCode, &partnerID, &e.AgreementID, &e.PeriodType, &e.ReportYear, &e.Audience,
+			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -230,6 +313,14 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 		if updatedBy.Valid {
 			p := updatedBy.String
 			e.UpdatedBy = &p
+		}
+		if actualAmount.Valid {
+			parsed, parseErr := money.Parse(actualAmount.String)
+			if parseErr != nil {
+				middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения фактической суммы")
+				return
+			}
+			e.ActualAmountRub = &parsed
 		}
 		json.Unmarshal(payloadRaw, &e.Payload)
 		out = append(out, e)
@@ -245,11 +336,120 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	middleware.WriteJSON(w, http.StatusOK, out)
 }
 
+func (h *EntryHandlers) Summary(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+	q := r.URL.Query()
+	conds := []string{"1=1"}
+	args := []interface{}{}
+	arg := func(value interface{}) string {
+		args = append(args, value)
+		return "$" + strconv.Itoa(len(args))
+	}
+	if scope := partnerScope(u, ""); scope != "" {
+		conds = append(conds, "partner_id::text="+arg(scope))
+	}
+	for _, field := range []string{"category_code", "period_type", "audience"} {
+		if value := strings.TrimSpace(q.Get(field)); value != "" {
+			conds = append(conds, field+"="+arg(value))
+		}
+	}
+	if value := strings.TrimSpace(q.Get("report_year")); value != "" {
+		year, err := strconv.Atoi(value)
+		if err != nil || year < 2000 || year > 2100 {
+			middleware.WriteError(w, 400, "некорректный год")
+			return
+		}
+		conds = append(conds, "report_year="+arg(year))
+	}
+	for _, field := range []string{"partner_id", "agreement_id"} {
+		if value := strings.TrimSpace(q.Get(field)); value != "" {
+			conds = append(conds, field+"::text="+arg(value))
+		}
+	}
+	if company := itCompanyScope(u); company != "" {
+		conds = append(conds, "it_company_id::text="+arg(company))
+	}
+	appendEntryDetailFilters(q, &conds, arg)
+	where := joinAnd(conds)
+	var count, partners, teachers, mentors, students, courses, programs int
+	var total money.Amount
+	var academicHours float64
+	err := h.DB.QueryRowContext(r.Context(), `SELECT count(*),COALESCE(sum(amount_rub),0),count(DISTINCT partner_id),
+		count(DISTINCT NULLIF(payload->>'teacher_full_name','')),count(DISTINCT NULLIF(payload->>'mentor_id','')),
+		count(DISTINCT NULLIF(payload->>'student_full_name','')),count(DISTINCT NULLIF(payload->>'course_name','')),
+		count(DISTINCT NULLIF(payload->>'program_name','')),COALESCE(sum(CASE WHEN payload ? 'academic_hours' THEN (payload->>'academic_hours')::numeric ELSE 0 END),0)::float8
+		FROM entries WHERE `+where, args...).Scan(&count, &total, &partners, &teachers, &mentors, &students, &courses, &programs, &academicHours)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка расчёта итогов")
+		return
+	}
+	type matrixItem struct {
+		DocumentType string       `json:"document_type"`
+		ActivityType string       `json:"activity_type"`
+		Count        int          `json:"count"`
+		Amount       money.Amount `json:"amount_rub"`
+	}
+	matrix := []matrixItem{}
+	matrixRows, err := h.DB.QueryContext(r.Context(), `SELECT payload->>'doc_type',payload->>'activity_type',count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='ood_rpd' GROUP BY 1,2 ORDER BY 1,2`, args...)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка сводки ООП/РПД")
+		return
+	}
+	for matrixRows.Next() {
+		var item matrixItem
+		if matrixRows.Scan(&item.DocumentType, &item.ActivityType, &item.Count, &item.Amount) != nil {
+			matrixRows.Close()
+			middleware.WriteError(w, 500, "ошибка сводки ООП/РПД")
+			return
+		}
+		matrix = append(matrix, item)
+	}
+	if err = matrixRows.Err(); err != nil {
+		matrixRows.Close()
+		middleware.WriteError(w, 500, "ошибка сводки ООП/РПД")
+		return
+	}
+	matrixRows.Close()
+	type unitItem struct {
+		Unit   string       `json:"unit"`
+		Count  int          `json:"count"`
+		Amount money.Amount `json:"amount_rub"`
+	}
+	units := []unitItem{}
+	unitRows, err := h.DB.QueryContext(r.Context(), `SELECT COALESCE(NULLIF(concat_ws(' / ',NULLIF(payload->>'institute',''),NULLIF(payload->>'faculty',''),NULLIF(payload->>'department','')),''),'Не указано'),count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='teachers' GROUP BY 1 ORDER BY 1`, args...)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка отчётности по подразделениям")
+		return
+	}
+	for unitRows.Next() {
+		var item unitItem
+		if unitRows.Scan(&item.Unit, &item.Count, &item.Amount) != nil {
+			unitRows.Close()
+			middleware.WriteError(w, 500, "ошибка отчётности по подразделениям")
+			return
+		}
+		units = append(units, item)
+	}
+	if err = unitRows.Err(); err != nil {
+		unitRows.Close()
+		middleware.WriteError(w, 500, "ошибка отчётности по подразделениям")
+		return
+	}
+	unitRows.Close()
+	middleware.WriteJSON(w, 200, map[string]interface{}{
+		"count": count, "amount_rub": total, "partners_count": partners,
+		"teachers_count": teachers, "mentors_count": mentors, "students_count": students,
+		"courses_count": courses, "programs_count": programs, "academic_hours": academicHours,
+		"ood_rpd_matrix": matrix, "structural_units": units,
+	})
+}
+
 type updateEntryRequest struct {
-	Payload     map[string]interface{} `json:"payload"`
-	Audience    string                 `json:"audience"`
-	AgreementID string                 `json:"agreement_id"`
-	Comment     string                 `json:"comment"` // ОБЯЗАТЕЛЕН по ТЗ при любом редактировании плана/факта
+	Payload         map[string]interface{} `json:"payload"`
+	Audience        string                 `json:"audience"`
+	AgreementID     string                 `json:"agreement_id"`
+	Comment         string                 `json:"comment"` // ОБЯЗАТЕЛЕН по ТЗ при любом редактировании плана/факта
+	CostMethod      string                 `json:"cost_method"`
+	ActualAmountRub *money.Amount          `json:"actual_amount_rub,omitempty"`
 }
 
 func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
@@ -278,13 +478,14 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	defer tx.Rollback()
 
-	var categoryCode, audience, oldAgreementID string
+	var categoryCode, audience, oldAgreementID, periodType, oldCostMethod string
 	var reportYear int
 	var oldPartnerID sql.NullString
 	var oldPayloadRaw []byte
-	var oldAmount money.Amount
-	err = tx.QueryRowContext(r.Context(), `SELECT category_code, partner_id,COALESCE(agreement_id::text,''),report_year,audience,payload,amount_rub FROM entries WHERE id = $1 FOR UPDATE`, entryID).
-		Scan(&categoryCode, &oldPartnerID, &oldAgreementID, &reportYear, &audience, &oldPayloadRaw, &oldAmount)
+	var oldAmount, oldFormulaAmount money.Amount
+	var oldActualAmount *money.Amount
+	err = tx.QueryRowContext(r.Context(), `SELECT category_code,partner_id,COALESCE(agreement_id::text,''),report_year,period_type,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method FROM entries WHERE id=$1 FOR UPDATE`, entryID).
+		Scan(&categoryCode, &oldPartnerID, &oldAgreementID, &reportYear, &periodType, &audience, &oldPayloadRaw, &oldAmount, &oldFormulaAmount, &oldActualAmount, &oldCostMethod)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, http.StatusNotFound, "запись не найдена")
 		return
@@ -311,7 +512,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !requirePartner(w, u, partnerID) {
+	if !requirePartnerTenant(w, r, h.DB, u, partnerID) {
 		return
 	}
 	if oldPartnerID.String != partnerID {
@@ -333,21 +534,31 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	newAmount, err := calculators.CalculateAmount(categoryCode, models.Audience(audience), req.Payload)
+	formulaAmount, err := calculators.CalculateAmount(categoryCode, models.Audience(audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
 	}
-	if err := calculators.ValidateAmount(newAmount.Rubles()); err != nil {
+	if err := calculators.ValidateAmount(formulaAmount.Rubles()); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
+		return
+	}
+	costMethod, newAmount, err := resolveEntryAmount(req.CostMethod, req.ActualAmountRub, formulaAmount)
+	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
+		return
+	}
+	req.CostMethod = costMethod
+	if periodType != string(models.PeriodFact) && req.CostMethod == "actual" {
+		middleware.WriteError(w, http.StatusBadRequest, "фактические затраты указываются только в отчёте «Факт»")
 		return
 	}
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
 	_, err = tx.ExecContext(r.Context(),
-		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,updated_by=$6,updated_at=now()
-		 WHERE id=$7`,
-		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, u.ID, entryID,
+		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,updated_by=$9,updated_at=now()
+		 WHERE id=$10`,
+		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, u.ID, entryID,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
@@ -370,8 +581,8 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		oldPartner = oldPartnerID.String
 	}
 	if err := logAudit(tx, "entry", entryID, "update", u.ID, req.Comment,
-		map[string]interface{}{"partner_id": oldPartner, "agreement_id": oldAgreementID, "audience": oldAudience, "payload": oldPayload, "amount_rub": oldAmount},
-		map[string]interface{}{"partner_id": partnerID, "agreement_id": req.AgreementID, "audience": audience, "payload": req.Payload, "amount_rub": newAmount},
+		map[string]interface{}{"partner_id": oldPartner, "agreement_id": oldAgreementID, "audience": oldAudience, "payload": oldPayload, "amount_rub": oldAmount, "formula_amount_rub": oldFormulaAmount, "actual_amount_rub": oldActualAmount, "cost_method": oldCostMethod},
+		map[string]interface{}{"partner_id": partnerID, "agreement_id": req.AgreementID, "audience": audience, "payload": req.Payload, "amount_rub": newAmount, "formula_amount_rub": formulaAmount, "actual_amount_rub": req.ActualAmountRub, "cost_method": req.CostMethod},
 	); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
 		return

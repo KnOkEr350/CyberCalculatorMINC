@@ -18,18 +18,25 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 
 	authH := &handlers.AuthHandlers{DB: db, SessionTTL: time.Duration(cfg.SessionTTLh) * time.Hour, SecureCookie: cfg.CookieSecure, MFAKey: cfg.MFAKey, RequireMFA: cfg.Environment == "production"}
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/live", func(w http.ResponseWriter, _ *http.Request) {
+		middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	ready := func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		if db.PingContext(ctx) != nil {
+		if db == nil || db.PingContext(ctx) != nil {
 			middleware.WriteError(w, http.StatusServiceUnavailable, "база данных недоступна")
 			return
 		}
 		middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
+	}
+	mux.HandleFunc("GET /api/ready", ready)
+	// Compatibility endpoint for existing external monitoring.
+	mux.HandleFunc("GET /api/health", ready)
 	partnerH := &handlers.PartnerHandlers{DB: db}
 	itCompanyH := &handlers.ITCompanyHandlers{DB: db}
 	agreementH := &handlers.AgreementHandlers{DB: db}
+	groupH := &handlers.LegalEntityGroupHandlers{DB: db}
 	regionalAuthorityH := &handlers.RegionalAuthorityHandlers{DB: db}
 	entryH := &handlers.EntryHandlers{DB: db}
 	attachH := &handlers.AttachmentHandlers{DB: db, UploadDir: cfg.UploadDir, ScannerAddress: cfg.ScannerAddress, QuotaBytes: cfg.UploadQuotaBytes}
@@ -57,6 +64,11 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/it-companies/import", middleware.RequireAuth(db, itCompanyH.Import))
 	mux.HandleFunc("GET /api/directory", middleware.RequireAuth(db, partnerH.Directory))
 	mux.HandleFunc("GET /api/directory/stats", middleware.RequireAuth(db, partnerH.DirectoryStats))
+	mux.HandleFunc("POST /api/directory", middleware.RequireAuth(db, partnerH.CreateDirectory))
+	mux.HandleFunc("GET /api/directory/proposals", middleware.RequireAuth(db, partnerH.DirectoryProposals))
+	mux.HandleFunc("POST /api/directory/{id}/decision", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		partnerH.DecideDirectoryProposal(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("PUT /api/directory/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		partnerH.UpdateDirectory(w, r, u, r.PathValue("id"))
 	}))
@@ -64,6 +76,11 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/agreements", middleware.RequireAuth(db, agreementH.Create))
 	mux.HandleFunc("PUT /api/agreements/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		agreementH.Update(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/legal-entity-groups", middleware.RequireAuth(db, groupH.List))
+	mux.HandleFunc("POST /api/legal-entity-groups", middleware.RequireAuth(db, groupH.Create))
+	mux.HandleFunc("PUT /api/legal-entity-groups/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		groupH.Update(w, r, u, r.PathValue("id"))
 	}))
 	mux.HandleFunc("GET /api/regional-authorities", middleware.RequireAuth(db, regionalAuthorityH.List))
 	mux.HandleFunc("POST /api/regional-authorities", middleware.RequireAuth(db, regionalAuthorityH.Create))
@@ -81,6 +98,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 
 	// План и факт.
 	mux.HandleFunc("GET /api/entries", middleware.RequireAuth(db, entryH.List))
+	mux.HandleFunc("GET /api/entries/summary", middleware.RequireAuth(db, entryH.Summary))
 	mux.HandleFunc("POST /api/entries", middleware.RequireAuth(db, entryH.Create))
 	mux.HandleFunc("PUT /api/entries/{id}", middleware.RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		entryH.Update(w, r, u, r.PathValue("id"))

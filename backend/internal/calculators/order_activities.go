@@ -35,6 +35,10 @@ func (topITCalc) Fields() []FieldSpec {
 		{Key: "org_name", Label: "Наименование образовательной организации", Type: "select", Required: true},
 		{Key: "project_name", Label: "Наименование федерального проекта", Type: "text", Required: true, MaxLength: 300},
 		{Key: "program_name", Label: "Наименование образовательной программы топ-уровня", Type: "text", Required: true, MaxLength: 500},
+		{Key: "joint_activities", Label: "Совместные активности", Type: "text", MaxLength: 2000},
+		{Key: "top_activity_type", Label: "Тип активности", Type: "select", Options: []string{"assistance", "cofinancing"}},
+		{Key: "duration_months", Label: "Продолжительность, мес.", Type: "number"},
+		{Key: "cost_type", Label: "Тип затрат", Type: "text"},
 		{Key: "cofinancing_report_reference", Label: "Реквизиты отчёта о софинансировании", Type: "text", Required: true},
 		{Key: "cofinancing_amount_rub", Label: "Объём софинансирования по отчёту, руб.", Type: "number", Required: true},
 	}

@@ -20,8 +20,8 @@ import (
 	"cybercalc/internal/config"
 	"cybercalc/internal/dbx"
 	"cybercalc/internal/handlers"
-	"cybercalc/internal/retention"
 	appserver "cybercalc/internal/server"
+	"cybercalc/internal/workers"
 )
 
 func main() {
@@ -31,7 +31,7 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		client := &http.Client{Timeout: 3 * time.Second}
-		res, err := client.Get("http://127.0.0.1:8080/api/health")
+		res, err := client.Get("http://127.0.0.1:8080/api/ready")
 		if err != nil {
 			os.Exit(1)
 		}
@@ -50,16 +50,17 @@ func main() {
 
 	migrationMode := len(os.Args) > 1 && os.Args[1] == "migrate"
 	enrichmentMode := len(os.Args) > 1 && os.Args[1] == "enrich-directory"
+	workerMode := len(os.Args) > 1 && os.Args[1] == "worker"
 	if migrationMode || os.Getenv("RUN_MIGRATIONS") != "false" {
 		if err := dbx.RunMigrations(db, "/app/migrations"); err != nil {
 			log.Fatalf("ошибка применения миграций: %v", err)
 		}
 	}
 
-	if err := ensureBootstrapAdmin(db, cfg); err != nil {
-		log.Fatalf("ошибка создания admin-пользователя по умолчанию: %v", err)
-	}
 	if migrationMode {
+		if err := ensureBootstrapAdmin(db, cfg); err != nil {
+			log.Fatalf("ошибка создания admin-пользователя по умолчанию: %v", err)
+		}
 		if err := dbx.ProvisionRuntime(db, os.Getenv("RUNTIME_DB_USER"), os.Getenv("RUNTIME_DB_PASSWORD")); err != nil {
 			log.Fatal(err)
 		}
@@ -114,24 +115,19 @@ func main() {
 		log.Printf("обогащение завершено: обработано %d, найдено %d, без результата %d", result.Processed, result.Matched, result.Unmatched)
 		return
 	}
+	if workerMode {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		if err := workers.Run(ctx, db, cfg); err != nil {
+			log.Fatalf("фоновые задания: %v", err)
+		}
+		return
+	}
+	if err := ensureBootstrapAdmin(db, cfg); err != nil {
+		log.Fatalf("ошибка создания admin-пользователя по умолчанию: %v", err)
+	}
 	if err := os.MkdirAll(cfg.UploadDir, 0o750); err != nil {
 		log.Fatalf("не удалось создать каталог загрузок: %v", err)
-	}
-
-	stop := make(chan struct{})
-	defer close(stop)
-	go retention.Run(db, 1*time.Hour, stop, cfg.UploadDir)
-	go handlers.RunDirectorySync(db, cfg.DirectorySyncURL, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
-	if cfg.DirectoryEnrichOnStart {
-		go handlers.RunDirectoryPrograms(db, cfg.DirectoryEnrichLimit, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
-		go func() {
-			result, enrichErr := handlers.EnrichEducationDirectory(context.Background(), db, cfg.DirectoryEnrichLimit, time.Duration(cfg.DirectoryEnrichDelayMS)*time.Millisecond)
-			if enrichErr != nil {
-				log.Printf("автозаполнение ИНН/ОГРН остановлено после %d записей: %v", result.Processed, enrichErr)
-				return
-			}
-			log.Printf("автозаполнение ИНН/ОГРН завершено: обработано %d, найдено %d, без результата %d", result.Processed, result.Matched, result.Unmatched)
-		}()
 	}
 
 	mux := appserver.BuildRoutes(db, cfg)

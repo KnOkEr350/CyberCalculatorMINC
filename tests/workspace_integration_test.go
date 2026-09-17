@@ -110,6 +110,9 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if companyProfile["it_company_id"] != itCompanyID || companyProfile["partner_id"] != nil {
 		t.Fatal("IT company assignment is missing or mixed with an educational institution")
 	}
+	if _, err := db.Exec(`UPDATE users SET it_company_id=$1 WHERE email=$2`, itCompanyID, email); err != nil {
+		t.Fatal(err)
+	}
 	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 5000}, 200)
 	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 6000}, 200)
 	adminDashboard := object(call(admin, "GET", "/dashboard?report_year=2026", nil, 200))
@@ -144,7 +147,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	// Verified licences alone are insufficient; an exact program is required.
 	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": directory1, "initial_agreement": agreement("NO-PROGRAM-" + stamp)}, 409)
-	if _, e := db.Exec(`UPDATE education_directory SET program_codes=ARRAY['09.03.01'],programs_source_url='https://university.example/sveden/education/' WHERE id IN ($1,$2)`, directory1, directory2); e != nil {
+	if _, e := db.Exec(`UPDATE education_directory SET program_codes=ARRAY['09.03.01'],programs_source_url='https://university.example/sveden/education/',listed_in_mincifry_order_27=TRUE WHERE id IN ($1,$2)`, directory1, directory2); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := db.Exec(`UPDATE education_directory SET program_codes=ARRAY['38.03.01'] WHERE id=$1`, staleDirectory); e != nil {
@@ -240,19 +243,20 @@ func TestWorkspaceIntegration(t *testing.T) {
 		"source_url":          "https://islod.obrnadzor.gov.ru/rlic/details/test-2",
 		"registry_updated_at": time.Now().Format("2006-01-02"), "confirmation_comment": "Проверено представителем",
 	}
-	call(partnerClient, "PUT", "/directory/"+directory2, reviewBody, 200)
+	call(partnerClient, "PUT", "/directory/"+directory2, reviewBody, 403)
+	call(admin, "PUT", "/directory/"+directory2, reviewBody, 200)
 	var reviewStatus string
 	if e := db.QueryRow(`SELECT verification_status FROM education_directory WHERE id=$1`, directory2).Scan(&reviewStatus); e != nil || reviewStatus != "pending" {
 		t.Fatalf("directory edit must require confirmation: status=%s err=%v", reviewStatus, e)
 	}
 	reviewBody["confirm"] = true
-	call(partnerClient, "PUT", "/directory/"+directory2, reviewBody, 200)
+	call(admin, "PUT", "/directory/"+directory2, reviewBody, 200)
 	var confirmedBy string
 	if e := db.QueryRow(`SELECT verification_status,verified_by::text FROM education_directory WHERE id=$1`, directory2).Scan(&reviewStatus, &confirmedBy); e != nil || reviewStatus != "verified" || confirmedBy == "" {
 		t.Fatalf("directory confirmation was not attributed: status=%s by=%s err=%v", reviewStatus, confirmedBy, e)
 	}
 	audit := call(admin, "GET", "/admin/logs?entity_type=education_directory&limit=20", nil, 200)
-	if !bytes.Contains(audit, []byte(`"action":"directory_confirm"`)) || !bytes.Contains(audit, []byte(partnerEmail)) {
+	if !bytes.Contains(audit, []byte(`"action":"directory_confirm"`)) || !bytes.Contains(audit, []byte(email)) {
 		t.Fatal("directory confirmation actor/details missing from audit")
 	}
 	partners := call(partnerClient, "GET", "/partners", nil, 200)
@@ -484,8 +488,9 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if string(bytes.TrimSpace(filtered)) != "[]" {
 		t.Fatal("directory type filter failed")
 	}
-	// Education users retain review access (canReviewEducationDirectory).
-	upload(partnerClient, "/admin/directory-import?commit=1", map[string][]byte{"directory.xlsx": directoryData}, 200)
+	// Education users may preview the directory, but only an organization admin may commit it.
+	upload(partnerClient, "/admin/directory-import", map[string][]byte{"directory.xlsx": directoryData}, 200)
+	upload(partnerClient, "/admin/directory-import?commit=1", map[string][]byte{"directory.xlsx": directoryData}, 403)
 	// MFA enrolment revokes old sessions; recovery codes are single-use.
 	setup := object(call(admin, "POST", "/auth/mfa/enroll", map[string]string{"password": password}, 200))
 	code, err := auth.TOTP(setup["secret"].(string), time.Now().Unix()/30)

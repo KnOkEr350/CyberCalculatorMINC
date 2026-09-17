@@ -36,27 +36,30 @@ type reportHistoryItem struct {
 }
 
 type reportWorkflowResponse struct {
-	AgreementID           string                 `json:"agreement_id"`
-	ReportYear            int                    `json:"report_year"`
-	PeriodType            string                 `json:"period_type"`
-	Status                string                 `json:"status"`
-	ScopeConfirmed        bool                   `json:"scope_confirmed"`
-	ConditionsConfirmed   bool                   `json:"conditions_confirmed"`
-	EvidenceConfirmed     bool                   `json:"evidence_confirmed"`
-	CounterpartyConfirmed bool                   `json:"counterparty_confirmed"`
-	Comment               string                 `json:"comment,omitempty"`
-	Activities            []reportActivityCheck  `json:"activities"`
-	AutomaticChecks       []reportAutomaticCheck `json:"automatic_checks"`
-	Missing               []string               `json:"missing"`
-	TopITException        bool                   `json:"top_it_exception"`
-	CanMarkReady          bool                   `json:"can_mark_ready"`
-	CanVerify             bool                   `json:"can_verify"`
-	CanApprove            bool                   `json:"can_approve"`
-	CanReturnDraft        bool                   `json:"can_return_draft"`
-	ReadyAt               *time.Time             `json:"ready_at,omitempty"`
-	VerifiedAt            *time.Time             `json:"verified_at,omitempty"`
-	ApprovedAt            *time.Time             `json:"approved_at,omitempty"`
-	History               []reportHistoryItem    `json:"history"`
+	AgreementID            string                 `json:"agreement_id"`
+	ReportYear             int                    `json:"report_year"`
+	PeriodType             string                 `json:"period_type"`
+	Status                 string                 `json:"status"`
+	ScopeConfirmed         bool                   `json:"scope_confirmed"`
+	ConditionsConfirmed    bool                   `json:"conditions_confirmed"`
+	EvidenceConfirmed      bool                   `json:"evidence_confirmed"`
+	ActualCostsConfirmed   bool                   `json:"actual_costs_confirmed"`
+	AuditorReportReference string                 `json:"auditor_report_reference,omitempty"`
+	UsesActualCosts        bool                   `json:"uses_actual_costs"`
+	CounterpartyConfirmed  bool                   `json:"counterparty_confirmed"`
+	Comment                string                 `json:"comment,omitempty"`
+	Activities             []reportActivityCheck  `json:"activities"`
+	AutomaticChecks        []reportAutomaticCheck `json:"automatic_checks"`
+	Missing                []string               `json:"missing"`
+	TopITException         bool                   `json:"top_it_exception"`
+	CanMarkReady           bool                   `json:"can_mark_ready"`
+	CanVerify              bool                   `json:"can_verify"`
+	CanApprove             bool                   `json:"can_approve"`
+	CanReturnDraft         bool                   `json:"can_return_draft"`
+	ReadyAt                *time.Time             `json:"ready_at,omitempty"`
+	VerifiedAt             *time.Time             `json:"verified_at,omitempty"`
+	ApprovedAt             *time.Time             `json:"approved_at,omitempty"`
+	History                []reportHistoryItem    `json:"history"`
 }
 
 type workflowQuerier interface {
@@ -76,7 +79,7 @@ func parseReportContext(r *http.Request) (string, int, string, error) {
 }
 
 func requireAgreement(w http.ResponseWriter, r *http.Request, db *sql.DB, u middleware.AuthUser, agreementID string) bool {
-	rows, err := db.QueryContext(r.Context(), `SELECT partner_id::text FROM agreement_partners WHERE agreement_id::text=$1`, agreementID)
+	rows, err := db.QueryContext(r.Context(), `SELECT ap.partner_id::text,COALESCE(a.it_company_id::text,'') FROM agreement_partners ap JOIN agreements a ON a.id=ap.agreement_id WHERE ap.agreement_id::text=$1`, agreementID)
 	if err != nil {
 		middleware.WriteError(w, 500, "не удалось проверить доступ к соглашению")
 		return false
@@ -84,13 +87,17 @@ func requireAgreement(w http.ResponseWriter, r *http.Request, db *sql.DB, u midd
 	defer rows.Close()
 	found, allowed := false, false
 	for rows.Next() {
-		var id string
-		if rows.Scan(&id) != nil {
+		var id, companyID string
+		if rows.Scan(&id, &companyID) != nil {
 			middleware.WriteError(w, 500, "не удалось проверить доступ к соглашению")
 			return false
 		}
 		found = true
-		allowed = allowed || canAccessPartner(u, id)
+		tenantAllowed := u.ITCompanyID == nil || *u.ITCompanyID == companyID
+		if u.EntityType == "organization" && u.ITCompanyID == nil {
+			tenantAllowed = false
+		}
+		allowed = allowed || (canAccessPartner(u, id) && tenantAllowed)
 	}
 	if !found {
 		middleware.WriteError(w, 404, "соглашение не найдено")
@@ -110,6 +117,7 @@ func topITAlternativeExists(ctx context.Context, q workflowQuerier, agreementID 
 		JOIN agreement_partners op ON op.agreement_id=other.id
 		JOIN partners p ON p.id=op.partner_id AND p.partner_kind<>'school'
 		WHERE other.id::text<>$1 AND other.status='active'
+		AND other.it_company_id=(SELECT it_company_id FROM agreements WHERE id::text=$1)
 		AND EXISTS(SELECT 1 FROM agreement_partners current_ap WHERE current_ap.agreement_id::text=$1 AND current_ap.partner_id<>op.partner_id)`, agreementID, year, period)
 	if err != nil {
 		return false, err
@@ -160,9 +168,9 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	}
 	var comment sql.NullString
 	var readyAt, verifiedAt, approvedAt sql.NullTime
-	err = q.QueryRowContext(ctx, `SELECT status,scope_confirmed,conditions_confirmed,evidence_confirmed,counterparty_confirmed,comment,ready_at,verified_at,approved_at
+	err = q.QueryRowContext(ctx, `SELECT status,scope_confirmed,conditions_confirmed,evidence_confirmed,counterparty_confirmed,actual_costs_confirmed,COALESCE(auditor_report_reference,''),comment,ready_at,verified_at,approved_at
 		FROM agreement_reports WHERE agreement_id::text=$1 AND report_year=$2 AND period_type=$3`, agreementID, year, period).
-		Scan(&resp.Status, &resp.ScopeConfirmed, &resp.ConditionsConfirmed, &resp.EvidenceConfirmed, &resp.CounterpartyConfirmed, &comment, &readyAt, &verifiedAt, &approvedAt)
+		Scan(&resp.Status, &resp.ScopeConfirmed, &resp.ConditionsConfirmed, &resp.EvidenceConfirmed, &resp.CounterpartyConfirmed, &resp.ActualCostsConfirmed, &resp.AuditorReportReference, &comment, &readyAt, &verifiedAt, &approvedAt)
 	if err != nil && err != sql.ErrNoRows {
 		return resp, err
 	}
@@ -224,11 +232,18 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	yearEnd := time.Date(year, 12, 31, 0, 0, 0, 0, time.UTC)
 	agreementValid := agreementStatus == "active" && !from.After(yearEnd) && !until.Before(yearStart) && (kind != "roiv" || raStatus == "active")
 	peopleValid := peopleCP > 0 && peopleOther > 0
+	if err = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM entries WHERE agreement_id::text=$1 AND report_year=$2 AND period_type=$3 AND cost_method='actual')`, agreementID, year, period).Scan(&resp.UsesActualCosts); err != nil {
+		return resp, err
+	}
+	auditorValid := !resp.UsesActualCosts || (strings.TrimSpace(resp.AuditorReportReference) != "" && resp.ActualCostsConfirmed)
 	resp.AutomaticChecks = []reportAutomaticCheck{
 		{Code: "agreement", Label: "Соглашение действует в отчётном году и надлежаще подписано", Complete: agreementValid},
 		{Code: "responsible_people", Label: "Указаны ответственные обеих сторон", Complete: peopleValid},
 		{Code: "activity_scope", Label: "Перечень видов мероприятий задан в соглашении", Complete: len(required) > 0},
 		{Code: "activities", Label: "По каждому виду есть мероприятие с положительной расчётной суммой", Complete: activitiesComplete},
+	}
+	if period == "fact" {
+		resp.AutomaticChecks = append(resp.AutomaticChecks, reportAutomaticCheck{Code: "actual_costs", Label: "Для фактических затрат указано аудиторское заключение", Complete: auditorValid})
 	}
 	for _, check := range resp.AutomaticChecks {
 		if !check.Complete {
@@ -317,12 +332,14 @@ func (h *ReportWorkflowHandlers) Get(w http.ResponseWriter, r *http.Request, u m
 }
 
 type workflowTransitionRequest struct {
-	Status                string `json:"status"`
-	ScopeConfirmed        bool   `json:"scope_confirmed"`
-	ConditionsConfirmed   bool   `json:"conditions_confirmed"`
-	EvidenceConfirmed     bool   `json:"evidence_confirmed"`
-	CounterpartyConfirmed bool   `json:"counterparty_confirmed"`
-	Comment               string `json:"comment"`
+	Status                 string `json:"status"`
+	ScopeConfirmed         bool   `json:"scope_confirmed"`
+	ConditionsConfirmed    bool   `json:"conditions_confirmed"`
+	EvidenceConfirmed      bool   `json:"evidence_confirmed"`
+	ActualCostsConfirmed   bool   `json:"actual_costs_confirmed"`
+	AuditorReportReference string `json:"auditor_report_reference"`
+	CounterpartyConfirmed  bool   `json:"counterparty_confirmed"`
+	Comment                string `json:"comment"`
 }
 
 func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -340,8 +357,13 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	req.Comment = strings.TrimSpace(req.Comment)
+	req.AuditorReportReference = strings.TrimSpace(req.AuditorReportReference)
 	if len([]rune(req.Comment)) > 1000 {
 		middleware.WriteError(w, 400, "комментарий не должен превышать 1000 символов")
+		return
+	}
+	if len([]rune(req.AuditorReportReference)) > 1000 {
+		middleware.WriteError(w, 400, "реквизиты аудиторского заключения не должны превышать 1000 символов")
 		return
 	}
 	if req.Comment == "" {
@@ -395,7 +417,7 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if req.Status == "ready" {
-		_, err = tx.ExecContext(r.Context(), `UPDATE agreement_reports SET scope_confirmed=$4,conditions_confirmed=$5,evidence_confirmed=$6,counterparty_confirmed=FALSE,comment=NULLIF($7,''),updated_by=$8,updated_at=now() WHERE agreement_id=$1 AND report_year=$2 AND period_type=$3`, id, year, period, req.ScopeConfirmed, req.ConditionsConfirmed, req.EvidenceConfirmed, req.Comment, u.ID)
+		_, err = tx.ExecContext(r.Context(), `UPDATE agreement_reports SET scope_confirmed=$4,conditions_confirmed=$5,evidence_confirmed=$6,actual_costs_confirmed=$7,auditor_report_reference=NULLIF($8,''),counterparty_confirmed=FALSE,comment=NULLIF($9,''),updated_by=$10,updated_at=now() WHERE agreement_id=$1 AND report_year=$2 AND period_type=$3`, id, year, period, req.ScopeConfirmed, req.ConditionsConfirmed, req.EvidenceConfirmed, req.ActualCostsConfirmed, req.AuditorReportReference, req.Comment, u.ID)
 		if err != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения подтверждений")
 			return
@@ -424,7 +446,7 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 			middleware.WriteError(w, 500, "ошибка повторной проверки отчёта")
 			return
 		}
-		manualOK := check.ScopeConfirmed && check.ConditionsConfirmed && check.EvidenceConfirmed && (period == "plan" || check.CounterpartyConfirmed)
+		manualOK := check.ScopeConfirmed && check.ConditionsConfirmed && check.EvidenceConfirmed && (!check.UsesActualCosts || (check.ActualCostsConfirmed && check.AuditorReportReference != "")) && (period == "plan" || check.CounterpartyConfirmed)
 		if len(check.Missing) > 0 || !manualOK {
 			middleware.WriteJSON(w, 422, map[string]interface{}{"error": "переход запрещён: комплектность или юридические подтверждения больше не действуют", "workflow": check})
 			return
@@ -439,7 +461,7 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 	case "approved":
 		stamp += ",approved_by=$3,approved_at=now()"
 	case "draft":
-		stamp += ",scope_confirmed=FALSE,conditions_confirmed=FALSE,evidence_confirmed=FALSE,counterparty_confirmed=FALSE,ready_by=NULL,ready_at=NULL,verified_by=NULL,verified_at=NULL,approved_by=NULL,approved_at=NULL"
+		stamp += ",scope_confirmed=FALSE,conditions_confirmed=FALSE,evidence_confirmed=FALSE,actual_costs_confirmed=FALSE,auditor_report_reference=NULL,counterparty_confirmed=FALSE,ready_by=NULL,ready_at=NULL,verified_by=NULL,verified_at=NULL,approved_by=NULL,approved_at=NULL"
 	}
 	query := `UPDATE agreement_reports SET status=$1,comment=NULLIF($2,''),updated_by=$3,` + stamp + ` WHERE agreement_id=$4 AND report_year=$5 AND period_type=$6`
 	if _, err = tx.ExecContext(r.Context(), query, req.Status, req.Comment, u.ID, id, year, period); err != nil {

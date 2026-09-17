@@ -28,11 +28,16 @@ type reportEntryRow struct {
 	CategoryCode          string
 	Audience              string
 	AmountRub             money.Amount
+	FormulaAmountRub      money.Amount
+	CostMethod            string
 	Payload               []byte
 	AgreementNumber       string
 	AgreementKind         string
 	AgreementStatus       string
 	RegionalAuthorityName string
+	LegalEntityGroupID    string
+	LegalEntityGroup      string
+	InteractionAgreement  string
 }
 
 // «Сформировать годовой план активностей» / «отчёт по реализованным
@@ -54,16 +59,22 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
-	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.payload,eligibility.eligible,
-		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,''),COALESCE(ra.name,'')
+	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.formula_amount_rub,e.cost_method,e.payload,eligibility.eligible,
+		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,''),COALESCE(ra.name,''),COALESCE(g.id::text,''),COALESCE(g.name,''),
+		CASE WHEN g.id IS NULL THEN '' ELSE concat('от ',to_char(g.interaction_agreement_date,'DD.MM.YYYY'),' № ',g.interaction_agreement_number) END
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id
 		LEFT JOIN agreements a ON a.id=e.agreement_id
 		LEFT JOIN regional_authorities ra ON ra.id=a.regional_authority_id
+		LEFT JOIN legal_entity_groups g ON g.id=a.legal_entity_group_id
 		WHERE e.period_type = $1 AND e.report_year = $2`
 	args := []interface{}{periodType, year}
+	if company := itCompanyScope(u); company != "" {
+		args = append(args, company)
+		query += fmt.Sprintf(" AND e.it_company_id::text=$%d", len(args))
+	}
 	if categoryFilter != "" {
-		query += ` AND e.category_code = $3`
 		args = append(args, categoryFilter)
+		query += fmt.Sprintf(" AND e.category_code=$%d", len(args))
 	}
 	if scope := partnerScope(u, q.Get("partner_id")); scope != "" {
 		args = append(args, scope)
@@ -95,8 +106,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	var payloadBytes int
 	for rows.Next() {
 		var row reportEntryRow
-		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.Payload, &row.Eligible,
-			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus, &row.RegionalAuthorityName); err != nil {
+		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.FormulaAmountRub, &row.CostMethod, &row.Payload, &row.Eligible,
+			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus, &row.RegionalAuthorityName, &row.LegalEntityGroupID, &row.LegalEntityGroup, &row.InteractionAgreement); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -149,7 +160,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	audiences := map[string]string{"vuz": "Вуз", "kolledj": "СПО", "school": "Школа"}
 
 	wb := xlsx.New()
-	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Категория активности", "Аудитория", "Расчётная сумма, руб.", "Параметры", "Статус отчёта"}
+	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Группа лиц", "Договор о взаимодействии", "Категория активности", "Аудитория", "Метод стоимости", "Сумма по методике, руб.", "Сумма в отчёте, руб.", "Параметры", "Статус отчёта"}
 	status := func(d reportEntryRow) string {
 		return "Утверждено"
 	}
@@ -162,7 +173,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
-		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		costMethod := map[string]string{"average": "Средние значения", "actual": "Фактические затраты"}[d.CostMethod]
+		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 		var sumErr error
 		total, sumErr = money.Add(total, d.AmountRub)
 		if sumErr != nil {
@@ -170,8 +182,48 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			return
 		}
 	}
-	consolidated = append(consolidated, []interface{}{"ИТОГО (только утверждённые данные)", "", "", "", "", "", total, "", "Утверждено"})
+	consolidated = append(consolidated, []interface{}{"ИТОГО (только утверждённые данные)", "", "", "", "", "", "", "", "", "", total, "", "Утверждено"})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
+	groupIDs := map[string]bool{}
+	for _, row := range data {
+		if row.LegalEntityGroupID != "" {
+			groupIDs[row.LegalEntityGroupID] = true
+		}
+	}
+	if len(groupIDs) > 0 {
+		groupRows := [][]interface{}{}
+		for groupID := range groupIDs {
+			rows, groupErr := h.DB.QueryContext(r.Context(), `SELECT g.name,g.interaction_agreement_number,g.interaction_agreement_date::text,
+				g.authorized_entity_name,g.authorized_entity_inn,g.authorized_entity_ogrn,
+				m.name,m.inn,m.ogrn,m.is_it_organization,COALESCE(m.target_amount_rub::text,'')
+				FROM legal_entity_groups g JOIN legal_entity_group_members m ON m.group_id=g.id
+				WHERE g.id::text=$1 ORDER BY m.is_it_organization DESC,m.name,m.id`, groupID)
+			if groupErr != nil {
+				middleware.WriteError(w, 500, "ошибка состава группы юридических лиц")
+				return
+			}
+			for rows.Next() {
+				var groupName, agreementNumber, agreementDate, authorizedName, authorizedINN, authorizedOGRN string
+				var memberName, memberINN, memberOGRN, targetAmount string
+				var isITOrganization bool
+				if groupErr = rows.Scan(&groupName, &agreementNumber, &agreementDate, &authorizedName, &authorizedINN, &authorizedOGRN,
+					&memberName, &memberINN, &memberOGRN, &isITOrganization, &targetAmount); groupErr != nil {
+					rows.Close()
+					middleware.WriteError(w, 500, "ошибка состава группы юридических лиц")
+					return
+				}
+				groupRows = append(groupRows, []interface{}{groupName, agreementNumber, agreementDate, authorizedName, authorizedINN, authorizedOGRN,
+					memberName, memberINN, memberOGRN, map[bool]string{true: "ИТ-организация", false: "Иное юридическое лицо"}[isITOrganization], targetAmount})
+			}
+			groupErr = rows.Err()
+			rows.Close()
+			if groupErr != nil {
+				middleware.WriteError(w, 500, "ошибка состава группы юридических лиц")
+				return
+			}
+		}
+		wb.AddSheet("Группа лиц", []string{"Группа", "Номер договора", "Дата договора", "Уполномоченное лицо", "ИНН уполномоченного", "ОГРН уполномоченного", "Участник", "ИНН участника", "ОГРН участника", "Тип участника", "Целевой объём, руб."}, groupRows)
+	}
 	if q.Get("format") == "docx" {
 		docRows := [][]string{}
 		for _, row := range consolidated {
@@ -241,7 +293,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if _, ok := byPartner[key]; !ok {
 			order = append(order, key)
 		}
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, categoryNames[d.CategoryCode], audiences[d.Audience], d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		costMethod := map[string]string{"average": "Средние значения", "actual": "Фактические затраты"}[d.CostMethod]
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
 	}
 	for _, key := range order {
 		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])

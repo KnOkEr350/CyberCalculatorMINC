@@ -97,8 +97,11 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := db.QueryRow(`SELECT target_amount_rub FROM budget_targets WHERE report_year=2026 AND owner_user_id=$1`, user).Scan(&amount); e != nil || amount != 12345 {
 		t.Fatal("legacy budget target lost", e)
 	}
-	if e := db.QueryRow(`SELECT count(*) FROM education_directory`).Scan(&count); e != nil || count != 1257 {
-		t.Fatalf("expected 1257 source records, got %d: %v", count, e)
+	if e := db.QueryRow(`SELECT count(*) FROM education_directory WHERE listed_in_mincifry_order_27`).Scan(&count); e != nil || count != 642 {
+		t.Fatalf("expected 642 organizations from Minцифры Order 27, got %d: %v", count, e)
+	}
+	if e := db.QueryRow(`SELECT count(*) FROM education_directory WHERE source LIKE 'Мониторинг ВО 2025%'`).Scan(&count); e != nil || count != 1257 {
+		t.Fatalf("expected all 1257 monitoring records to be preserved, got %d: %v", count, e)
 	}
 	var agreement, agreementStatus string
 	if e := db.QueryRow(`SELECT e.agreement_id,a.status FROM entries e JOIN agreements a ON a.id=e.agreement_id WHERE e.id=$1`, entry).Scan(&agreement, &agreementStatus); e != nil {

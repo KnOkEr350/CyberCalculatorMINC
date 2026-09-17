@@ -18,7 +18,7 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 	if !ok {
 		return
 	}
-	rows, err := h.DB.QueryContext(r.Context(), `SELECT p.id,p.name,p.partner_kind,COALESCE(p.directory_id::text,''),
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT p.id,COALESCE(p.it_company_id::text,''),p.name,p.partner_kind,COALESCE(p.directory_id::text,''),
 		COALESCE(latest.number,''),latest.signed_on,p.other_agreement,p.created_at,
 		(SELECT count(*) FROM agreement_partners ap WHERE ap.partner_id=p.id),
 		(SELECT count(*) FROM agreement_partners ap JOIN agreements a ON a.id=ap.agreement_id
@@ -31,7 +31,7 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		 SELECT a.number,a.signed_on FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id
 		 WHERE ap.partner_id=p.id ORDER BY (a.status='active') DESC,a.valid_from DESC,a.created_at DESC LIMIT 1
 		) latest ON true
-		WHERE ($1='' OR p.id::text=$1) ORDER BY p.name,p.id`+page, partnerScope(u, ""))
+		WHERE ($1='' OR p.id::text=$1) AND ($2='' OR p.it_company_id::text=$2) ORDER BY p.name,p.id`+page, partnerScope(u, ""), itCompanyScope(u))
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
@@ -43,7 +43,7 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		var p models.Partner
 		var agreementDate sql.NullTime
 		var otherAgreement sql.NullString
-		if err := rows.Scan(&p.ID, &p.Name, &p.PartnerKind, &p.DirectoryID, &p.AgreementNumber,
+		if err := rows.Scan(&p.ID, &p.ITCompanyID, &p.Name, &p.PartnerKind, &p.DirectoryID, &p.AgreementNumber,
 			&agreementDate, &otherAgreement, &p.CreatedAt, &p.AgreementsCount, &p.ActiveAgreementsCount,
 			&p.VerificationStatus, &p.INN, &p.OGRN, &p.LicenseNumber, &p.LicenseStatus, &p.InstitutionStatus); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
@@ -73,6 +73,10 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		middleware.WriteError(w, 403, "партнёров добавляет сотрудник Киберпротекта")
 		return
 	}
+	companyID, ok := requireITCompanyForWrite(w, u)
+	if !ok {
+		return
+	}
 	var req createPartnerRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
@@ -95,6 +99,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
+	agreement.ITCompanyID = companyID
 
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -107,6 +112,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 	err = tx.QueryRowContext(r.Context(), `SELECT name,partner_kind,
 		(verification_status='verified' AND license_status='active' AND institution_status='active'
 		 AND education_matches_order(partner_kind,program_codes)
+		 AND (partner_kind<>'vuz' OR listed_in_mincifry_order_27)
 		 AND verified_at>=now()-interval '35 days'
 		 AND registry_updated_at BETWEEN CURRENT_DATE-35 AND CURRENT_DATE)
 		FROM education_directory WHERE id::text=$1 FOR SHARE`, req.DirectoryID).
@@ -120,12 +126,12 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	if !selectable {
-		middleware.WriteError(w, 409, "проверьте действующую лицензию и актуальность сведений; у вуза должно быть направление из приказа Минцифры № 27")
+		middleware.WriteError(w, 409, "проверьте действующую лицензию и актуальность сведений; вуз должен входить в перечень и иметь направление из приказа Минцифры № 27")
 		return
 	}
 	var partnerID string
-	err = tx.QueryRowContext(r.Context(), `INSERT INTO partners(name,partner_kind,directory_id,agreement_date,agreement_number)
-		VALUES($1,$2,$3,$4,$5) RETURNING id`, name, partnerKind, req.DirectoryID, agreement.SignedOn, agreement.Request.Number).Scan(&partnerID)
+	err = tx.QueryRowContext(r.Context(), `INSERT INTO partners(name,partner_kind,directory_id,agreement_date,agreement_number,it_company_id)
+		VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, name, partnerKind, req.DirectoryID, agreement.SignedOn, agreement.Request.Number, companyID).Scan(&partnerID)
 	if err != nil {
 		middleware.WriteError(w, http.StatusConflict, "организация уже добавлена в партнёры")
 		return
