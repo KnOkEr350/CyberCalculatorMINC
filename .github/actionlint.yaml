@@ -1,3 +1,4 @@
 self-hosted-runner:
   labels:
     - cybercalculator-prod
+    - dependency-track

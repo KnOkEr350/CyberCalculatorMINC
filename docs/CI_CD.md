@@ -11,7 +11,8 @@ request, вручную и по понедельникам для планово
 | `dynamic` | fuzzing XLSX-парсера и воспроизводимые CPU/memory-профили benchmark |
 | `codeql` | data-flow/SAST анализ Go и JavaScript набором `security-extended` |
 | `semgrep` | блокирующие security-правила Semgrep для Go, JavaScript, конфигураций и OWASP Top 10 |
-| `supply-chain` | Trivy (включая секреты), `govulncheck`, CycloneDX SBOM и Dependency-Track |
+| `supply-chain` | Trivy (включая секреты), `govulncheck` и генерация CycloneDX SBOM |
+| `dependency-track` | загрузка готового SBOM на отдельном self-hosted runner рядом с Dependency-Track |
 | `container-dast` | сборка изолированного Compose-стенда, сканирование всех образов Trivy и активный DAST через OWASP ZAP |
 | `deploy` | безопасное обновление Debian VM и проверка SHA реально запущенной версии |
 
@@ -51,14 +52,21 @@ Dependency-Track для непрерывного анализа.
 | Тип | Имя | Значение |
 |---|---|---|
 | Repository variable | `DTRACK_HOSTNAME` | hostname сервера без `https://` |
-| Repository variable | `DTRACK_PROTOCOL` | необязательно: `https` по умолчанию |
-| Repository variable | `DTRACK_PORT` | необязательно: `443` по умолчанию |
+| Repository variable | `DTRACK_PROTOCOL` | необязательно: `http` по умолчанию |
+| Repository variable | `DTRACK_PORT` | необязательно: `8080` по умолчанию |
 | Repository secret | `DTRACK_API_KEY` | API-ключ команды с правами `BOM_UPLOAD` и `PROJECT_CREATION_UPLOAD` |
 
 Без этих двух значений SBOM всё равно создаётся и сохраняется как CI artifact,
 но upload в Dependency-Track явно помечается предупреждением.
 
-## Подготовка Debian VM
+Загрузка выполняется только для `main` после push, ручного запуска или запуска
+по расписанию. Зарегистрируйте на VM с Dependency-Track отдельный repository
+runner с label `dependency-track`. Если API опубликован на loopback-интерфейсе
+этой же VM, задайте `DTRACK_HOSTNAME=127.0.0.1`. Этому runner не нужен доступ к
+Docker: он скачивает созданный GitHub-hosted job артефакт и отправляет SBOM в
+локальный API. Не назначайте ему label `cybercalculator-prod`.
+
+## Подготовка production Debian VM
 
 На VM должны быть установлены Git, curl, jq, Docker Engine и Docker Compose plugin:
 
