@@ -5,13 +5,14 @@ request и вручную. Он состоит из трёх jobs:
 
 1. `quality` запускает форматирование, линтеры и проверки безопасности.
    Найденные проблемы блокируют production-деплой.
-2. `verify` на GitHub-hosted Ubuntu runner выполняет Go-тесты, собирает и
+2. `verify` на GitHub-hosted Ubuntu runner выполняет Go-тесты backend и отдельного
+   модуля публичных contract-тестов, собирает и
    запускает весь Docker Compose, проверяет frontend, nginx, PostgreSQL,
    миграции, вход, создание и редактирование факта, загрузку и скачивание
-   вложений. Ошибка этого job блокирует CD.
+   вложений, health-контракты и запуск worker. Ошибка этого job блокирует CD.
 3. `deploy` запускается только для `main`, только после успешного `verify` и
    выполняет `docker compose up` на Debian VM через self-hosted runner. После
-   пересоздания сервисов он перезапускает nginx, затем сверяет версию, которую
+   пересоздания сервисов сверяет readiness API и версию, которую
    отдаёт frontend, с SHA проверенного коммита.
 
 ## Подготовка Debian VM
@@ -111,7 +112,7 @@ production-запуском необходимо вернуть `APP_ENV=product
 в `main`. Последовательность будет такой:
 
 ```text
-push → quality (не блокирует) + verify → deploy на Debian VM
+push → quality + verify (параллельно) → deploy на Debian VM
 ```
 
 `actions/checkout` обновляет служебную копию в рабочем каталоге runner, обычно
@@ -135,3 +136,5 @@ curl http://127.0.0.1:8080/version.txt
 ```
 
 Последняя команда должна вернуть полный SHA коммита из успешного deploy-job.
+При ошибке deploy сценарий отката восстанавливает прежние `backend`, `worker`, `frontend`
+и `nginx`; миграции базы назад не откатываются.

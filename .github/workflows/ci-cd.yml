@@ -24,7 +24,9 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
 
       - name: Check Go formatting
         working-directory: backend
@@ -39,6 +41,10 @@ jobs:
 
       - name: Run go vet
         working-directory: backend
+        run: go vet ./...
+
+      - name: Vet public contract tests
+        working-directory: tests
         run: go vet ./...
 
       - name: Run staticcheck
@@ -82,10 +88,16 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: |
+            backend/go.sum
+            tests/go.sum
 
       - name: Run required Go tests
         working-directory: backend
+        run: go test ./...
+
+      - name: Run public contract tests
+        working-directory: tests
         run: go test ./...
 
       - name: Check frontend JavaScript syntax
@@ -132,6 +144,9 @@ jobs:
 
           curl --fail --silent --show-error "${base_url}/app.js" > /dev/null
           curl --fail --silent --show-error "${base_url}/style.css" > /dev/null
+          curl --fail --silent --show-error "${base_url}/api/live" | grep -q '"status":"ok"'
+          curl --fail --silent --show-error "${base_url}/api/ready" | grep -q '"status":"ok"'
+          docker compose ps --status running worker | grep -q worker
           served_version="$(curl --fail --silent --show-error "${base_url}/version.txt" | tr -d '\r\n')"
           [[ "$served_version" == "$APP_VERSION" ]] || {
             echo "Expected frontend $APP_VERSION, got $served_version"

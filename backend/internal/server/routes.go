@@ -18,15 +18,21 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 
 	authH := &handlers.AuthHandlers{DB: db, SessionTTL: time.Duration(cfg.SessionTTLh) * time.Hour, SecureCookie: cfg.CookieSecure, MFAKey: cfg.MFAKey, RequireMFA: cfg.Environment == "production"}
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/live", func(w http.ResponseWriter, _ *http.Request) {
+		middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	ready := func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		if db.PingContext(ctx) != nil {
+		if db == nil || db.PingContext(ctx) != nil {
 			middleware.WriteError(w, http.StatusServiceUnavailable, "база данных недоступна")
 			return
 		}
 		middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
+	}
+	mux.HandleFunc("GET /api/ready", ready)
+	// Compatibility endpoint for existing external monitoring.
+	mux.HandleFunc("GET /api/health", ready)
 	partnerH := &handlers.PartnerHandlers{DB: db}
 	itCompanyH := &handlers.ITCompanyHandlers{DB: db}
 	agreementH := &handlers.AgreementHandlers{DB: db}
