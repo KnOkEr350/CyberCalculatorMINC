@@ -30,7 +30,9 @@ type dashboardResponse struct {
 	EligibleFactTotalRub money.Amount        `json:"eligible_fact_total_rub"`
 	IncompleteEntries    int                 `json:"incomplete_entries"`
 	ReportYear           int                 `json:"report_year"`
+	GeneratedAt          time.Time           `json:"generated_at"`
 	TargetAmountRub      *money.Amount       `json:"target_amount_rub"` // "Общие затраты (3% от сэкономленных льгот)"
+	TargetConfirmedRub   *money.Amount       `json:"target_confirmed_fact_rub"`
 	PlanTotalRub         money.Amount        `json:"plan_total_rub"`
 	FactTotalRub         money.Amount        `json:"fact_total_rub"`
 	PlanCompletionPct    float64             `json:"plan_completion_pct"` // % реализации плана
@@ -51,7 +53,7 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		}
 	}
 
-	resp := dashboardResponse{ReportYear: year}
+	resp := dashboardResponse{ReportYear: year, GeneratedAt: time.Now().UTC()}
 	if year < 2000 || year > 2100 {
 		middleware.WriteError(w, 400, "некорректный год")
 		return
@@ -87,6 +89,15 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 	}
 	if targetErr == nil && isStaff(u) && scope == "" {
 		resp.TargetAmountRub = &target
+		var confirmed money.Amount
+		if err := h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(sum(e.amount_rub),0)
+			FROM entry_eligibility eligibility JOIN entries e ON e.id=eligibility.id
+			WHERE e.report_year=$1 AND e.it_company_id::text=$2
+			AND e.period_type='fact' AND eligibility.eligible`, year, companyScope).Scan(&confirmed); err != nil {
+			middleware.WriteError(w, 500, "ошибка расчёта подтверждённых расходов")
+			return
+		}
+		resp.TargetConfirmedRub = &confirmed
 	}
 
 	if err := h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2) AND ($3='' OR it_company_id::text=$3) AND ($4='' OR category_code=$4) AND ($5='' OR audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {

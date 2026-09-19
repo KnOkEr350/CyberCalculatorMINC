@@ -139,6 +139,26 @@ function fmtMoney(v) {
   );
 }
 
+function fmtReportDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
+
+function dashboardKPIIcon(kind) {
+  const icons = {
+    target: '<circle cx="12" cy="12" r="7.5"></circle><circle cx="12" cy="12" r="3.5"></circle><path d="M12 12 20 4m-3 0h3v3"></path>',
+    confirmed: '<path d="M7.5 11.5 10.5 14.5 17 8"></path><circle cx="12" cy="12" r="9"></circle>',
+    gap: '<path d="m3 6 5 5 4-4 7 7"></path><path d="M15 14h4v-4"></path>',
+    date: '<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4m8-4v4M3 10h18M7 14h2m3 0h2m3 0h1M7 17h2m3 0h2"></path>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[kind]}</svg>`;
+}
+
 function escapeHTML(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -472,11 +492,20 @@ async function renderDashboard(root) {
   };
 
   const planPct = clampPercent(d.plan_completion_pct);
-  const targetPct = d.target_amount_rub
-    ? clampPercent(
-        (Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 100,
-      )
+  const targetAmount = d.target_amount_rub == null
+    ? null
+    : Number(d.target_amount_rub);
+  const confirmedAmount = Number(
+    d.target_confirmed_fact_rub ?? d.eligible_fact_total_rub ?? 0,
+  );
+  const targetGap = targetAmount == null
+    ? null
+    : Math.max(targetAmount - confirmedAmount, 0);
+  const targetReached = targetAmount != null && targetGap === 0;
+  const targetCompletionPct = targetAmount
+    ? Math.round((confirmedAmount / targetAmount) * 10000) / 100
     : 0;
+  const targetPct = clampPercent(targetCompletionPct);
   const selectedPartner = state.partners.find(
     (partner) => partner.id === state.partnerID,
   );
@@ -500,18 +529,42 @@ async function renderDashboard(root) {
         </div>
       </div>
     </div>
-    <div class="grid cols-3 dashboard-kpis">
-      <div class="stat"><div class="label">План, всего</div><div class="value">${fmtMoney(d.plan_total_rub)}</div></div>
-      <div class="stat"><div class="label">Факт, всего</div><div class="value">${fmtMoney(d.fact_total_rub)}</div></div>
-      <div class="stat"><div class="label">Реализация плана</div><div class="value">${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</div></div>
-      <div class="stat"><div class="label">Утверждённый план</div><div class="value">${fmtMoney(d.eligible_plan_total_rub)}</div></div>
-      <div class="stat"><div class="label">Утверждённый факт</div><div class="value">${fmtMoney(d.eligible_fact_total_rub)}</div></div>
-      <div class="stat ${Number(d.incomplete_entries || 0) ? "warning-stat" : ""}"><div class="label">Не учтено записей</div><div class="value">${Number(d.incomplete_entries || 0).toLocaleString("ru-RU")}</div></div>
+    <div class="dashboard-primary-kpis" aria-label="Ключевые показатели">
+      <article class="dashboard-kpi target">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
+        <div class="dashboard-kpi-label">Целевой показатель</div>
+        <div class="dashboard-kpi-value">${targetAmount == null ? "Не задан" : fmtMoney(targetAmount)}</div>
+        <div class="dashboard-kpi-meta">Минимальный объём — 3% от экономии</div>
+      </article>
+      <article class="dashboard-kpi confirmed">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
+        <div class="dashboard-kpi-label">Подтверждённые расходы</div>
+        <div class="dashboard-kpi-value">${fmtMoney(confirmedAmount)}</div>
+        <div class="dashboard-kpi-meta">Учтены только прошедшие проверку записи</div>
+      </article>
+      <article class="dashboard-kpi gap ${targetReached ? "reached" : ""}">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon(targetReached ? "confirmed" : "gap")}</div>
+        <div class="dashboard-kpi-label">До выполнения цели</div>
+        <div class="dashboard-kpi-value">${targetGap == null ? "—" : fmtMoney(targetGap)}</div>
+        <div class="dashboard-kpi-meta">${targetAmount == null ? "Сначала задайте целевой показатель" : targetReached ? "Целевой показатель выполнен" : `Выполнено ${targetCompletionPct.toLocaleString("ru-RU")}% целевого показателя`}</div>
+      </article>
+      <article class="dashboard-kpi date">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("date")}</div>
+        <div class="dashboard-kpi-label">Дата формирования отчёта</div>
+        <div class="dashboard-kpi-value">${escapeHTML(fmtReportDate(d.generated_at))}</div>
+        <div class="dashboard-kpi-meta">Актуальный срез за ${Number(d.report_year || state.year)} год</div>
+      </article>
+    </div>
+    <div class="dashboard-summary-strip" aria-label="Дополнительные показатели">
+      <div><span>План, всего</span><strong>${fmtMoney(d.plan_total_rub)}</strong></div>
+      <div><span>Факт, всего</span><strong>${fmtMoney(d.fact_total_rub)}</strong></div>
+      <div><span>Утверждённый план</span><strong>${fmtMoney(d.eligible_plan_total_rub)}</strong></div>
+      <div class="${Number(d.incomplete_entries || 0) ? "has-warning" : ""}"><span>Не учтено записей</span><strong>${Number(d.incomplete_entries || 0).toLocaleString("ru-RU")}</strong></div>
     </div>
     <div class="progress-card dashboard-progress">
       <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
       <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
-      ${d.target_amount_rub ? `<div class="progress-header target"><span>Выполнение минимального объёма 3% · цель ${fmtMoney(d.target_amount_rub)}</span><strong>${Math.round((Number(d.fact_total_rub) / Number(d.target_amount_rub)) * 10000) / 100}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
+      ${targetAmount ? `<div class="progress-header target"><span>Подтверждённые расходы к минимальному объёму 3%</span><strong>${targetCompletionPct.toLocaleString("ru-RU")}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
