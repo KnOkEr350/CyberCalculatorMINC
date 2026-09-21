@@ -59,6 +59,7 @@ func TestComposeWorkspace(t *testing.T) {
 func testComposeAttachments(t *testing.T, admin *smokeClient, partner smokePartner) {
 	payload := map[string]any{
 		"org_name": partner.ID, "course_name": "CI course", "teacher_full_name": "CI teacher",
+		"education_level": "bachelor", "semester": 1,
 		"employment_form": "ГПХ", "academic_hours": 2,
 	}
 	created := decodeSmoke[struct{ ID string }](t, admin.json(t, "POST", "/api/entries", map[string]any{

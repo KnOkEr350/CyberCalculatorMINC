@@ -2,6 +2,7 @@ package calculators
 
 import (
 	"cybercalc/internal/models"
+	teachingdomain "cybercalc/internal/modules/teaching/domain"
 	"fmt"
 )
 
@@ -35,6 +36,8 @@ func (teachersCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование ОО", Type: "select", Required: true},
 		{Key: "course_name", Label: "Наименование курса", Type: "text", Required: true},
+		{Key: "education_level", Label: "Уровень образовательной программы", Type: "select", Required: true, Options: []string{"bachelor", "master", "specialist", "spo"}},
+		{Key: "semester", Label: "Семестр", Type: "number", Required: true, Integer: true, Minimum: 1, Maximum: 13},
 		{Key: "training_direction", Label: "Направление подготовки", Type: "text"},
 		{Key: "institute", Label: "Институт / школа", Type: "text"},
 		{Key: "faculty", Label: "Факультет", Type: "text"},
@@ -47,4 +50,16 @@ func (teachersCalc) Fields() []FieldSpec {
 		{Key: "class_schedule", Label: "Расписание занятий", Type: "text", MaxLength: 2000},
 		{Key: "work_schedule", Label: "График работы", Type: "text", MaxLength: 2000},
 	}
+}
+
+func (teachersCalc) Validate(payload map[string]interface{}) error {
+	level, err := str(payload, "education_level")
+	if err != nil {
+		return err
+	}
+	semester, err := num(payload, "semester")
+	if err != nil {
+		return err
+	}
+	return teachingdomain.ValidateSemester(teachingdomain.EducationLevel(level), int(semester))
 }

@@ -118,6 +118,48 @@ func TestRejectsInvalidNumbers(t *testing.T) {
 	}
 }
 
+func TestTeacherPayloadEnforcesSemesterMatrix(t *testing.T) {
+	calc, err := Get("teachers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := map[string]interface{}{
+		"org_name":          "partner-id",
+		"course_name":       "Информационная безопасность",
+		"teacher_full_name": "Петров Пётр Петрович",
+		"employment_form":   "ГПХ",
+		"academic_hours":    10.0,
+	}
+	tests := []struct {
+		level     string
+		semester  float64
+		wantError bool
+	}{
+		{level: "bachelor", semester: 1},
+		{level: "bachelor", semester: 8},
+		{level: "bachelor", semester: 9, wantError: true},
+		{level: "master", semester: 8, wantError: true},
+		{level: "master", semester: 9},
+		{level: "master", semester: 12},
+		{level: "specialist", semester: 13},
+		{level: "specialist", semester: 14, wantError: true},
+		{level: "spo", semester: 10},
+		{level: "spo", semester: 11, wantError: true},
+	}
+	for _, test := range tests {
+		payload := make(map[string]interface{}, len(base)+2)
+		for key, value := range base {
+			payload[key] = value
+		}
+		payload["education_level"] = test.level
+		payload["semester"] = test.semester
+		err := ValidatePayload(calc, payload)
+		if (err != nil) != test.wantError {
+			t.Fatalf("level=%s semester=%v error=%v, wantError=%v", test.level, test.semester, err, test.wantError)
+		}
+	}
+}
+
 func TestValidatePayloadRequiresTextAndValidSelect(t *testing.T) {
 	calc, err := Get("minc_decision")
 	if err != nil {

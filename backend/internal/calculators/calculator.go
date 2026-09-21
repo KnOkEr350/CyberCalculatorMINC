@@ -21,6 +21,10 @@ type Calculator interface {
 	Fields() []FieldSpec
 }
 
+type payloadValidator interface {
+	Validate(map[string]interface{}) error
+}
+
 type FieldSpec struct {
 	Key       string   `json:"key"`
 	Label     string   `json:"label"`
@@ -29,6 +33,8 @@ type FieldSpec struct {
 	Options   []string `json:"options,omitempty"`
 	Integer   bool     `json:"integer,omitempty"`
 	MaxLength int      `json:"max_length,omitempty"`
+	Minimum   float64  `json:"minimum,omitempty"`
+	Maximum   float64  `json:"maximum,omitempty"`
 }
 
 const (
@@ -159,6 +165,12 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 			if field.Integer && math.Trunc(number) != number {
 				return fmt.Errorf("поле %q должно быть целым числом", field.Label)
 			}
+			if field.Minimum != 0 && number < field.Minimum {
+				return fmt.Errorf("поле %q должно быть не меньше %v", field.Label, field.Minimum)
+			}
+			if field.Maximum != 0 && number > field.Maximum {
+				return fmt.Errorf("поле %q должно быть не больше %v", field.Label, field.Maximum)
+			}
 		case "text", "select":
 			s, ok := value.(string)
 			if !ok {
@@ -196,6 +208,9 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 		default:
 			return fmt.Errorf("поле %q имеет неизвестный тип %q", field.Key, field.Type)
 		}
+	}
+	if validator, ok := c.(payloadValidator); ok {
+		return validator.Validate(payload)
 	}
 	return nil
 }

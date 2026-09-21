@@ -60,6 +60,9 @@ const VALUE_LABELS = {
   oop: "ООП",
   vo: "Высшее образование (ВО)",
   spo: "Среднее профессиональное образование (СПО)",
+  bachelor: "Бакалавриат",
+  master: "Магистратура",
+  specialist: "Специалитет",
   development: "Разработка",
   update: "Актуализация",
   expertise: "Экспертиза",
@@ -716,6 +719,9 @@ function fieldInput(f, value, audience) {
                   oop: "ООП",
                   vo: "Высшее образование",
                   spo: "Среднее профессиональное",
+                  bachelor: "Бакалавриат",
+                  master: "Магистратура",
+                  specialist: "Специалитет",
                   development: "Разработка",
                   update: "Актуализация",
                   expertise: "Экспертиза",
@@ -732,7 +738,7 @@ function fieldInput(f, value, audience) {
     </select>`;
   }
   if (f.type === "number") {
-    return `<input type="number" min="0" max="1000000000000" step="${f.integer ? "1" : "any"}" data-key="${escapeHTML(
+    return `<input type="number" min="${f.minimum ?? 0}" max="${f.maximum ?? 1000000000000}" step="${f.integer ? "1" : "any"}" data-key="${escapeHTML(
       f.key,
     )}" data-kind="number" value="${escapeHTML(val)}" ${f.required ? "required" : ""}>`;
   }
@@ -779,6 +785,10 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
         const number = Number(raw);
         if (!Number.isFinite(number)) message = "Введите корректное число";
         else if (number < 0) message = "Значение не может быть отрицательным";
+        else if (field.minimum !== undefined && number < field.minimum)
+          message = `Значение должно быть не меньше ${field.minimum}`;
+        else if (field.maximum !== undefined && number > field.maximum)
+          message = `Значение должно быть не больше ${field.maximum}`;
         else if (number > 1_000_000_000_000)
           message = "Значение слишком велико";
         else if (field.integer && !Number.isInteger(number))
@@ -808,6 +818,26 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
       "academic_hours",
       "Количество часов должно быть больше нуля",
     );
+  if (category.code === "teachers") {
+    const ranges = {
+      bachelor: [1, 8],
+      master: [9, 12],
+      specialist: [1, 13],
+      spo: [1, 10],
+    };
+    const range = ranges[payload.education_level];
+    const semester = Number(payload.semester);
+    if (range && (semester < range[0] || semester > range[1])) {
+      const input = fieldsBox.querySelector('[data-key="semester"]');
+      if (input) {
+        setFieldError(
+          input,
+          `Для выбранного уровня допустимы семестры ${range[0]}–${range[1]}`,
+        );
+        firstInvalid ||= input;
+      }
+    }
+  }
   if (
     category.code === "internship" ||
     category.code === "employment_practice"
@@ -1025,6 +1055,26 @@ async function openEntryModal(entry, readOnly = false) {
       if (add) row.appendChild(add);
     }
   });
+
+  if (cat.code === "teachers") {
+    const level = fieldsBox.querySelector('[data-key="education_level"]');
+    const semester = fieldsBox.querySelector('[data-key="semester"]');
+    const semesterRanges = {
+      bachelor: [1, 8],
+      master: [9, 12],
+      specialist: [1, 13],
+      spo: [1, 10],
+    };
+    const syncSemesterRange = () => {
+      const range = semesterRanges[level.value] || [1, 13];
+      semester.min = String(range[0]);
+      semester.max = String(range[1]);
+      semester.placeholder = `${range[0]}–${range[1]}`;
+      semester.title = `Допустимые семестры: ${range[0]}–${range[1]}`;
+    };
+    level.addEventListener("change", syncSemesterRange);
+    syncSemesterRange();
+  }
 
   const closeModal = () => {
     if (busy) return;

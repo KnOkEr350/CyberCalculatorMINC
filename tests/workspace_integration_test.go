@@ -277,7 +277,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(educationAdminClient, "POST", "/entries", map[string]interface{}{
 		"partner_id": p1, "agreement_id": agreement1, "category_code": "teachers", "period_type": "plan", "report_year": 2026, "audience": "vuz",
-		"payload": map[string]interface{}{"org_name": p1, "course_name": "Недопустимый план", "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 1},
+		"payload": map[string]interface{}{"org_name": p1, "course_name": "Недопустимый план", "education_level": "bachelor", "semester": 1, "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 1},
 	}, 403)
 	educationAdminEntries := call(educationAdminClient, "GET", "/entries?report_year=2026", nil, 200)
 	if bytes.Contains(educationAdminEntries, []byte(schoolPartner)) {
@@ -295,7 +295,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p2, "full_name": "Иванов Иван Иванович"}, 403)
 	call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p1, "full_name": "123"}, 400)
 	teacher := func(p string) map[string]interface{} {
-		return map[string]interface{}{"org_name": p, "course_name": "ИТ", "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 2}
+		return map[string]interface{}{"org_name": p, "course_name": "ИТ", "education_level": "bachelor", "semester": 1, "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 2}
 	}
 	create := func(client *http.Client, p, agreementID, category, period string, payload map[string]interface{}, want int) []byte {
 		return call(client, "POST", "/entries", map[string]interface{}{"partner_id": p, "agreement_id": agreementID, "category_code": category, "period_type": period, "report_year": 2026, "audience": "vuz", "payload": payload}, want)
@@ -306,6 +306,9 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if money(first["amount_rub"]) != "8280.00" {
 		t.Fatal("wrong teacher formula")
 	}
+	invalidSemester := teacher(p1)
+	invalidSemester["semester"] = 9
+	create(companyClient, p1, agreement1, "teachers", "plan", invalidSemester, 400)
 	create(companyClient, p1, agreement2, "teachers", "plan", teacher(p1), 400)
 	create(companyClient, p1, groupID, "teachers", "plan", teacher(p1), 400)
 	foreign := object(create(admin, p2, agreement2, "teachers", "fact", teacher(p2), 201))["id"].(string)
@@ -411,7 +414,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "GET", "/attachments/"+attachID+"/download", nil, 410)
 	// Excel: preview doesn't insert; commit recalculates; same batch cannot duplicate.
 	wb := xlsx.New()
-	wb.AddSheet("Данные", []string{"course_name", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"Импорт", "Петров Пётр", "ГПХ", 3}})
+	wb.AddSheet("Данные", []string{"course_name", "education_level", "semester", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"Импорт", "bachelor", 1, "Петров Пётр", "ГПХ", 3}})
 	book, _ := wb.Bytes()
 	importPath := "/entries/import?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&category_code=teachers&period_type=fact&report_year=2026"
 	upload(partnerClient, importPath, map[string][]byte{"data.xlsx": book}, 403)
@@ -426,7 +429,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	upload(companyClient, importPath+"&commit=1", map[string][]byte{"data.xlsx": book}, 409)
 	before := call(partnerClient, "GET", "/entries?category_code=teachers&period_type=fact", nil, 200)
 	bad := xlsx.New()
-	bad.AddSheet("Данные", []string{"course_name", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"ok", "Петров Пётр", "ГПХ", 3}, {"bad", "Петров Пётр", "ГПХ", -1}})
+	bad.AddSheet("Данные", []string{"course_name", "education_level", "semester", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"ok", "bachelor", 1, "Петров Пётр", "ГПХ", 3}, {"bad", "bachelor", 1, "Петров Пётр", "ГПХ", -1}})
 	badBook, _ := bad.Bytes()
 	badResult := object(upload(companyClient, importPath+"&commit=1", map[string][]byte{"bad.xlsx": badBook}, 200))
 	if len(badResult["errors"].([]interface{})) != 1 {
