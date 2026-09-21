@@ -41,15 +41,15 @@ const AGREEMENT_KIND_LABELS = {
   roiv: "С РОИВ",
 };
 const CHART_COLORS = [
-  "#1a79ff",
-  "#00a6a6",
-  "#6757d9",
-  "#f2a51a",
-  "#e85c8b",
-  "#36a269",
-  "#489dff",
-  "#805ad5",
-  "#de6f3c",
+  "#397ec4",
+  "#43a98b",
+  "#6c75c9",
+  "#dda33f",
+  "#c86686",
+  "#71a15d",
+  "#5c9fd6",
+  "#8a69b4",
+  "#c97c4f",
 ];
 
 const VALUE_LABELS = {
@@ -179,9 +179,20 @@ function validYear(value) {
 
 function brandMarkup(inverse = false) {
   return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
-    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 36 40" focusable="false"><rect class="calculator-body" x="3" y="1" width="30" height="38" rx="6"/><rect class="calculator-screen" x="8" y="6" width="20" height="8" rx="2"/><circle cx="10" cy="21" r="2"/><circle cx="18" cy="21" r="2"/><circle cx="26" cy="21" r="2"/><circle cx="10" cy="30" r="2"/><circle cx="18" cy="30" r="2"/><rect x="24" y="28" width="4" height="4" rx="1.2"/></svg></span>
-    <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong><small>Калькулятор затрат</small></span>
+    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
+    <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong><small>Корпоративные сервисы</small></span>
   </div>`;
+}
+
+function navigationIcon(kind) {
+  const icons = {
+    dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect>',
+    entries: '<path d="M9 5h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"></path><path d="M9 3h6v4H9zM9 12h8M9 16h8"></path>',
+    partners: '<path d="M3 21h18M5 21V8l7-4 7 4v13M9 12h2m2 0h2m-6 4h2m2 0h2"></path>',
+    companies: '<path d="M4 21V7h9v14M13 11h7v10M7 10h2m-2 4h2m-2 4h2m9-3h-2m2 3h-2"></path>',
+    admin: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[kind]}</svg>`;
 }
 
 function initials(name) {
@@ -273,6 +284,7 @@ function renderLogin() {
   const wrap = el(`<div class="auth-shell">
     <aside class="auth-brand-panel">
       ${brandMarkup(true)}
+      <div class="auth-message"><span>Корпоративный сервис</span><h2>Калькулятор затрат</h2><p>Планирование, согласование и контроль исполнения мероприятий в едином защищённом пространстве.</p></div>
       <div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
     </aside>
     <main class="auth-form-panel">
@@ -331,33 +343,70 @@ function renderLayout() {
     if (canViewITCompanies()) allowedViews.add("it-companies");
   }
   if (!allowedViews.has(state.view)) state.view = "dashboard";
-  const wrap = el(`<div>
+  const organizationName = state.me.organization_name || state.me.entity_name || profileLabel;
+  const wrap = el(`<div class="app-shell">
     <a class="skip-link" href="#content">К содержанию</a>
-    <div class="topbar">
-      ${brandMarkup()}
-      <nav>
-        <button data-view="dashboard">Сводка</button>
-        <button data-view="entries">${isEducationReviewer() ? "Рассмотрение" : "План / Факт"}</button>
-        ${!isManager && canReviewEducationDirectory() ? '<button data-view="partners">Учебные заведения</button>' : ""}
-        ${!isManager && canViewITCompanies() ? '<button data-view="it-companies">ИТ-компании</button>' : ""}
-        ${isManager ? '<button data-view="admin">Управление <span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span></button>' : ""}
-      </nav>
+    <header class="topbar">
+      <div class="topbar-brand">${brandMarkup(true)}</div>
+      <button type="button" class="topbar-menu" id="sidebar-toggle" aria-label="Свернуть меню" aria-controls="primary-sidebar" aria-expanded="true"><span></span><span></span><span></span></button>
+      <div class="product-context"><strong>Калькулятор затрат</strong><span>Планирование и контроль исполнения</span></div>
       <div class="who">
-        <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
         <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
-        <button id="change-password" title="Изменить пароль">Сменить пароль</button>
-        ${state.me.mfa_available && !state.me.mfa_enabled ? '<button id="setup-mfa">Настроить 2FA</button>' : ''}
-        <button id="logout" title="Выйти из системы">Выйти</button>
+        <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
+        <button class="header-action" id="change-password" title="Изменить пароль" aria-label="Изменить пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v10H4zM8 11V7a4 4 0 0 1 8 0v4"></path></svg></button>
+        ${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="header-action header-action-text" id="setup-mfa" title="Настроить двухфакторную аутентификацию">2FA</button>' : ''}
+        <button class="header-action" id="logout" title="Выйти из системы" aria-label="Выйти из системы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H4v14h6M14 8l4 4-4 4m4-4H9"></path></svg></button>
       </div>
+    </header>
+    <div class="app-body">
+      <aside class="sidebar" id="primary-sidebar">
+        <div class="tenant-card"><span>Рабочее пространство</span><strong title="${escapeHTML(organizationName)}">${escapeHTML(organizationName)}</strong><small>${escapeHTML(profileLabel)}</small></div>
+        <nav class="primary-nav" aria-label="Основная навигация">
+          <span class="nav-section-title">Навигация</span>
+          <button data-view="dashboard">${navigationIcon("dashboard")}<span>Сводка</span></button>
+          <button data-view="entries">${navigationIcon("entries")}<span>${isEducationReviewer() ? "Рассмотрение" : "План / Факт"}</span></button>
+          ${!isManager && canReviewEducationDirectory() ? `<button data-view="partners">${navigationIcon("partners")}<span>Учебные заведения</span></button>` : ""}
+          ${!isManager && canViewITCompanies() ? `<button data-view="it-companies">${navigationIcon("companies")}<span>ИТ-компании</span></button>` : ""}
+          ${isManager ? `<button data-view="admin">${navigationIcon("admin")}<span>Управление</span><span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span></button>` : ""}
+        </nav>
+        <div class="sidebar-footer"><span class="system-indicator"></span><div><b>Система доступна</b><small>Защищённое соединение</small></div></div>
+      </aside>
+      <main class="container" id="content"></main>
     </div>
-    <main class="container" id="content"></main>
   </div>`);
-  wrap.querySelectorAll("nav button").forEach((b) => {
-    if (b.dataset.view === state.view) b.classList.add("active");
+  wrap.querySelectorAll(".primary-nav button").forEach((b) => {
+    if (b.dataset.view === state.view) {
+      b.classList.add("active");
+      b.setAttribute("aria-current", "page");
+    }
     b.onclick = () => {
       state.view = b.dataset.view;
       render();
     };
+  });
+  wrap.querySelector("#sidebar-toggle").onclick = () => {
+    if (window.matchMedia("(max-width: 680px)").matches) {
+      wrap.classList.remove("sidebar-collapsed");
+      const opened = wrap.classList.toggle("sidebar-mobile-open");
+      wrap.querySelector("#sidebar-toggle").setAttribute("aria-expanded", String(opened));
+      wrap.querySelector("#sidebar-toggle").setAttribute("aria-label", opened ? "Закрыть меню" : "Открыть меню");
+      return;
+    }
+    wrap.classList.remove("sidebar-mobile-open");
+    const collapsed = wrap.classList.toggle("sidebar-collapsed");
+    wrap.querySelector("#sidebar-toggle").setAttribute("aria-expanded", String(!collapsed));
+    wrap.querySelector("#sidebar-toggle").setAttribute("aria-label", collapsed ? "Развернуть меню" : "Свернуть меню");
+  };
+  if (window.matchMedia("(max-width: 680px)").matches) {
+    wrap.querySelector("#sidebar-toggle").setAttribute("aria-expanded", "false");
+    wrap.querySelector("#sidebar-toggle").setAttribute("aria-label", "Открыть меню");
+  }
+  wrap.addEventListener("click", (event) => {
+    if (!wrap.classList.contains("sidebar-mobile-open")) return;
+    if (event.target.closest("#primary-sidebar") || event.target.closest("#sidebar-toggle")) return;
+    wrap.classList.remove("sidebar-mobile-open");
+    wrap.querySelector("#sidebar-toggle").setAttribute("aria-expanded", "false");
+    wrap.querySelector("#sidebar-toggle").setAttribute("aria-label", "Открыть меню");
   });
   wrap.querySelector("#logout").onclick = async () => {
     try {
