@@ -64,6 +64,7 @@ func officeValueLabel(value string) string {
 		"vuz": "Вуз", "kolledj": "Колледж", "school": "Школа",
 		"rpd": "РПД", "oop": "ООП", "vo": "Высшее образование", "spo": "Среднее профессиональное образование",
 		"bachelor": "Бакалавриат", "master": "Магистратура", "specialist": "Специалитет",
+		"absent": "Отсутствует", "full_or_partial": "Есть полностью или частично",
 		"development": "Разработка", "update": "Актуализация", "expertise": "Экспертиза",
 		"education_organization": "С образовательной организацией", "roiv": "С РОИВ",
 		"needs_review": "Требует проверки", "draft": "Проект", "active": "Действует",

@@ -195,8 +195,14 @@ func TestWorkspaceIntegration(t *testing.T) {
 	schoolEntry := map[string]interface{}{
 		"partner_id": schoolPartner, "agreement_id": schoolAgreementID, "category_code": "it_clubs",
 		"period_type": "plan", "report_year": 2026, "audience": "school",
-		"payload": map[string]interface{}{"org_name": schoolPartner, "program_name": "Кружок ИТ", "academic_hours": 1, "developed_programs_count": 1, "students_count": 10},
+		"payload": map[string]interface{}{
+			"org_name": schoolPartner, "program_name": "Кружок ИТ", "academic_hours": 1, "developed_programs_count": 1, "students_count": 10,
+			"funding_source": "100% средства ИТ-компании", "budget_funding": "absent", "citizen_funding": "absent",
+		},
 	}
+	schoolEntry["payload"].(map[string]interface{})["budget_funding"] = "full_or_partial"
+	call(admin, "POST", "/entries", schoolEntry, 400)
+	schoolEntry["payload"].(map[string]interface{})["budget_funding"] = "absent"
 	call(admin, "POST", "/entries", schoolEntry, 201)
 	authorities := call(admin, "GET", "/regional-authorities", nil, 200)
 	if !bytes.Contains(authorities, []byte(authorityID)) || !bytes.Contains(authorities, []byte(`"schools_count":1`)) || !bytes.Contains(authorities, []byte(`"activities_count":1`)) {

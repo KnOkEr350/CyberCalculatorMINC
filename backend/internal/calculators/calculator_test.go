@@ -204,6 +204,9 @@ func TestValidatePayloadRejectsUnexpectedHugeAndFractionalValues(t *testing.T) {
 		"academic_hours":           10.0,
 		"developed_programs_count": 1.0,
 		"students_count":           20.0,
+		"funding_source":           "Средства ИТ-компании",
+		"budget_funding":           "absent",
+		"citizen_funding":          "absent",
 	}
 
 	withUnexpected := make(map[string]interface{}, len(base)+1)
@@ -224,6 +227,65 @@ func TestValidatePayloadRejectsUnexpectedHugeAndFractionalValues(t *testing.T) {
 	base["academic_hours"] = 1_000_000_000_001.0
 	if err := ValidatePayload(school, base); err == nil {
 		t.Fatal("huge payload number must be rejected")
+	}
+}
+
+func TestSchoolActivitiesRejectProhibitedFunding(t *testing.T) {
+	tests := []struct {
+		category string
+		payload  map[string]interface{}
+	}{
+		{
+			category: "it_clubs",
+			payload: map[string]interface{}{
+				"org_name": "school-id", "program_name": "ИТ-кружок", "academic_hours": 72.0,
+				"developed_programs_count": 1.0, "students_count": 25.0,
+			},
+		},
+		{
+			category: "teacher_training",
+			payload: map[string]interface{}{
+				"org_name": "school-id", "program_name": "Повышение квалификации", "developed_programs_count": 1.0,
+				"academic_hours_per_teacher": 16.0, "trained_teachers_count": 20.0,
+			},
+		},
+		{
+			category: "edu_content",
+			payload: map[string]interface{}{
+				"org_name": "school-id", "platform_name": "Моя школа", "student_platform_months": 100.0,
+				"teacher_platform_months": 10.0, "digital_trace_reference": "Логи от 01.09.2026",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.category, func(t *testing.T) {
+			calc, err := Get(test.category)
+			if err != nil {
+				t.Fatal(err)
+			}
+			base := make(map[string]interface{}, len(test.payload)+3)
+			for key, value := range test.payload {
+				base[key] = value
+			}
+			base["funding_source"] = "100% средства ИТ-компании"
+			base["budget_funding"] = "absent"
+			base["citizen_funding"] = "absent"
+			if err := ValidatePayload(calc, base); err != nil {
+				t.Fatalf("eligible funding rejected: %v", err)
+			}
+
+			for _, prohibited := range []string{"budget_funding", "citizen_funding"} {
+				payload := make(map[string]interface{}, len(base))
+				for key, value := range base {
+					payload[key] = value
+				}
+				payload[prohibited] = "full_or_partial"
+				if err := ValidatePayload(calc, payload); err == nil {
+					t.Fatalf("%s must block %s", prohibited, test.category)
+				}
+			}
+		})
 	}
 }
 

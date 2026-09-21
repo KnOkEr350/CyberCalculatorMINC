@@ -63,6 +63,8 @@ const VALUE_LABELS = {
   bachelor: "Бакалавриат",
   master: "Магистратура",
   specialist: "Специалитет",
+  absent: "Отсутствует",
+  full_or_partial: "Есть полностью или частично",
   development: "Разработка",
   update: "Актуализация",
   expertise: "Экспертиза",
@@ -722,6 +724,8 @@ function fieldInput(f, value, audience) {
                   bachelor: "Бакалавриат",
                   master: "Магистратура",
                   specialist: "Специалитет",
+                  absent: "Отсутствует",
+                  full_or_partial: "Есть полностью или частично",
                   development: "Разработка",
                   update: "Актуализация",
                   expertise: "Экспертиза",
@@ -835,6 +839,22 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
           `Для выбранного уровня допустимы семестры ${range[0]}–${range[1]}`,
         );
         firstInvalid ||= input;
+      }
+    }
+  }
+  if (["it_clubs", "teacher_training", "edu_content"].includes(category.code)) {
+    for (const key of ["budget_funding", "citizen_funding"]) {
+      if (payload[key] === "full_or_partial") {
+        const input = fieldsBox.querySelector(`[data-key="${key}"]`);
+        if (input) {
+          setFieldError(
+            input,
+            key === "budget_funding"
+              ? "Бюджетное финансирование полностью или частично запрещено"
+              : "Финансирование средствами граждан полностью или частично запрещено",
+          );
+          firstInvalid ||= input;
+        }
       }
     }
   }

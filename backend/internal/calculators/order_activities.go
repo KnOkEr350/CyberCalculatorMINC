@@ -49,6 +49,32 @@ func (topITCalc) Fields() []FieldSpec {
 // полной стоимости разработки программ.
 type schoolProgramsCalc struct{}
 
+func schoolFundingFields() []FieldSpec {
+	return []FieldSpec{
+		{Key: "funding_source", Label: "Источник финансирования", Type: "text", Required: true, MaxLength: 500},
+		{Key: "budget_funding", Label: "Бюджетное финансирование", Type: "select", Required: true, Options: []string{"absent", "full_or_partial"}},
+		{Key: "citizen_funding", Label: "Финансирование средствами граждан", Type: "select", Required: true, Options: []string{"absent", "full_or_partial"}},
+	}
+}
+
+func validateSchoolFunding(payload map[string]interface{}) error {
+	budgetFunding, err := str(payload, "budget_funding")
+	if err != nil {
+		return err
+	}
+	if budgetFunding != "absent" {
+		return fmt.Errorf("мероприятие не может быть зачтено: полностью или частично использованы средства бюджетов РФ")
+	}
+	citizenFunding, err := str(payload, "citizen_funding")
+	if err != nil {
+		return err
+	}
+	if citizenFunding != "absent" {
+		return fmt.Errorf("мероприятие не может быть зачтено: полностью или частично использованы средства граждан")
+	}
+	return nil
+}
+
 func (schoolProgramsCalc) Calculate(audience models.Audience, payload map[string]interface{}) (float64, error) {
 	if audience != models.AudienceSchool {
 		return 0, fmt.Errorf("категория дополнительных школьных программ поддерживает только аудиторию school")
@@ -68,14 +94,18 @@ func (schoolProgramsCalc) Calculate(audience models.Audience, payload map[string
 }
 
 func (schoolProgramsCalc) Fields() []FieldSpec {
-	return []FieldSpec{
+	return append([]FieldSpec{
 		{Key: "org_name", Label: "Наименование общеобразовательной организации", Type: "select", Required: true},
 		{Key: "program_name", Label: "Наименование дополнительной общеобразовательной программы", Type: "text", Required: true},
 		{Key: "employee_full_name", Label: "ФИО привлечённого сотрудника", Type: "text"},
 		{Key: "academic_hours", Label: "Количество академических часов", Type: "number", Required: true},
 		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true, Integer: true},
 		{Key: "students_count", Label: "Численность учащихся 5–11 классов", Type: "number", Required: true, Integer: true},
-	}
+	}, schoolFundingFields()...)
+}
+
+func (schoolProgramsCalc) Validate(payload map[string]interface{}) error {
+	return validateSchoolFunding(payload)
 }
 
 // teacherTrainingCalc — программы повышения квалификации учителей
@@ -105,13 +135,17 @@ func (teacherTrainingCalc) Calculate(audience models.Audience, payload map[strin
 }
 
 func (teacherTrainingCalc) Fields() []FieldSpec {
-	return []FieldSpec{
+	return append([]FieldSpec{
 		{Key: "org_name", Label: "Наименование образовательной организации", Type: "select", Required: true},
 		{Key: "program_name", Label: "Наименование программы повышения квалификации", Type: "text", Required: true},
 		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true, Integer: true},
 		{Key: "academic_hours_per_teacher", Label: "Количество академических часов на одного учителя", Type: "number", Required: true},
 		{Key: "trained_teachers_count", Label: "Количество обученных учителей информатики", Type: "number", Required: true, Integer: true},
-	}
+	}, schoolFundingFields()...)
+}
+
+func (teacherTrainingCalc) Validate(payload map[string]interface{}) error {
+	return validateSchoolFunding(payload)
 }
 
 // educationalContentCalc считает суммарные человеко-платформо-месяцы доступа
@@ -137,11 +171,15 @@ func (educationalContentCalc) Calculate(audience models.Audience, payload map[st
 }
 
 func (educationalContentCalc) Fields() []FieldSpec {
-	return []FieldSpec{
+	return append([]FieldSpec{
 		{Key: "org_name", Label: "Наименование общеобразовательной организации", Type: "select", Required: true},
 		{Key: "platform_name", Label: "Наименование образовательной платформы", Type: "text", Required: true},
 		{Key: "student_platform_months", Label: "Суммарные месяцы доступа всех учащихся", Type: "number", Required: true, Integer: true},
 		{Key: "teacher_platform_months", Label: "Суммарные месяцы доступа всех учителей", Type: "number", Required: true, Integer: true},
 		{Key: "digital_trace_reference", Label: "Описание/ссылка на подтверждение цифрового следа", Type: "text", Required: true},
-	}
+	}, schoolFundingFields()...)
+}
+
+func (educationalContentCalc) Validate(payload map[string]interface{}) error {
+	return validateSchoolFunding(payload)
 }
