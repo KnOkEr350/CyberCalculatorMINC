@@ -3,6 +3,7 @@ package money
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
@@ -49,9 +50,15 @@ func FromRat(r *big.Rat) (Amount, error) {
 }
 
 func (a Amount) String() string               { return fmt.Sprintf("%d.%02d", int64(a)/100, int64(a)%100) }
-func (a Amount) MarshalJSON() ([]byte, error) { return []byte(a.String()), nil }
+func (a Amount) MarshalJSON() ([]byte, error) { return json.Marshal(a.String()) }
 func (a *Amount) UnmarshalJSON(b []byte) error {
-	v, err := Parse(string(b))
+	value := string(b)
+	if len(b) > 0 && b[0] == '"' {
+		if err := json.Unmarshal(b, &value); err != nil {
+			return fmt.Errorf("некорректная сумма: %w", err)
+		}
+	}
+	v, err := Parse(value)
 	if err == nil {
 		*a = v
 	}

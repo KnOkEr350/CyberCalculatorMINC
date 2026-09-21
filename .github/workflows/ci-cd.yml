@@ -48,6 +48,10 @@ jobs:
         working-directory: backend
         run: go run ./cmd/migrationcheck ../migrations ../migrations/checksums.sha256
 
+      - name: Verify versioned API contract
+        working-directory: backend
+        run: go run ./cmd/apicontract ../api/openapi/v1.json ./internal/modules
+
       - name: Run go vet
         shell: bash
         run: |

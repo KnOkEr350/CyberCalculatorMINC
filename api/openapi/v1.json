@@ -1,0 +1,220 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "CyberCalculatorMINC HTTP API",
+    "version": "1.0.0",
+    "description": "Версионированный контракт текущего HTTP API. Денежные значения передаются десятичной строкой, даты — ISO 8601, идентификаторы — UUID."
+  },
+  "servers": [{ "url": "/", "description": "Текущий экземпляр приложения" }],
+  "security": [{ "sessionCookie": [] }],
+  "tags": [
+    { "name": "health" },
+    { "name": "features" },
+    { "name": "authentication" },
+    { "name": "directories" },
+    { "name": "planning" },
+    { "name": "documents" },
+    { "name": "reporting" },
+    { "name": "administration" }
+  ],
+  "paths": {
+    "/api/live": { "get": { "tags": ["health"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/ready": { "get": { "tags": ["health"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "503": { "$ref": "#/components/responses/Error" } } } },
+    "/api/health": { "get": { "tags": ["health"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "503": { "$ref": "#/components/responses/Error" } } } },
+    "/api/features": { "get": { "tags": ["features"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" } } } },
+
+    "/api/auth/login": { "post": { "tags": ["authentication"], "security": [], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/logout": { "post": { "tags": ["authentication"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" } } } },
+    "/api/auth/password": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/mfa/enroll": { "post": { "tags": ["authentication"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/mfa/confirm": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/me": { "get": { "tags": ["authentication"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "401": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/entity-type": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+
+    "/api/partners": {
+      "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/it-companies": {
+      "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/it-companies/registry-search": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/it-companies/template": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/it-companies/import": { "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/directory": {
+      "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/directory/stats": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/directory/proposals": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/directory/{id}/decision": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/directory/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/agreements": {
+      "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/agreements/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/legal-entity-groups": {
+      "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/legal-entity-groups/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/regional-authorities": {
+      "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/regional-authorities/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/mentors": {
+      "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/admin/directory-template": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/directory-import": { "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+
+    "/api/obligations": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/entries/import-template": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/entries/import": { "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/categories": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/entries": {
+      "get": { "tags": ["planning"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/entries/summary": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/entries/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/entries/{id}/comments": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+
+    "/api/entries/{id}/attachments": {
+      "parameters": [{ "$ref": "#/components/parameters/ID" }],
+      "get": { "tags": ["documents"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["documents"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/attachments/{id}/download": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["documents"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+
+    "/api/dashboard": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/dashboard/target": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/reports/export": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/report-workflow": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/report-workflow/transition": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+
+    "/api/admin/users": {
+      "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/admin/users/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "patch": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/it-company-options": { "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/settings": {
+      "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/admin/logs": { "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } } }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": { "type": "apiKey", "in": "cookie", "name": "session" }
+    },
+    "parameters": {
+      "ID": { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/UUID" } },
+      "Offset": { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "maximum": 1000000, "default": 0 } }
+    },
+    "schemas": {
+      "UUID": { "type": "string", "format": "uuid", "examples": ["6ba7b810-9dad-11d1-80b4-00c04fd430c8"] },
+      "Date": { "type": "string", "format": "date", "examples": ["2026-09-21"] },
+      "DateTime": { "type": "string", "format": "date-time", "examples": ["2026-09-21T12:00:00Z"] },
+      "Money": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,14})\\.[0-9]{2}$", "examples": ["125000.00"], "description": "Рубли и копейки; JSON float и экспоненциальная запись запрещены." },
+      "FieldError": {
+        "type": "object",
+        "required": ["field", "message"],
+        "properties": {
+          "field": { "type": "string" },
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string" },
+          "code": { "type": "string" },
+          "request_id": { "type": "string" },
+          "fields": { "type": "array", "items": { "$ref": "#/components/schemas/FieldError" } }
+        },
+        "additionalProperties": false
+      },
+      "Pagination": {
+        "type": "object",
+        "required": ["offset", "limit"],
+        "properties": {
+          "offset": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+          "next_offset": { "type": ["integer", "null"], "minimum": 0 },
+          "total": { "type": ["integer", "null"], "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "UploadMetadata": {
+        "type": "object",
+        "required": ["id", "file_name", "content_type", "size_bytes", "uploaded_at"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/UUID" },
+          "file_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "content_type": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 1, "maximum": 20971520 },
+          "uploaded_at": { "$ref": "#/components/schemas/DateTime" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "requestBodies": {
+      "JSONBody": {
+        "required": true,
+        "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+      },
+      "FileUpload": {
+        "required": true,
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "required": ["file"],
+              "properties": { "file": { "type": "string", "contentMediaType": "application/octet-stream" } }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "JSONSuccess": {
+        "description": "Успешный JSON-ответ",
+        "content": { "application/json": { "schema": true } }
+      },
+      "PaginatedJSON": {
+        "description": "Массив элементов. При наличии следующей страницы сервер возвращает X-Next-Offset.",
+        "headers": {
+          "X-Next-Offset": { "required": false, "schema": { "type": "integer", "minimum": 0 } },
+          "X-Total-Count": { "required": false, "schema": { "type": "integer", "minimum": 0 } }
+        },
+        "content": { "application/json": { "schema": { "type": "array", "items": true } } }
+      },
+      "BinaryDownload": {
+        "description": "Потоковая загрузка файла",
+        "headers": {
+          "Content-Disposition": { "required": true, "schema": { "type": "string" } },
+          "Content-Length": { "required": false, "schema": { "type": "integer", "minimum": 0 } }
+        },
+        "content": {
+          "application/octet-stream": { "schema": { "type": "string", "contentMediaType": "application/octet-stream" } },
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { "schema": { "type": "string", "contentMediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "Error": {
+        "description": "Структурированная ошибка",
+        "headers": { "X-Request-ID": { "required": false, "schema": { "type": "string" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  }
+}
