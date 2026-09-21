@@ -1,22 +1,43 @@
 # ADR-09: Криптографическое исполнение MVP
 
-- Статус: `PROPOSED`
+- Статус: `ACCEPTED`
 - Владелец решения: Security owner
-- Backlog: Technical/Security
-- Блокирует: CRYPTO-02–CRYPTO-11, OPS-10
+- Дата решения: 21 сентября 2026 года
+- Основание: решение встречи
+- Блокирует: —
 
 ## Контекст
 
-ТЗ называет StandardAESCrypto и будущий CryptoPro adapter, но не фиксирует
-полный wire format, KDF, параметры, управление ключами и требования к подписи.
+ТЗ называет StandardAESCrypto и будущий CryptoPro adapter. На встрече уточнён
+обязательный сценарий: представитель компании подписывает пакет электронной
+подписью и шифрует для конкретного контрагента, а контрагент расшифровывает
+своим закрытым ключом и проверяет подпись отправителя.
 
-## Варианты
+## Решение
 
-1. AES-256-GCM + Argon2id для password-based пакетов.
-2. AES-256-GCM + PBKDF2-HMAC-SHA256 при ограничениях зависимостей.
-3. Отдельный envelope с provider-specific recipient keys.
+Используется versioned asymmetric envelope:
 
-## Критерий принятия
+1. payload шифруется случайным симметричным content-encryption key;
+2. content key оборачивается отдельно для каждого явного получателя его
+   открытым ключом;
+3. представитель отправителя подписывает canonical manifest и hash ciphertext;
+4. получатель расшифровывает content key своим закрытым ключом, проверяет
+   целостность и подпись до разбора payload;
+5. manifest содержит sender/recipient IDs, key/certificate IDs, алгоритмы,
+   версии формата/схемы, timestamps, nonce/AAD и hashes.
 
-Опубликованы versioned format, KDF-параметры, nonce/salt semantics, AAD,
-лимиты, zeroization policy, test vectors и политика совместимости версий.
+Парольный `StandardAESCrypto` не является целевым форматом обмена между
+контрагентами. Он может использоваться только как отдельный provider для
+локального backup при явно утверждённом профиле.
+
+Закрытые ключи и PIN не сохраняются в БД приложения. `CryptoEngine` работает
+через provider interface, поддерживающий локальное хранилище ОС, токен/HSM или
+CryptoPro. Проверка сертификата, срока, назначения, цепочки и отзыва является
+частью Verify/Decrypt.
+
+## Этапность
+
+Сейчас реализуются только модель ключей/сертификатов, versioned manifest,
+provider interfaces, fixture provider и тестовые векторы. Реальный
+CryptoPro/ГОСТ provider, выпуск и ротация сертификатов выполняются отдельным
+этапом после утверждения security profile.
