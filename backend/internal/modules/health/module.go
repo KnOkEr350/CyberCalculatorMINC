@@ -11,9 +11,17 @@ import (
 	"cybercalc/internal/modules/health/service"
 )
 
-// RegisterRoutes wires repository, service and HTTP layers for this module.
-func RegisterRoutes(mux *http.ServeMux, db *sql.DB) {
+type Module struct {
+	handler *healthhttp.Handler
+}
+
+// New wires repository, service and HTTP layers for this module.
+func New(db *sql.DB) *Module {
 	probe := repository.NewSQLProbe(db)
 	healthService := service.New(probe)
-	healthhttp.New(healthService).RegisterRoutes(mux)
+	return &Module{handler: healthhttp.New(healthService)}
+}
+
+func (m *Module) RegisterRoutes(mux *http.ServeMux) {
+	m.handler.RegisterRoutes(mux)
 }
