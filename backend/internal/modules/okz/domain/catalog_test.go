@@ -27,3 +27,10 @@ func TestParseCSVRejectsInvalidCatalog(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCSVRejectsInvalidUTF8(t *testing.T) {
+	_, err := ParseCSV(strings.NewReader("code;name\n2;\xff\n"))
+	if err == nil || !strings.Contains(err.Error(), "UTF-8") {
+		t.Fatalf("expected UTF-8 validation error, got %v", err)
+	}
+}

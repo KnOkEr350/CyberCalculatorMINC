@@ -55,6 +55,9 @@ func ParseCSV(reader io.Reader) ([]Occupation, error) {
 	if len(data) > maxCSVBytes {
 		return nil, fmt.Errorf("CSV превышает 5 МБ")
 	}
+	if !utf8.Valid(data) {
+		return nil, fmt.Errorf("CSV должен быть сохранён в кодировке UTF-8")
+	}
 	text := strings.TrimPrefix(string(data), "\ufeff")
 	firstLine := text
 	if index := strings.IndexByte(text, '\n'); index >= 0 {
