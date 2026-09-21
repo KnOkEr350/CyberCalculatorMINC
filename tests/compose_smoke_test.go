@@ -11,7 +11,7 @@ import (
 func TestComposeBoundary(t *testing.T) {
 	s := newComposeSmoke(t)
 	c := s.newClient(t)
-	for _, path := range []string{"/", "/app.js", "/style.css", "/api/live", "/api/ready", "/version.txt"} {
+	for _, path := range []string{"/", "/app.js", "/screens.js", "/style.css", "/api/live", "/api/ready", "/version.txt"} {
 		t.Run(path, func(t *testing.T) {
 			data := c.request(t, "GET", path, "", nil, http.StatusOK)
 			switch path {

@@ -53,9 +53,10 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.locator('#login-email').waitFor();
-    await page.evaluate(() => { state.me = { role: 'user', entity_type: 'edu_institution', partner_id: 'test-partner', full_name: 'Тест ОО' }; state.view = 'it-companies'; render(); });
+    await page.evaluate(() => { state.me = { role: 'user', entity_type: 'edu_institution', partner_id: 'test-partner', full_name: 'Тест ОО' }; state.view = 'partners'; render(); });
     await page.locator('#it-list tbody tr').first().waitFor();
-    assert.equal(await page.locator('nav [data-view="it-companies"]').count(), 1);
+    assert.equal(await page.locator('nav [data-view="partners"]').count(), 1);
+    assert.equal(await page.locator('.primary-nav [data-view]').count(), 11);
     assert.equal(await page.locator('#it-list tbody tr').count(), 500);
     assert.equal(await page.locator('#it-add').count(), 0);
     assert.equal(await page.getByText('Загрузить выгрузку', { exact: true }).count(), 0);
@@ -84,30 +85,23 @@ const companies = Array.from({ length: 650 }, (_, i) => ({
     assert.deepEqual(searches, ['7700000001', '7736207543', 'Киберпротект']);
     for (const role of ['admin', 'moderator']) {
       requests.length = 0;
-      await page.evaluate(role => { state.me.role = role; state.view = 'admin'; render(); }, role);
-      assert.equal(await page.locator('.admin-nav [data-t="partners"]').count(), 0);
-      assert.equal(await page.locator('.admin-nav [data-t="it-companies"].active').count(), 1);
+      await page.evaluate(role => { state.me.role = role; state.view = 'partners'; render(); }, role);
       await page.locator('#it-add').waitFor();
       await page.locator('#it-list tbody tr').first().waitFor();
-      await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'partners'));
+      await page.evaluate(() => renderPartnerDirectory(document.querySelector('#partners-screen-content')));
       await page.getByText('Справочник учебных заведений недоступен для этого профиля', { exact: true }).waitFor();
-      await page.evaluate(() => renderPartnerDirectory(document.querySelector('#admin-content')));
       assert.equal(requests.some(p => ['/api/directory', '/api/directory/stats', '/api/regional-authorities'].includes(p)), false);
     }
     for (const role of ['admin', 'moderator']) {
       requests.length = 0;
-      await page.evaluate(role => { state.me.role = role; state.me.entity_type = 'organization'; state.view = 'admin'; render(); }, role);
-      assert.equal(await page.locator('.admin-nav [data-t="it-companies"]').count(), 0);
-      assert.equal(await page.locator('.admin-nav [data-t="partners"].active').count(), 1);
+      await page.evaluate(role => { state.me.role = role; state.me.entity_type = 'organization'; state.view = 'partners'; render(); }, role);
       await page.locator('#partner-list .muted').waitFor();
-      await page.evaluate(() => renderAdminTab(document.querySelector('#admin-content'), 'it-companies'));
+      await page.evaluate(() => renderITCompanies(document.querySelector('#partners-screen-content')));
       await page.getByText('Реестр ИТ-компаний недоступен для этого профиля', { exact: true }).waitFor();
-      await page.evaluate(() => renderITCompanies(document.querySelector('#admin-content')));
       assert.equal(requests.some(p => p.startsWith('/api/it-companies')), false);
     }
-    await page.evaluate(() => { state.me.role = 'admin'; state.view = 'admin'; render(); });
-    await page.locator('#partner-list .muted').waitFor();
-    await page.locator('.admin-nav [data-t="users"]').click();
+    await page.evaluate(() => { state.me.role = 'admin'; state.view = 'settings'; render(); });
+    await page.locator('[data-settings-tab="users"]').click();
     await page.locator('#u-company').waitFor();
     assert.equal(await page.locator('#u-company option').count(), 651);
     await page.locator('#u-company').selectOption('test-company-649');

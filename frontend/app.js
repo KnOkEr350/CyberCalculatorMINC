@@ -22,6 +22,7 @@ const state = {
   mentors: [],
   dashboardCategory: "",
   dashboardAudience: "",
+  reportCategory: "",
   legalEntityGroups: [],
   entryFilters: {},
 };
@@ -200,8 +201,17 @@ function navigationIcon(kind) {
     partners: '<path d="M3 21h18M5 21V8l7-4 7 4v13M9 12h2m2 0h2m-6 4h2m2 0h2"></path>',
     companies: '<path d="M4 21V7h9v14M13 11h7v10M7 10h2m-2 4h2m-2 4h2m9-3h-2m2 3h-2"></path>',
     admin: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
+    teachers: '<circle cx="9" cy="8" r="3"></circle><path d="M3.5 20v-2.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V20M15 5h6v10h-4"></path>',
+    documents: '<path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7"></path>',
+    internship: '<path d="M4 7h16v13H4zM8 7V4h8v3M4 12h16M10 12v2h4v-2"></path>',
+    practice: '<path d="M12 3 4 7v5c0 5 3.4 8.2 8 9.8 4.6-1.6 8-4.8 8-9.8V7zM8.5 12l2.2 2.2 4.8-5"></path>',
+    top: '<path d="M4 20h16M6 17l4-5 3 2 5-7M15 7h3v3"></path>',
+    schools: '<path d="m3 9 9-5 9 5-9 5zM6 11v6c3 2 9 2 12 0v-6M21 9v7"></path>',
+    ministry: '<path d="m3 9 9-5 9 5M5 10h14M6 10v8m4-8v8m4-8v8m4-8v8M3 20h18"></path>',
+    reports: '<path d="M5 3h14v18H5zM9 16v-3m3 3V8m3 8v-5M8 6h8"></path>',
+    settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
   };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[kind]}</svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[kind] || icons.entries}</svg>`;
 }
 
 function initials(name) {
@@ -337,28 +347,51 @@ function renderLogin() {
 
 // ---------------------------------------------------------------- LAYOUT --
 
+function activateScreen(view) {
+  const screen = CyberCalcScreens.get(view) || CyberCalcScreens.get("dashboard");
+  const activity = CyberCalcScreens.activity(screen.id);
+  state.view = screen.id;
+  if (activity) {
+    if (!activity.categoryCodes.includes(state.categoryCode)) {
+      state.categoryCode = activity.categoryCodes[0];
+      state.entryFilters = {};
+      state.entryPageOffset = 0;
+    }
+    if (
+      activity.audiences.length &&
+      !activity.audiences.includes(state.partnerKind)
+    ) {
+      state.partnerKind = activity.defaultAudience || activity.audiences[0];
+      const selectedPartner = state.partners.find(
+        (partner) => partner.id === state.partnerID,
+      );
+      if (!selectedPartner || !activity.audiences.includes(selectedPartner.partner_kind)) {
+        state.partnerID = "";
+        state.agreementID = "";
+        state.agreementPartnerID = "";
+      }
+    }
+  }
+  render();
+}
+
 function renderLayout() {
   const isAdmin = state.me.role === "admin";
   const isModerator = state.me.role === "moderator";
-  const isManager = isAdmin || isModerator;
   const profileLabel =
     state.me.entity_type === "organization"
       ? "ИТ-организация"
       : "Учебное заведение";
-  const allowedViews = new Set(["dashboard", "entries"]);
-  if (isManager) allowedViews.add("admin");
-  else {
-    if (canReviewEducationDirectory()) allowedViews.add("partners");
-    if (canViewITCompanies()) allowedViews.add("it-companies");
-  }
-  if (!allowedViews.has(state.view)) state.view = "dashboard";
+  const screens = CyberCalcScreens.all;
+  if (!CyberCalcScreens.get(state.view)) state.view = "dashboard";
+  const activeScreen = CyberCalcScreens.get(state.view);
   const organizationName = state.me.organization_name || state.me.entity_name || profileLabel;
   const wrap = el(`<div class="app-shell">
     <a class="skip-link" href="#content">К содержанию</a>
     <header class="topbar">
       <div class="topbar-brand">${brandMarkup(true)}</div>
       <button type="button" class="topbar-menu" id="sidebar-toggle" aria-label="Свернуть меню" aria-controls="primary-sidebar" aria-expanded="true"><span></span><span></span><span></span></button>
-      <div class="product-context"><strong>Калькулятор затрат</strong><span>Планирование и контроль исполнения</span></div>
+      <div class="product-context"><strong>${escapeHTML(activeScreen.title)}</strong><span>${escapeHTML(activeScreen.subtitle)}</span></div>
       <div class="who">
         <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
@@ -371,12 +404,8 @@ function renderLayout() {
       <aside class="sidebar" id="primary-sidebar">
         <div class="tenant-card"><span>Рабочее пространство</span><strong title="${escapeHTML(organizationName)}">${escapeHTML(organizationName)}</strong><small>${escapeHTML(profileLabel)}</small></div>
         <nav class="primary-nav" aria-label="Основная навигация">
-          <span class="nav-section-title">Навигация</span>
-          <button data-view="dashboard">${navigationIcon("dashboard")}<span>Сводка</span></button>
-          <button data-view="entries">${navigationIcon("entries")}<span>${isEducationReviewer() ? "Рассмотрение" : "План / Факт"}</span></button>
-          ${!isManager && canReviewEducationDirectory() ? `<button data-view="partners">${navigationIcon("partners")}<span>Учебные заведения</span></button>` : ""}
-          ${!isManager && canViewITCompanies() ? `<button data-view="it-companies">${navigationIcon("companies")}<span>ИТ-компании</span></button>` : ""}
-          ${isManager ? `<button data-view="admin">${navigationIcon("admin")}<span>Управление</span><span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span></button>` : ""}
+          <span class="nav-section-title">11 экранов системы</span>
+          ${screens.map((screen) => `<button data-view="${screen.id}" title="Экран ${screen.number}. ${escapeHTML(screen.label)}">${navigationIcon(screen.icon)}<span><small>${screen.number}</small>${escapeHTML(screen.label)}</span>${screen.id === "partners" ? '<span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span>' : ""}</button>`).join("")}
         </nav>
         <div class="sidebar-footer"><span class="system-indicator"></span><div><b>Система доступна</b><small>Защищённое соединение</small></div></div>
       </aside>
@@ -389,8 +418,7 @@ function renderLayout() {
       b.setAttribute("aria-current", "page");
     }
     b.onclick = () => {
-      state.view = b.dataset.view;
-      render();
+      activateScreen(b.dataset.view);
     };
   });
   wrap.querySelector("#sidebar-toggle").onclick = () => {
@@ -431,12 +459,14 @@ function renderLayout() {
   if (setupMFA) setupMFA.onclick = () => { app.replaceChildren(renderMFASetup()); };
   const content = wrap.querySelector("#content");
   if (state.view === "dashboard") renderDashboard(content);
-  else if (state.view === "entries") renderEntries(content);
   else if (state.view === "partners")
-    renderPartnerDirectory(content).catch((e) => showToast(e.message));
-  else if (state.view === "it-companies")
-    renderITCompanies(content).catch((e) => showToast(e.message));
-  else if (state.view === "admin") renderAdmin(content);
+    renderPartnersScreen(content).catch((e) => showToast(e.message));
+  else if (CyberCalcScreens.activity(state.view))
+    renderEntries(content, CyberCalcScreens.activity(state.view));
+  else if (state.view === "reports")
+    renderReportsScreen(content).catch((e) => showToast(e.message));
+  else if (state.view === "settings")
+    renderSettingsScreen(content).catch((e) => showToast(e.message));
   else {
     state.view = "dashboard";
     renderDashboard(content);
@@ -466,6 +496,109 @@ function openPasswordDialog() {
       form.reset(); modal.remove(); state.me = null; render(); showToast("Пароль изменён. Войдите с новым паролем.");
     } catch (e) { error.textContent = e.message; } finally { button.disabled = false; }
   };
+}
+
+// --------------------------------------------------------- PRODUCT SCREENS --
+
+async function renderPartnersScreen(root) {
+  const screen = CyberCalcScreens.get("partners");
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div></section><div id="partners-screen-content"></div>`;
+  const content = root.querySelector("#partners-screen-content");
+  if (state.me.entity_type === "edu_institution") await renderITCompanies(content, true);
+  else await renderPartnerDirectory(content, true);
+}
+
+function reportLink(href, label, description, enabled) {
+  return `<article class="report-format-card${enabled ? "" : " disabled"}"><div class="report-format-icon">${navigationIcon("reports")}</div><div><h3>${escapeHTML(label)}</h3><p>${escapeHTML(description)}</p></div><a class="btn secondary${enabled ? "" : " disabled"}" ${enabled ? `href="${escapeHTML(href)}"` : 'aria-disabled="true"'}>${enabled ? "Сформировать" : "Недоступно"}</a></article>`;
+}
+
+async function renderReportsScreen(root) {
+  const screen = CyberCalcScreens.get("reports");
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div><span class="year-badge">${state.year}</span></section><div class="card loading-state"><span class="spinner"></span>Загрузка отчётного контура…</div>`;
+  if (!state.categories.length) {
+    state.categories = (await api("/categories")) || [];
+    state.categories.forEach((category) => (CATEGORY_LABELS[category.code] = category.name));
+  }
+  const fixedPartner = isEducationReviewer();
+  if (fixedPartner) state.partnerID = state.me.partner_id || "";
+  let partner = state.partners.find((item) => item.id === state.partnerID);
+  if (!partner && state.partners.length === 1) {
+    partner = state.partners[0];
+    state.partnerID = partner.id;
+  }
+  if (partner && state.agreementPartnerID !== partner.id) {
+    state.agreements = await api(`/agreements?partner_id=${encodeURIComponent(partner.id)}`);
+    state.agreementPartnerID = partner.id;
+    state.agreementID = "";
+  }
+  if (!partner) {
+    state.agreements = [];
+    state.agreementID = "";
+    state.agreementPartnerID = "";
+  }
+  if (!state.agreements.some((agreement) => agreement.id === state.agreementID)) {
+    state.agreementID = state.agreements.find((agreement) => agreementIsUsable(agreement))?.id || state.agreements[0]?.id || "";
+  }
+  const agreement = state.agreements.find((item) => item.id === state.agreementID);
+  const availableCategories = state.categories.filter((category) =>
+    (!partner || category.audience_scope.includes(partner.partner_kind)) &&
+    (!agreement?.activity_codes || agreement.activity_codes.includes(category.code)),
+  );
+  if (state.reportCategory && !availableCategories.some((category) => category.code === state.reportCategory)) state.reportCategory = "";
+  let workflow = null;
+  if (partner && agreement) {
+    workflow = await api(`/report-workflow?${new URLSearchParams({ agreement_id: agreement.id, report_year: state.year, period_type: state.period })}`);
+  }
+  const approved = workflow?.status === "approved";
+  const statusLabels = { draft: "Черновик", ready: "На рассмотрении", verified: "Согласовано", approved: "Утверждено" };
+  const base = new URLSearchParams({ partner_id: state.partnerID, agreement_id: state.agreementID, period_type: state.period, report_year: state.year });
+  const categoryQuery = new URLSearchParams(base);
+  if (state.reportCategory) categoryQuery.set("category_code", state.reportCategory);
+  const reportHint = !agreement
+    ? "Выберите партнёра и соглашение."
+    : approved
+      ? "Отчёт утверждён — регламентные выгрузки доступны."
+      : `Текущий статус: ${statusLabels[workflow?.status] || "не определён"}; экспорт откроется после утверждения.`;
+
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div><span class="year-badge">${state.year}</span></section>
+    <div class="card report-builder"><div class="flex between"><div><h2>Конструктор среза</h2><p class="muted">Выберите контекст отчёта; пустые строки сервер удалит при формировании документа.</p></div><span class="status-badge ${approved ? "active" : "pending"}">${escapeHTML(statusLabels[workflow?.status] || "Контекст не выбран")}</span></div>
+      <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">— Выберите —</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">— Выберите —</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
+    </div>
+    <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", approved)}${reportLink(`/api/reports/export?${categoryQuery}&format=docx`, "Таблица Word", "Печатная таблица для согласования.", approved)}${reportLink(`/api/reports/export?${base}`, "Полный Excel партнёра", "Все мероприятия выбранного соглашения.", approved)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
+    <div class="grid cols-2"><div class="card"><h2>Комплектность и согласование</h2>${workflow ? `<div class="readiness-list">${workflow.automatic_checks.map((check) => `<div><span class="risk-dot ${check.complete ? "green" : "red"}"></span><span>${escapeHTML(check.label)}</span><b>${check.complete ? "Готово" : "Не выполнено"}</b></div>`).join("")}</div>${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : '<p class="notice">Автоматические проверки пройдены.</p>'}` : '<p class="muted">После выбора соглашения здесь появится готовность комплекта.</p>'}</div><div class="card"><h2>Обменные пакеты .pkg</h2><p>Шифрованный обмен и Diff Engine предусмотрены ТЗ, но требуют серверного CryptoEngine и API сверки.</p><div class="field"><label>Пакет для сверки</label><input type="file" accept=".pkg" disabled></div><div class="flex"><button class="btn" disabled>Сформировать .pkg</button><button class="btn secondary" disabled>Сверить пакет</button></div><p class="field-hint">Контролы заранее размещены в отдельном контуре и не имитируют ещё не реализованную серверную операцию.</p></div></div>`;
+
+  const rerender = () => renderReportsScreen(root).catch((error) => showToast(error.message));
+  root.querySelector("#report-year").onchange = (event) => { const year = Number(event.target.value); if (!validYear(year)) return event.target.reportValidity(); state.year = year; rerender(); };
+  root.querySelector("#report-period").onchange = (event) => { state.period = event.target.value; rerender(); };
+  root.querySelector("#report-category").onchange = (event) => { state.reportCategory = event.target.value; rerender(); };
+  root.querySelector("#report-partner")?.addEventListener("change", (event) => { state.partnerID = event.target.value; state.agreementID = ""; state.agreementPartnerID = ""; rerender(); });
+  root.querySelector("#report-agreement").onchange = (event) => { state.agreementID = event.target.value; rerender(); };
+}
+
+function renderSettingsOverview(box) {
+  const flags = globalThis.CyberCalcFeatures?.snapshot?.() || {};
+  const enabledFlags = Object.values(flags).filter(Boolean).length;
+  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>В текущем контексте доступно договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p><p class="field-hint">Состав группы применяется в соглашениях и консолидированной оценке норматива.</p></div><div class="card"><h2>Снимки и криптография</h2><p>Фиксация среза на 1 мая и выбор криптопровайдера требуют соответствующих серверных модулей.</p><div class="flex"><button class="btn secondary" disabled>Создать снимок</button><button class="btn secondary" disabled>Проверить CryptoEngine</button></div></div></div>`;
+  box.querySelector("#settings-target")?.addEventListener("click", (event) => openBudgetTargetDialog(event.currentTarget));
+  box.querySelector("#settings-password").onclick = openPasswordDialog;
+  box.querySelector("#settings-mfa")?.addEventListener("click", () => app.replaceChildren(renderMFASetup()));
+}
+
+async function renderSettingsScreen(root) {
+  const screen = CyberCalcScreens.get("settings");
+  const isAdmin = state.me.role === "admin";
+  const tabs = [{ id: "context", label: "Контекст и безопасность" }, ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
+  if (!tabs.some((tab) => tab.id === state.settingsTab)) state.settingsTab = "context";
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
+  const content = root.querySelector("#settings-content");
+  const show = async (tab) => {
+    state.settingsTab = tab;
+    root.querySelectorAll("[data-settings-tab]").forEach((button) => button.classList.toggle("active", button.dataset.settingsTab === tab));
+    if (tab === "context") return renderSettingsOverview(content);
+    await renderAdminTab(content, tab);
+  };
+  root.querySelectorAll("[data-settings-tab]").forEach((button) => { button.onclick = () => show(button.dataset.settingsTab).catch((error) => showToast(error.message)); });
+  await show(state.settingsTab);
 }
 
 // ------------------------------------------------------------- DASHBOARD --
@@ -559,11 +692,39 @@ async function renderDashboard(root) {
   const targetGap = targetAmount == null
     ? null
     : Math.max(targetAmount - confirmedAmount, 0);
+  const targetSurplus = targetAmount == null
+    ? null
+    : Math.max(confirmedAmount - targetAmount, 0);
   const targetReached = targetAmount != null && targetGap === 0;
   const targetCompletionPct = targetAmount
     ? Math.round((confirmedAmount / targetAmount) * 10000) / 100
     : 0;
   const targetPct = clampPercent(targetCompletionPct);
+  const amountsByCategory = (items) => (items || []).reduce((result, item) => {
+    result[item.category_code] = (result[item.category_code] || 0) + Number(item.amount_rub || 0);
+    return result;
+  }, {});
+  const planAmounts = amountsByCategory(d.plan_by_category);
+  const factAmounts = amountsByCategory(d.fact_by_category);
+  const activityRows = state.categories.map((category) => {
+    const plan = planAmounts[category.code] || 0;
+    const fact = factAmounts[category.code] || 0;
+    const risk = fact > 0 && (plan === 0 || fact >= plan)
+      ? "green"
+      : plan > 0 || fact > 0
+        ? "yellow"
+        : "red";
+    return { ...category, plan, fact, risk };
+  });
+  const riskCounts = activityRows.reduce((counts, item) => {
+    counts[item.risk] += 1;
+    return counts;
+  }, { green: 0, yellow: 0, red: 0 });
+  const mandatory = [
+    { label: "Преподаватели", complete: Number(factAmounts.teachers || 0) > 0 },
+    { label: "ООП / РПД", complete: Number(factAmounts.ood_rpd || 0) > 0 },
+    { label: "ТОП-ИТ / ИИ", complete: Number(factAmounts.top_it || 0) > 0, optional: true },
+  ];
   const selectedPartner = state.partners.find(
     (partner) => partner.id === state.partnerID,
   );
@@ -573,7 +734,7 @@ async function renderDashboard(root) {
 
   root.innerHTML = `
     <section class="page-heading">
-      <div><h1>Сводка</h1></div>
+      <div><span class="eyebrow">Экран 1</span><h1>Пульс проекта</h1><p>Выполнение норматива 3%, обязательный минимум и оперативная оценка рисков.</p></div>
       <span class="year-badge">${state.year}</span>
     </section>
     <div class="card dashboard-filter-card">
@@ -602,8 +763,8 @@ async function renderDashboard(root) {
       </article>
       <article class="dashboard-kpi gap ${targetReached ? "reached" : ""}">
         <div class="dashboard-kpi-icon">${dashboardKPIIcon(targetReached ? "confirmed" : "gap")}</div>
-        <div class="dashboard-kpi-label">До выполнения цели</div>
-        <div class="dashboard-kpi-value">${targetGap == null ? "—" : fmtMoney(targetGap)}</div>
+        <div class="dashboard-kpi-label">${targetReached ? "Профицит" : "До выполнения цели"}</div>
+        <div class="dashboard-kpi-value">${targetGap == null ? "—" : fmtMoney(targetReached ? targetSurplus : targetGap)}</div>
         <div class="dashboard-kpi-meta">${targetAmount == null ? "Сначала задайте целевой показатель" : targetReached ? "Целевой показатель выполнен" : `Выполнено ${targetCompletionPct.toLocaleString("ru-RU")}% целевого показателя`}</div>
       </article>
       <article class="dashboard-kpi date">
@@ -619,10 +780,18 @@ async function renderDashboard(root) {
       <div><span>Утверждённый план</span><strong>${fmtMoney(d.eligible_plan_total_rub)}</strong></div>
       <div class="${Number(d.incomplete_entries || 0) ? "has-warning" : ""}"><span>Не учтено записей</span><strong>${Number(d.incomplete_entries || 0).toLocaleString("ru-RU")}</strong></div>
     </div>
+    <div class="mandatory-strip" aria-label="Обязательный минимум высшего образования">
+      <div><span class="eyebrow">Обязательный минимум ВО</span><b>Пункт 22</b></div>
+      ${mandatory.map((item) => `<span class="mandatory-chip ${item.complete ? "complete" : "missing"}">${item.complete ? "✓" : "!"} ${escapeHTML(item.label)}${item.optional ? " · альтернатива" : ""}</span>`).join("")}
+    </div>
     <div class="progress-card dashboard-progress">
       <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
       <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
       ${targetAmount ? `<div class="progress-header target"><span>Подтверждённые расходы к минимальному объёму 3%</span><strong>${targetCompletionPct.toLocaleString("ru-RU")}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
+    </div>
+    <div class="grid cols-2 dashboard-risk-grid">
+      <div class="card"><h2>Распределение рисков</h2><div class="risk-buckets"><div class="green"><span>${riskCounts.green}</span><b>Гарантировано</b><small>Факт закрывает план</small></div><div class="yellow"><span>${riskCounts.yellow}</span><b>В процессе</b><small>Есть план или частичный факт</small></div><div class="red"><span>${riskCounts.red}</span><b>В зоне риска</b><small>Нет подтверждённых данных</small></div></div><p class="field-hint">Оперативная UI-оценка; юридический зачёт определяется утверждённым отчётом.</p></div>
+      <div class="card"><h2>Все виды мероприятий</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
@@ -686,9 +855,9 @@ async function openBudgetTargetDialog(button) {
 
 // --------------------------------------------------------------- ENTRIES --
 
-async function renderEntries(root) {
+async function renderEntries(root, screen = CyberCalcScreens.activity(state.view)) {
   try {
-    await renderPartnerEntries(root);
+    await renderPartnerEntries(root, screen);
   } catch (e) {
     root.innerHTML = `<div class="card error">${escapeHTML(e.message)}</div>`;
   }

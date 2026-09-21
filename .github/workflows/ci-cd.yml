@@ -72,8 +72,10 @@ jobs:
           node --check frontend/mfa.js
           node --check frontend/okz.js
           node --check frontend/features.js
+          node --check frontend/screens.js
           node --test frontend/features.test.cjs
           node --test frontend/okz.test.cjs
+          node --test frontend/screens.test.cjs
 
       - name: Lint GitHub Actions workflow and extracted scripts
         run: |

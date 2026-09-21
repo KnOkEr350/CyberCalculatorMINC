@@ -19,9 +19,8 @@ function canViewITCompanies() {
 }
 
 function canReviewEducationDirectory() {
-  if (state.me?.role === "admin" || state.me?.role === "moderator")
-    return state.me?.entity_type === "organization";
-  return state.me?.entity_type === "edu_institution";
+  if (state.me?.entity_type === "organization") return true;
+  return state.me?.role === "user" && state.me?.entity_type === "edu_institution";
 }
 
 function canProposeEducationDirectory() {
@@ -295,7 +294,7 @@ function entryFiltersMarkup(category) {
   }[category] || "";
   return `<div class="grid cols-3">${common}${byCategory}</div><div class="flex"><button class="btn secondary" id="entry-filter-apply">Применить фильтры</button><button class="btn secondary" id="entry-filter-reset">Сбросить</button></div>`;
 }
-async function renderPartnerEntries(root) {
+async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(state.view)) {
   const generation = (root.workspaceGeneration || 0) + 1;
   root.workspaceGeneration = generation;
   if (!state.categories.length) {
@@ -335,8 +334,10 @@ async function renderPartnerEntries(root) {
   );
   const canPrepare = !isEducationReviewer();
   const writable = agreementIsUsable(selectedAgreement) && canPrepare;
+  const screenCategories = screen?.categoryCodes || [];
   const available = state.categories.filter(
     (category) =>
+      (!screenCategories.length || screenCategories.includes(category.code)) &&
       category.audience_scope.includes(partner?.partner_kind || state.partnerKind) &&
       (!selectedAgreement?.activity_codes || selectedAgreement.activity_codes.includes(category.code)),
   );
@@ -354,14 +355,20 @@ async function renderPartnerEntries(root) {
         .join("")}</select></div>
     <div class="field"><label for="partner-search">Поиск учебного заведения</label><input id="partner-search" placeholder="Введите часть названия"></div>
     <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>`;
-  root.innerHTML = `<section class="page-heading"><div><h1>${canPrepare ? "План и факт" : "Рассмотрение плана и отчёта"}</h1>${canPrepare ? "" : "<p>План и отчёт формирует ИТ-организация. Здесь образовательная организация просматривает направленный перечень и согласовывает факт либо возвращает замечания.</p>"}</div></section>
+  const headingTitle = screen?.title || (canPrepare ? "План и факт" : "Рассмотрение плана и отчёта");
+  const headingText = screen?.subtitle || (canPrepare ? "" : "План и отчёт формирует ИТ-организация. Здесь образовательная организация просматривает направленный перечень и согласовывает факт либо возвращает замечания.");
+  const screenFacts = screen?.facts?.length
+    ? `<div class="activity-facts">${screen.facts.map((fact) => `<div><span class="activity-fact-mark"></span><b>${escapeHTML(fact)}</b></div>`).join("")}</div>`
+    : "";
+  root.innerHTML = `<section class="page-heading screen-heading"><div>${screen ? `<span class="eyebrow">Экран ${screen.number} · ${escapeHTML(screen.kind)}</span>` : ""}<h1>${escapeHTML(headingTitle)}</h1>${headingText ? `<p>${escapeHTML(headingText)}</p>` : ""}</div><span class="year-badge">${state.year}</span></section>
+  ${screenFacts}
   <div class="card"><div class="grid cols-3">
     ${educationSelector}
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
   </div><div class="flex workspace-actions">${canPrepare && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}${canPrepare && isStaffUser() ? '<button class="btn secondary" id="edit-budget-target">Целевая сумма (3%)</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
-    <div class="field"><label>4. Категория активности</label><select id="category">${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
+    <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Режим</label>${canPrepare ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : '<input value="Просмотр и согласование" readonly>'}</div></div>
     <div class="flex">${canPrepare ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
@@ -413,8 +420,7 @@ async function renderPartnerEntries(root) {
   };
   const openDirectory = root.querySelector("#open-directory");
   if (openDirectory) openDirectory.onclick = () => {
-    state.view = state.me.role === "admin" || state.me.role === "moderator" ? "admin" : "partners";
-    render();
+    activateScreen("partners");
   };
   root.querySelectorAll("[data-p]").forEach(
     (b) =>
@@ -464,6 +470,12 @@ async function renderPartnerEntries(root) {
   if (!state.agreementID) {
     root.querySelectorAll("a").forEach((a) => a.removeAttribute("href"));
     root.querySelector("#entries-table").textContent = "Добавьте и выберите соглашение.";
+    return;
+  }
+  if (!available.length) {
+    root.querySelectorAll("a").forEach((a) => a.removeAttribute("href"));
+    root.querySelector("#obligation-box").innerHTML = '<div class="card notice">Выбранный экран не входит в перечень мероприятий соглашения или недоступен для этого типа образовательной организации.</div>';
+    root.querySelector("#entries-table").textContent = "Нет доступных категорий для выбранного контекста.";
     return;
   }
   const chosen = state.partnerID;
@@ -1240,8 +1252,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     root.querySelectorAll("[data-partner]").forEach((button) => {
       button.onclick = () => {
         state.partnerID = button.dataset.partner;
-        state.view = "entries";
-        render();
+        activateScreen("teachers");
       };
     });
     root.querySelectorAll("[data-mentors]").forEach((button) => {

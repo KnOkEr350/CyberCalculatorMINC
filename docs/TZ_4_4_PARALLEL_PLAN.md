@@ -337,19 +337,19 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 
 | ID | Статус | Что уже есть | Что остаётся до готовности |
 |---|---|---|---|
-| BASE-05 | НЕ НАЧАТО | Существующий router и shell сохранены | Разнести `app.js`/`workspace.js` на shell, registry, store и независимые каталоги экранов; обеспечить lazy/registry-подключение |
+| BASE-05 | ЧАСТИЧНО | Создан отдельный registry 11 экранов с тестом порядка, уникальности и категорий | Разнести shell, store и реализации экранов из `app.js`/`workspace.js` по независимым каталогам и добавить lazy loading |
 | BASE-06 | ЧАСТИЧНО | Общие CSS-стили карточек, таблиц, полей, кнопок, modal и toast | Выделить переиспользуемые компоненты таблицы, фильтров, drawer, upload, risk badge, money/date input; добавить component tests |
 | UIR-01 | ЧАСТИЧНО | В `theme.css` введены цвета, размеры sidebar/topbar, border, shadow, spacing и состояния контролов | Оформить карту токенов как стабильный контракт UI-библиотеки и проверить contrast/state matrix |
-| UIR-02 | ЧАСТИЧНО | Тёмный sidebar, светлая рабочая область, topbar, active state, line-icons, desktop collapse и mobile overlay | Подключить полную навигацию из 11 экранов, синхронизировать пункты с permissions и проверить целевые разрешения |
+| UIR-02 | ВЫПОЛНЕНО | Тёмный sidebar, светлая рабочая область, topbar, active state, полный список из 11 экранов, desktop collapse и mobile overlay | Поддерживать permission-aware содержимое экранов при расширении RBAC |
 | UIR-03 | ЧАСТИЧНО | Таблицы стали плотнее, добавлены hover, компактные заголовки и горизонтальный overflow | Сделать единый компонент, явный selected state, сортировку, поиск, пагинацию и keyboard interaction |
 | UIR-04 | НЕ НАЧАТО | Текущие карточки редактируются в modal | Реализовать общий правый drawer с overlay, focus trap, сохранением scroll/selection таблицы и режимами view/edit |
 | UIR-05 | ЧАСТИЧНО | Унифицированы базовые поля, focus/error states и primary/secondary кнопки | Добавить toggle, inline actions, составные поля, полную validation matrix и вынести их в UI-библиотеку |
-| UIR-06 | ЧАСТИЧНО | Для пяти текущих пунктов навигации сделаны собственные inline SVG line-icons | Выделить icon registry, покрыть 11 экранов и действия, унифицировать stroke/size/states; решить ADR-21 |
+| UIR-06 | ЧАСТИЧНО | Собственные inline SVG line-icons покрывают все 11 экранов и имеют единые stroke/size/states | Вынести пиктограммы действий в общий registry и решить ADR-21 |
 | UIR-07 | НЕ НАЧАТО | В репозитории есть референсные снимки | Добавить воспроизводимые эталонные снимки shell/table/drawer/form и автоматическое сравнение на 1366×768 и 1920×1080 |
-| UI-00 | ЧАСТИЧНО | Работают shell, skip-link, `aria-current`, sidebar collapse и mobile drawer; текущие роли видят 2–5 пунктов | Добавить 11 маршрутов, registry, permission-aware navigation, 100vh без общего page scroll и полный keyboard/focus сценарий |
-| UI-01 | ЧАСТИЧНО | Обновлены текущие KPI, фильтры, progress bars и сводные карточки | Подключить DASH-01–DASH-06: risk buckets, mandatory chips, readiness/eligibility и таблицу всех видов |
+| UI-00 | ЧАСТИЧНО | Работают registry и 11 маршрутов, skip-link, `aria-current`, 100vh workspace, sidebar collapse и mobile drawer | Завершить BASE-05 и полный keyboard/focus сценарий |
+| UI-01 | ЧАСТИЧНО | Реализованы KPI, 3% прогресс и профицит, risk buckets, mandatory chips и таблица всех видов | Заменить оперативную UI-оценку рисков единым backend `ComplianceProjection` |
 | UI-02 | ЧАСТИЧНО | Существующие справочники учебных заведений и ИТ-компаний получили новый стиль | Собрать единый экран партнёров v4.4: фильтры, selected row, drawer, документы, соглашения, кураторы и бюджеты |
-| UI-03–UI-11 | НЕ НАЧАТО | Отдельных маршрутов и модулей по требованиям ТЗ 4.4 нет | Реализовать девять независимых экранов после BASE-05 и утверждения соответствующих API-контрактов |
+| UI-03–UI-11 | ЧАСТИЧНО | [Девять отдельных маршрутов](FRONTEND_11_SCREENS.md) подключены к действующим API: категории изолированы, отчётность и настройки имеют собственные экраны | Достроить специализированные подреестры и операции после утверждения недостающих backend-контрактов |
 | UI-12 | ЧАСТИЧНО | Есть skip-link, семантическая nav, подписи и ARIA для основных shell-действий | Провести keyboard/focus/labels/contrast pass для shell, общих компонентов и всех 11 экранов |
 | UI-13 | НЕ НАЧАТО | Автоматизированных screenshot/regression проверок не найдено | Добавить desktop/tablet эталоны, проверку переполнения и запрет общего page scroll |
 

@@ -1,0 +1,149 @@
+// Registry of the eleven product screens from TZ 4.4.
+(function initializeScreens(global) {
+  "use strict";
+
+  const screens = [
+    {
+      id: "dashboard",
+      number: 1,
+      label: "Дашборд",
+      title: "Пульс проекта",
+      subtitle: "Норматив 3%, обязательный минимум, план, факт и риски.",
+      icon: "dashboard",
+    },
+    {
+      id: "partners",
+      number: 2,
+      label: "Партнёры",
+      title: "Партнёры и соглашения",
+      subtitle: "Образовательные организации, РОИВ, реквизиты и соглашения.",
+      icon: "partners",
+    },
+    {
+      id: "teachers",
+      number: 3,
+      label: "Преподаватели",
+      title: "Преподаватели",
+      subtitle: "Нагрузка штатных ИТ-специалистов, семестры, ставки и компенсации.",
+      icon: "teachers",
+      categoryCodes: ["teachers"],
+      audiences: ["vuz", "kolledj"],
+      defaultAudience: "vuz",
+      kind: "Вид 1",
+      facts: ["ВО — 4 140 ₽/ч", "СПО — 3 900 ₽/ч", "Контроль семестра и ОКЗ"],
+    },
+    {
+      id: "ood_rpd",
+      number: 4,
+      label: "ООП / РПД",
+      title: "ООП и РПД",
+      subtitle: "Разработка, актуализация и экспертиза образовательных программ.",
+      icon: "documents",
+      categoryCodes: ["ood_rpd"],
+      audiences: ["vuz", "kolledj"],
+      defaultAudience: "vuz",
+      kind: "Вид 3",
+      facts: ["Матрица РПД × ООП", "Твёрдые нормативные ставки", "Минимум одно мероприятие для ВО"],
+    },
+    {
+      id: "internship",
+      number: 5,
+      label: "Стажировки",
+      title: "Стажировки",
+      subtitle: "Стажёры, наставники, часы и комплект кадровых документов.",
+      icon: "internship",
+      categoryCodes: ["internship"],
+      audiences: ["vuz", "kolledj"],
+      defaultAudience: "vuz",
+      kind: "Вид 2",
+      facts: ["Студент — 800 ₽/ч", "Наставник — 2 390 ₽/ч", "HR · Куратор · Юрист"],
+    },
+    {
+      id: "employment_practice",
+      number: 6,
+      label: "Практика",
+      title: "Практика с трудоустройством",
+      subtitle: "Производственная практика с проверкой официального трудоустройства.",
+      icon: "practice",
+      categoryCodes: ["employment_practice"],
+      audiences: ["vuz", "kolledj"],
+      defaultAudience: "vuz",
+      kind: "Вид 2",
+      facts: ["Только срочный трудовой договор", "Проверка номера и даты", "Отдельно от стажировок"],
+    },
+    {
+      id: "top_it",
+      number: 7,
+      label: "ТОП-ИТ / ИИ",
+      title: "ТОП-ИТ и ТОП-ИИ",
+      subtitle: "Софинансирование программ, фактическое списание и подтверждение АНО АЦ.",
+      icon: "top",
+      categoryCodes: ["top_it"],
+      audiences: ["vuz"],
+      defaultAudience: "vuz",
+      kind: "Вид 4",
+      facts: ["Только высшее образование", "Контроль 30% / 70%", "Фактически списанные средства"],
+    },
+    {
+      id: "schools",
+      number: 8,
+      label: "Школы",
+      title: "Школьный трек",
+      subtitle: "ИТ-кружки, повышение квалификации и образовательный контент.",
+      icon: "schools",
+      categoryCodes: ["it_clubs", "teacher_training", "edu_content"],
+      audiences: ["school"],
+      defaultAudience: "school",
+      kind: "Виды 6–8",
+      facts: ["Три направления в одном разделе", "Без бюджетного финансирования", "Связь со школой и РОИВ"],
+    },
+    {
+      id: "minc_decision",
+      number: 9,
+      label: "Решение МЦ",
+      title: "Решение Минцифры",
+      subtitle: "Разовые мероприятия по решениям Президента, Правительства и Совбеза.",
+      icon: "ministry",
+      categoryCodes: ["minc_decision"],
+      audiences: ["vuz", "kolledj"],
+      defaultAudience: "vuz",
+      kind: "Вид 5",
+      facts: ["Реквизиты решения обязательны", "Динамическая единица измерения", "Только подтверждённая стоимость"],
+    },
+    {
+      id: "reports",
+      number: 10,
+      label: "Отчётность",
+      title: "Центр отчётности",
+      subtitle: "Срезы, регламентные формы, статусы согласования и обменные пакеты.",
+      icon: "reports",
+    },
+    {
+      id: "settings",
+      number: 11,
+      label: "Настройки",
+      title: "Настройки системы",
+      subtitle: "Контекст, справочники, доступ, 2FA, хранение и аудит.",
+      icon: "settings",
+    },
+  ].map((screen) => Object.freeze({
+    ...screen,
+    categoryCodes: Object.freeze([...(screen.categoryCodes || [])]),
+    audiences: Object.freeze([...(screen.audiences || [])]),
+    facts: Object.freeze([...(screen.facts || [])]),
+  }));
+
+  const byID = new Map(screens.map((screen) => [screen.id, screen]));
+  const api = {
+    all: Object.freeze(screens),
+    get(id) {
+      return byID.get(id) || null;
+    },
+    activity(id) {
+      const screen = byID.get(id);
+      return screen?.categoryCodes.length ? screen : null;
+    },
+  };
+
+  global.CyberCalcScreens = Object.freeze(api);
+})(globalThis);

@@ -42,9 +42,8 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
       full_name: "Иванов Иван Иванович",
     });
     await page.goto(base);
-    await page.locator('nav [data-view="entries"]').click();
+    await page.locator('nav [data-view="internship"]').click();
     await page.locator("#workspace-partner").selectOption(partner.id);
-    await page.locator("#category").selectOption("internship");
     await page.locator("#add-entry").click();
     await page.locator('[data-key="mentor_id"]').selectOption(mentor.id);
     await page
@@ -57,7 +56,7 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
     await page.locator(".modal-backdrop").waitFor({ state: "detached" });
     await page.getByText("Петров Пётр Петрович", { exact: true }).waitFor();
     await page.locator('[data-p="fact"]').click();
-    await page.locator("#category").selectOption("teachers");
+    await page.locator('nav [data-view="teachers"]').click();
     await page.locator("#add-entry").click();
     await page.locator('[data-key="course_name"]').fill("Безопасность");
     await page.locator('[data-key="teacher_full_name"]').fill("Сидоров Сидор");
@@ -76,7 +75,7 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
     await page.locator("#m-comment").fill("Уточнение часов");
     await page.locator("#m-save").click();
     await page.locator(".modal-backdrop").waitFor({ state: "detached" });
-    await page.locator("#category").selectOption("top_it");
+    await page.locator('nav [data-view="top_it"]').click();
     await page
       .getByRole("heading", {
         name: "ТОП ИТ: обязательность будет снята после сохранения",
@@ -98,7 +97,7 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
         exact: true,
       })
       .waitFor();
-    await page.locator("#category").selectOption("teachers");
+    await page.locator('nav [data-view="teachers"]').click();
     await page
       .getByRole("heading", {
         name: "ТОП ИТ: обязательность снята",
@@ -144,7 +143,7 @@ if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator('nav [data-view="entries"]').click();
+    await page.locator('nav [data-view="teachers"]').click();
     await page.locator("#category").waitFor();
     assert.ok(
       await page.evaluate(
