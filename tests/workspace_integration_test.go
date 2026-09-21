@@ -84,6 +84,14 @@ func TestWorkspaceIntegration(t *testing.T) {
 		}
 		return m
 	}
+	money := func(value interface{}) string {
+		t.Helper()
+		amount, ok := value.(string)
+		if !ok {
+			t.Fatalf("money value must use the decimal string API contract, got %T (%v)", value, value)
+		}
+		return amount
+	}
 	call(admin, "POST", "/auth/login", map[string]string{"email": email, "password": password}, 200)
 	var itCompanyID string
 	if err := db.QueryRow(`INSERT INTO accredited_it_companies(name,inn,ogrn,accreditation_status,registry_updated_at,source_url,registry_record_id,created_by)
@@ -116,7 +124,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 5000}, 200)
 	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 6000}, 200)
 	adminDashboard := object(call(admin, "GET", "/dashboard?report_year=2026", nil, 200))
-	if adminDashboard["target_amount_rub"].(float64) != 6000 {
+	if money(adminDashboard["target_amount_rub"]) != "6000.00" {
 		t.Fatal("owner-scoped target upsert failed")
 	}
 	var directory1, directory2, schoolDirectory, staleDirectory string
@@ -295,7 +303,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	create(partnerClient, p1, agreement1, "teachers", "plan", teacher(p1), 403)
 	first := object(create(companyClient, p1, agreement1, "teachers", "plan", teacher(p1), 201))
 	id := first["id"].(string)
-	if first["amount_rub"].(float64) != 8280 {
+	if money(first["amount_rub"]) != "8280.00" {
 		t.Fatal("wrong teacher formula")
 	}
 	create(companyClient, p1, agreement2, "teachers", "plan", teacher(p1), 400)
@@ -317,7 +325,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	internship := map[string]interface{}{"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор", "duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3}
 	trainee := object(create(companyClient, p1, agreement1, "internship", "fact", internship, 201))
 	traineeID := trainee["id"].(string)
-	if trainee["amount_rub"].(float64) != 30340 {
+	if money(trainee["amount_rub"]) != "30340.00" {
 		t.Fatal("wrong internship formula")
 	}
 	entries := call(partnerClient, "GET", "/entries?category_code=internship", nil, 200)
@@ -354,7 +362,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatal("verified TOP exception across another educational organization was not applied")
 	}
 	beforeApprovalDashboard := object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
-	if beforeApprovalDashboard["eligible_plan_total_rub"].(float64) != 0 {
+	if money(beforeApprovalDashboard["eligible_plan_total_rub"]) != "0.00" {
 		t.Fatal("individual mandatory rows were counted before their agreement report was approved")
 	}
 	status = object(call(partnerClient, "GET", strings.ReplaceAll(statusPath, "period_type=plan", "period_type=fact"), nil, 200))
@@ -408,7 +416,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	importPath := "/entries/import?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&category_code=teachers&period_type=fact&report_year=2026"
 	upload(partnerClient, importPath, map[string][]byte{"data.xlsx": book}, 403)
 	preview := object(upload(companyClient, importPath, map[string][]byte{"data.xlsx": book}, 200))
-	if preview["committed"].(bool) || preview["total_rub"].(float64) != 12420 {
+	if preview["committed"].(bool) || money(preview["total_rub"]) != "12420.00" {
 		t.Fatal("bad preview")
 	}
 	committed := object(upload(companyClient, importPath+"&commit=1", map[string][]byte{"data.xlsx": book}, 201))
@@ -459,14 +467,14 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact&format=docx", nil, 200)
 	dash := object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
-	if dash["fact_total_rub"].(float64) != 98760 || dash["eligible_fact_total_rub"].(float64) != 98760 {
+	if money(dash["fact_total_rub"]) != "98760.00" || money(dash["eligible_fact_total_rub"]) != "98760.00" {
 		t.Fatalf("dashboard scope/formulas wrong: %v", dash)
 	}
 	internship["mentor_id"] = mentor
 	call(companyClient, "PUT", "/entries/"+traineeID, map[string]interface{}{"payload": internship, "comment": "Уточнение данных после утверждения"}, 200)
 	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
 	dash = object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
-	if dash["eligible_fact_total_rub"].(float64) != 0 {
+	if money(dash["eligible_fact_total_rub"]) != "0.00" {
 		t.Fatal("changed approved report was not returned to draft")
 	}
 	directoryBook := xlsx.New()
