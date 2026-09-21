@@ -76,6 +76,29 @@ func TestWorkspaceIntegration(t *testing.T) {
 		}
 		return b
 	}
+	upload := func(client *http.Client, path string, files map[string][]byte, want int) []byte {
+		t.Helper()
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		for name, b := range files {
+			f, _ := mw.CreateFormFile("file", name)
+			f.Write(b)
+		}
+		mw.Close()
+		req, _ := http.NewRequest("POST", server.URL+"/api"+path, &body)
+		req.Header.Set("X-Cybercalc-Request", "1")
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		res, e := client.Do(req)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		if res.StatusCode != want {
+			t.Fatalf("upload %s: %d expected %d %s", path, res.StatusCode, want, b)
+		}
+		return b
+	}
 	object := func(b []byte) map[string]interface{} {
 		t.Helper()
 		var m map[string]interface{}
@@ -337,6 +360,53 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if money(trainee["amount_rub"]) != "30340.00" {
 		t.Fatal("wrong internship formula")
 	}
+	if _, err := db.Exec(`INSERT INTO agreement_activity_requirements(agreement_id,category_code) VALUES($1,'employment_practice')`, agreement1); err != nil {
+		t.Fatalf("enable isolated employment practice fixture: %v", err)
+	}
+	practiceHeaders := []string{
+		"mentor_full_name", "student_full_name", "duration_months", "student_load_hours_per_month", "mentor_load_hours_per_month",
+		"labor_contract_type", "labor_contract_number", "labor_contract_date",
+	}
+	practiceWorkbook := func(contractType string) []byte {
+		wb := xlsx.New()
+		wb.AddSheet("Данные", practiceHeaders, [][]interface{}{{
+			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01",
+		}})
+		book, err := wb.Bytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return book
+	}
+	practiceImportPath := "/entries/import?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&category_code=employment_practice&period_type=fact&report_year=2026"
+	invalidPracticeImport := object(upload(companyClient, practiceImportPath, map[string][]byte{"practice.xlsx": practiceWorkbook("Другой тип договора")}, 200))
+	if len(invalidPracticeImport["errors"].([]interface{})) != 1 {
+		t.Fatal("employment practice import accepted a non-fixed-term contract")
+	}
+	validPracticeImport := object(upload(companyClient, practiceImportPath, map[string][]byte{"practice.xlsx": practiceWorkbook("Срочный трудовой договор")}, 200))
+	if len(validPracticeImport["errors"].([]interface{})) != 0 || money(validPracticeImport["total_rub"]) != "15170.00" {
+		t.Fatal("employment practice import rejected a fixed-term contract")
+	}
+	practice := map[string]interface{}{
+		"org_name": p1, "mentor_id": mentor, "student_full_name": "Практикантов Павел", "duration_months": 1,
+		"student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3,
+	}
+	create(companyClient, p1, agreement1, "employment_practice", "fact", practice, 400)
+	practice["labor_contract_type"] = "other"
+	practice["labor_contract_number"] = "ТД-42"
+	practice["labor_contract_date"] = "2026-09-01"
+	create(companyClient, p1, agreement1, "employment_practice", "fact", practice, 400)
+	practice["labor_contract_type"] = "fixed_term"
+	createdPractice := object(create(companyClient, p1, agreement1, "employment_practice", "fact", practice, 201))
+	if money(createdPractice["amount_rub"]) != "15170.00" {
+		t.Fatal("wrong employment practice formula")
+	}
+	if _, err := db.Exec(`DELETE FROM entries WHERE id=$1`, createdPractice["id"]); err != nil {
+		t.Fatalf("remove isolated employment practice fixture: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM agreement_activity_requirements WHERE agreement_id=$1 AND category_code='employment_practice'`, agreement1); err != nil {
+		t.Fatalf("restore agreement after employment practice fixture: %v", err)
+	}
 	entries := call(partnerClient, "GET", "/entries?category_code=internship", nil, 200)
 	if bytes.Contains(entries, []byte("Поддельное")) {
 		t.Fatal("mentor snapshot forged")
@@ -384,29 +454,6 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	call(partnerClient, "GET", strings.ReplaceAll(statusPath, p1, p2), nil, 403)
 	// Batch upload: optional, supported even on plan, and scoped on download.
-	upload := func(client *http.Client, path string, files map[string][]byte, want int) []byte {
-		t.Helper()
-		var body bytes.Buffer
-		mw := multipart.NewWriter(&body)
-		for name, b := range files {
-			f, _ := mw.CreateFormFile("file", name)
-			f.Write(b)
-		}
-		mw.Close()
-		req, _ := http.NewRequest("POST", server.URL+"/api"+path, &body)
-		req.Header.Set("X-Cybercalc-Request", "1")
-		req.Header.Set("Content-Type", mw.FormDataContentType())
-		res, e := client.Do(req)
-		if e != nil {
-			t.Fatal(e)
-		}
-		defer res.Body.Close()
-		b, _ := io.ReadAll(res.Body)
-		if res.StatusCode != want {
-			t.Fatalf("upload %s: %d expected %d %s", path, res.StatusCode, want, b)
-		}
-		return b
-	}
 	attachments := object(upload(companyClient, "/entries/"+id+"/attachments", map[string][]byte{"Акт 1.txt": []byte("one"), "Акт 2.txt": []byte("two")}, 201))
 	if len(attachments["files"].([]interface{})) != 2 {
 		t.Fatal("batch not saved")

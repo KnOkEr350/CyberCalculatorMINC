@@ -289,6 +289,62 @@ func TestSchoolActivitiesRejectProhibitedFunding(t *testing.T) {
 	}
 }
 
+func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
+	calc, err := Get("employment_practice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := map[string]interface{}{
+		"org_name": "partner-id", "mentor_id": "mentor-id", "mentor_full_name": "Иванов Иван Иванович",
+		"student_full_name": "Петров Пётр Петрович", "duration_months": 2.0,
+		"student_load_hours_per_month": 10.0, "mentor_load_hours_per_month": 3.0,
+		"labor_contract_type": "fixed_term", "labor_contract_number": "ТД-42", "labor_contract_date": "2026-09-01",
+	}
+	if err := ValidatePayload(calc, valid); err != nil {
+		t.Fatalf("valid fixed-term contract rejected: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		key   string
+		value interface{}
+	}{
+		{name: "missing number", key: "labor_contract_number", value: nil},
+		{name: "invalid date", key: "labor_contract_date", value: "2026-02-30"},
+		{name: "non fixed-term contract", key: "labor_contract_type", value: "other"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload := make(map[string]interface{}, len(valid))
+			for key, value := range valid {
+				payload[key] = value
+			}
+			if test.value == nil {
+				delete(payload, test.key)
+			} else {
+				payload[test.key] = test.value
+			}
+			if err := ValidatePayload(calc, payload); err == nil {
+				t.Fatal("invalid employment practice was accepted")
+			}
+		})
+	}
+
+	internship, err := Get("internship")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withoutContract := make(map[string]interface{}, len(valid)-3)
+	for key, value := range valid {
+		if key != "labor_contract_type" && key != "labor_contract_number" && key != "labor_contract_date" {
+			withoutContract[key] = value
+		}
+	}
+	if err := ValidatePayload(internship, withoutContract); err != nil {
+		t.Fatalf("internship unexpectedly requires practice contract fields: %v", err)
+	}
+}
+
 func TestValidatePayloadNormalizesTextAndAmountBounds(t *testing.T) {
 	calc, err := Get("top_it")
 	if err != nil {

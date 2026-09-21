@@ -65,6 +65,8 @@ const VALUE_LABELS = {
   specialist: "Специалитет",
   absent: "Отсутствует",
   full_or_partial: "Есть полностью или частично",
+  fixed_term: "Срочный трудовой договор",
+  other: "Другой тип договора",
   development: "Разработка",
   update: "Актуализация",
   expertise: "Экспертиза",
@@ -726,6 +728,8 @@ function fieldInput(f, value, audience) {
                   specialist: "Специалитет",
                   absent: "Отсутствует",
                   full_or_partial: "Есть полностью или частично",
+                  fixed_term: "Срочный трудовой договор",
+                  other: "Другой тип договора",
                   development: "Разработка",
                   update: "Актуализация",
                   expertise: "Экспертиза",
@@ -745,6 +749,9 @@ function fieldInput(f, value, audience) {
     return `<input type="number" min="${f.minimum ?? 0}" max="${f.maximum ?? 1000000000000}" step="${f.integer ? "1" : "any"}" data-key="${escapeHTML(
       f.key,
     )}" data-kind="number" value="${escapeHTML(val)}" ${f.required ? "required" : ""}>`;
+  }
+  if (f.type === "date") {
+    return `<input type="date" data-key="${escapeHTML(f.key)}" data-kind="date" value="${escapeHTML(val)}" ${f.required ? "required" : ""}>`;
   }
   return `<input type="text" maxlength="${f.max_length || 1000}" data-key="${escapeHTML(f.key)}" data-kind="text" value="${escapeHTML(
     val,
@@ -856,6 +863,19 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
           firstInvalid ||= input;
         }
       }
+    }
+  }
+  if (
+    category.code === "employment_practice" &&
+    payload.labor_contract_type === "other"
+  ) {
+    const input = fieldsBox.querySelector('[data-key="labor_contract_type"]');
+    if (input) {
+      setFieldError(
+        input,
+        "Для зачёта практики требуется срочный трудовой договор",
+      );
+      firstInvalid ||= input;
     }
   }
   if (

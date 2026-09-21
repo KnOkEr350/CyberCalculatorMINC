@@ -10,6 +10,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -28,7 +29,7 @@ type payloadValidator interface {
 type FieldSpec struct {
 	Key       string   `json:"key"`
 	Label     string   `json:"label"`
-	Type      string   `json:"type"` // number|text|select
+	Type      string   `json:"type"` // number|text|select|date
 	Required  bool     `json:"required"`
 	Options   []string `json:"options,omitempty"`
 	Integer   bool     `json:"integer,omitempty"`
@@ -47,7 +48,7 @@ var registry = map[string]Calculator{
 	"teachers":            teachersCalc{},
 	"ood_rpd":             oodRpdCalc{},
 	"internship":          internshipCalc{},
-	"employment_practice": internshipCalc{}, // формула идентична "Стажировкам" (см. ТЗ, раздел "Практика с трудоустройством")
+	"employment_practice": employmentPracticeCalc{}, // формула едина, комплаенс-поля практики строже
 	"top_it":              topITCalc{},
 	"minc_decision":       manualCalc{},
 	"it_clubs":            schoolProgramsCalc{},
@@ -171,7 +172,7 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 			if field.Maximum != 0 && number > field.Maximum {
 				return fmt.Errorf("поле %q должно быть не больше %v", field.Label, field.Maximum)
 			}
-		case "text", "select":
+		case "text", "select", "date":
 			s, ok := value.(string)
 			if !ok {
 				return fmt.Errorf("поле %q должно быть строкой", field.Key)
@@ -203,6 +204,11 @@ func ValidatePayload(c Calculator, payload map[string]interface{}) error {
 				}
 				if !valid {
 					return fmt.Errorf("поле %q содержит недопустимое значение", field.Key)
+				}
+			}
+			if field.Type == "date" && s != "" {
+				if _, err := time.Parse("2006-01-02", s); err != nil {
+					return fmt.Errorf("поле %q должно содержать корректную дату в формате YYYY-MM-DD", field.Label)
 				}
 			}
 		default:
