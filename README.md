@@ -1,6 +1,7 @@
 # CyberCalculatorMINC — калькулятор затрат по Приказу Минцифры
 
 Архитектура и границы масштабирования описаны в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Стандарт новых backend-модулей и эталонное направление зависимостей описаны в [backend/internal/modules/README.md](backend/internal/modules/README.md).
 Актуальный сценарий работы от учебного заведения, роли, справочник, импорт Excel, вложения, ограничения и локальные проверки описаны в [WORKSPACE_CHANGES.md](WORKSPACE_CHANGES.md).
 
 Реализация ТЗ «Калькулятор затрат по Приказу МЦ»: расчёт стоимости
@@ -22,6 +23,8 @@
 │   │   ├── handlers/        # HTTP-хендлеры
 │   │   ├── middleware/      # авторизация/роли
 │   │   ├── models/          # доменные структуры
+│   │   ├── modules/         # независимые domain/repository/service/http-модули
+│   │   ├── platform/        # общие типизированные ошибки и HTTP-примитивы
 │   │   ├── retention/       # фоновая очистка логов/файлов по срокам
 │   │   ├── workers/         # жизненный цикл фоновых задач
 │   │   └── xlsx/            # минимальный xlsx-writer на archive/zip
