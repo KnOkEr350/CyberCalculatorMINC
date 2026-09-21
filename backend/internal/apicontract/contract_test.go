@@ -21,7 +21,7 @@ func TestOpenAPIV1IsValidAndMatchesRegisteredRoutes(t *testing.T) {
 	if err := CompareRoutes(Operations(document), registered); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(registered); got != 61 {
+	if got := len(registered); got != 65 {
 		t.Fatalf("route inventory changed unexpectedly: got %d; update the contract and this assertion", got)
 	}
 }

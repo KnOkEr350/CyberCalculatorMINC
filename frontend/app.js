@@ -88,6 +88,8 @@ const VALUE_LABELS = {
   directory_propose: "Предложение учебного заведения",
   directory_proposal_approve: "Принятие предложения",
   directory_proposal_reject: "Отклонение предложения",
+  okz_catalog_version: "Версия ОКЗ",
+  okz_import: "Импорт ОКЗ",
 };
 
 function valueLabel(value) {
@@ -1215,7 +1217,7 @@ async function renderAdmin(root) {
     <nav class="admin-nav" aria-label="Разделы административной панели">
       ${showEducationDirectory ? `<button data-t="partners"${initialDirectoryTab === "partners" ? ' class="active"' : ""}><b>Справочник ОО <span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span></b></button>` : ""}
       ${showITDirectory ? `<button data-t="it-companies"${initialDirectoryTab === "it-companies" ? ' class="active"' : ""}><b>ИТ-компании</b></button>` : ""}
-      ${isAdmin ? '<button data-t="users"><b>Пользователи</b></button><button data-t="settings"><b>Настройки</b></button><button data-t="logs"><b>Журнал изменений</b></button>' : ""}
+      ${isAdmin ? '<button data-t="users"><b>Пользователи</b></button><button data-t="okz"><b>Справочник ОКЗ</b></button><button data-t="settings"><b>Настройки</b></button><button data-t="logs"><b>Журнал изменений</b></button>' : ""}
     </nav>
     <div id="admin-content"></div>
   </div>`;
@@ -1235,10 +1237,11 @@ async function renderAdmin(root) {
 async function renderAdminTab(box, tab) {
   box.innerHTML = `<div class="card loading-state"><span class="spinner"></span>Загрузка данных…</div>`;
   try {
-    const adminOnly = new Set(["users", "settings", "logs"]);
+    const adminOnly = new Set(["users", "okz", "settings", "logs"]);
     if (adminOnly.has(tab) && state.me.role !== "admin")
       throw new Error("Этот раздел доступен только администратору");
     if (tab === "users") return await renderAdminUsers(box);
+    if (tab === "okz") return await CyberCalcOKZ.render(box, { api, escapeHTML, showToast });
     if (tab === "partners") return await renderPartnerDirectory(box, true);
     if (tab === "it-companies") {
       if (!canViewITCompanies()) throw new Error("Реестр ИТ-компаний недоступен для этого профиля");
@@ -1531,6 +1534,7 @@ async function renderAdminLogs(box) {
     institution_status: "Статус организации", registry_record_id: "Запись реестра",
     source_url: "Источник", registry_updated_at: "Дата актуальности",
     verification_status: "Статус проверки",
+    version: "Версия", records: "Количество записей", effective_on: "Дата начала действия",
   };
   const summarize = (log) => {
     const before = log.old_value || {};

@@ -4,6 +4,7 @@
 Стандарт новых backend-модулей и эталонное направление зависимостей описаны в [backend/internal/modules/README.md](backend/internal/modules/README.md).
 Управление поэтапным включением backend-модулей и frontend-экранов описано в [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md).
 Версионированный OpenAPI-контракт и его автоматическая проверка описаны в [docs/API_CONTRACT.md](docs/API_CONTRACT.md).
+Версионированный справочник ОКЗ, CSV-импорт и поиск описаны в [docs/OKZ_DIRECTORY.md](docs/OKZ_DIRECTORY.md).
 Актуальный сценарий работы от учебного заведения, роли, справочник, импорт Excel, вложения, ограничения и локальные проверки описаны в [WORKSPACE_CHANGES.md](WORKSPACE_CHANGES.md).
 
 Реализация ТЗ «Калькулятор затрат по Приказу МЦ»: расчёт стоимости

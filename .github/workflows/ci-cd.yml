@@ -70,8 +70,10 @@ jobs:
           node --check frontend/app.js
           node --check frontend/workspace.js
           node --check frontend/mfa.js
+          node --check frontend/okz.js
           node --check frontend/features.js
           node --test frontend/features.test.cjs
+          node --test frontend/okz.test.cjs
 
       - name: Lint GitHub Actions workflow and extracted scripts
         run: |

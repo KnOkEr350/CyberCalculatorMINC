@@ -14,6 +14,7 @@ import (
 	"cybercalc/internal/modules/documents"
 	"cybercalc/internal/modules/features"
 	"cybercalc/internal/modules/health"
+	"cybercalc/internal/modules/okz"
 	"cybercalc/internal/modules/planning"
 	"cybercalc/internal/modules/reporting"
 	"cybercalc/internal/platform/routing"
@@ -35,6 +36,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 			RequireMFA:   cfg.Environment == "production",
 		}),
 		directories.New(db),
+		okz.New(db),
 		planning.New(db),
 		documents.New(db, documents.Options{
 			UploadDir:      cfg.UploadDir,

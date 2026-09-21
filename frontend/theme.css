@@ -293,6 +293,11 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 .proposal-item .btn { margin-top: 3px; }
 .directory-heading { margin-bottom: 10px; }
 .directory-heading p { margin: 3px 0 0; }
+.okz-search-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, .45fr) auto; gap: 10px; align-items: end; margin: 12px 0 14px; }
+.okz-search-toolbar input, .okz-search-toolbar select { min-width: 0; }
+.okz-page-footer { margin-top: 12px; }
+.okz-page-footer small { color: var(--muted); }
+#okz-import-error:empty { display: none; }
 
 /* Login */
 .auth-shell { display: grid; grid-template-columns: minmax(360px, .78fr) minmax(460px, 1.22fr); min-height: 100vh; background: #fff; }
@@ -427,7 +432,7 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
   .dashboard-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-summary-strip > div:nth-child(2) { border-right: 0; }
   .dashboard-summary-strip > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
-  .directory-search, .directory-search.user-search { grid-template-columns: 1fr; }
+  .directory-search, .directory-search.user-search, .okz-search-toolbar { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 500px) {
