@@ -3,6 +3,8 @@ package config
 
 import (
 	"cybercalc/internal/auth"
+	"cybercalc/internal/platform/featureflags"
+	"errors"
 	"fmt"
 	"net"
 	"net/mail"
@@ -36,6 +38,10 @@ type Config struct {
 	DirectoryEnrichOnStart bool
 	DirectoryEnrichLimit   int
 	DirectoryEnrichDelayMS int
+
+	BackendFeatureFlags  featureflags.Set
+	FrontendFeatureFlags featureflags.Set
+	featureFlagsError    error
 }
 
 func getenv(key, def string) string {
@@ -88,6 +94,17 @@ func Load() Config {
 	if raw := os.Getenv("UPLOAD_QUOTA_BYTES"); raw != "" {
 		c.UploadQuotaBytes, _ = strconv.ParseInt(raw, 10, 64)
 	}
+	backendFeatureFlags, backendFeatureFlagsError := featureflags.Parse(os.Getenv("BACKEND_FEATURE_FLAGS"))
+	frontendFeatureFlags, frontendFeatureFlagsError := featureflags.Parse(os.Getenv("FRONTEND_FEATURE_FLAGS"))
+	c.BackendFeatureFlags = backendFeatureFlags
+	c.FrontendFeatureFlags = frontendFeatureFlags
+	if backendFeatureFlagsError != nil {
+		backendFeatureFlagsError = fmt.Errorf("BACKEND_FEATURE_FLAGS: %w", backendFeatureFlagsError)
+	}
+	if frontendFeatureFlagsError != nil {
+		frontendFeatureFlagsError = fmt.Errorf("FRONTEND_FEATURE_FLAGS: %w", frontendFeatureFlagsError)
+	}
+	c.featureFlagsError = errors.Join(backendFeatureFlagsError, frontendFeatureFlagsError)
 	return c
 }
 
@@ -104,6 +121,12 @@ func (c Config) DSN() string {
 }
 
 func (c Config) Validate() error {
+	if c.featureFlagsError != nil {
+		return c.featureFlagsError
+	}
+	if c.Environment == "production" && (c.BackendFeatureFlags.UsedAllShortcut() || c.FrontendFeatureFlags.UsedAllShortcut()) {
+		return fmt.Errorf("production запрещает feature flag shortcut all; перечислите разрешённые флаги явно")
+	}
 	if c.UploadQuotaBytes < 64<<20 || c.UploadQuotaBytes > 1<<40 {
 		return fmt.Errorf("UPLOAD_QUOTA_BYTES должен быть от 64 МиБ до 1 ТиБ")
 	}

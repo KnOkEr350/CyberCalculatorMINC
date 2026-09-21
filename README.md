@@ -2,6 +2,7 @@
 
 Архитектура и границы масштабирования описаны в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Стандарт новых backend-модулей и эталонное направление зависимостей описаны в [backend/internal/modules/README.md](backend/internal/modules/README.md).
+Управление поэтапным включением backend-модулей и frontend-экранов описано в [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md).
 Актуальный сценарий работы от учебного заведения, роли, справочник, импорт Excel, вложения, ограничения и локальные проверки описаны в [WORKSPACE_CHANGES.md](WORKSPACE_CHANGES.md).
 
 Реализация ТЗ «Калькулятор затрат по Приказу МЦ»: расчёт стоимости

@@ -1,12 +1,14 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"cybercalc/internal/config"
+	"cybercalc/internal/platform/featureflags"
 )
 
 func TestBuildRoutesMountsAllProtectedModuleRoutes(t *testing.T) {
@@ -97,6 +99,7 @@ func TestBuildRoutesMountsPublicModuleRoutes(t *testing.T) {
 		{http.MethodGet, "/api/live", "", http.StatusOK},
 		{http.MethodGet, "/api/ready", "", http.StatusServiceUnavailable},
 		{http.MethodGet, "/api/health", "", http.StatusServiceUnavailable},
+		{http.MethodGet, "/api/features", "", http.StatusOK},
 		{http.MethodPost, "/api/auth/login", "", http.StatusBadRequest},
 		{http.MethodPost, "/api/auth/logout", "", http.StatusOK},
 	}
@@ -110,5 +113,29 @@ func TestBuildRoutesMountsPublicModuleRoutes(t *testing.T) {
 		if response.Code != test.wantStatus {
 			t.Fatalf("%s %s returned %d, want %d; body=%q", test.method, test.path, response.Code, test.wantStatus, response.Body.String())
 		}
+	}
+}
+
+func TestBuildRoutesPublishesOnlyConfiguredFrontendFlags(t *testing.T) {
+	frontendFlags, err := featureflags.Parse("teachers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	backendFlags, err := featureflags.Parse("schools")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := BuildRoutes(nil, config.Config{FrontendFeatureFlags: frontendFlags, BackendFeatureFlags: backendFlags})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/features", nil))
+
+	var body struct {
+		Flags map[string]bool `json:"flags"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Flags["teachers"] || body.Flags["schools"] {
+		t.Fatalf("frontend snapshot leaked or lost flags: %#v", body.Flags)
 	}
 }

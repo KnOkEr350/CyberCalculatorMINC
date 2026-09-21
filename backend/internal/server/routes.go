@@ -12,6 +12,7 @@ import (
 	"cybercalc/internal/modules/authentication"
 	"cybercalc/internal/modules/directories"
 	"cybercalc/internal/modules/documents"
+	"cybercalc/internal/modules/features"
 	"cybercalc/internal/modules/health"
 	"cybercalc/internal/modules/planning"
 	"cybercalc/internal/modules/reporting"
@@ -26,6 +27,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	routing.RegisterAll(
 		mux,
 		health.New(db),
+		features.New(cfg.FrontendFeatureFlags),
 		authentication.New(db, authentication.Options{
 			SessionTTL:   time.Duration(cfg.SessionTTLh) * time.Hour,
 			SecureCookie: cfg.CookieSecure,

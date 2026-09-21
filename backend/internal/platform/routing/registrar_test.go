@@ -44,3 +44,16 @@ func TestRegisterAllRejectsInvalidComposition(t *testing.T) {
 		})
 	}
 }
+
+func TestWhenControlsBackendModuleRegistration(t *testing.T) {
+	mux := http.NewServeMux()
+	RegisterAll(mux, When(false, registrarStub{"GET /disabled"}), When(true, registrarStub{"GET /enabled"}))
+
+	for path, want := range map[string]int{"/disabled": http.StatusNotFound, "/enabled": http.StatusNoContent} {
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != want {
+			t.Fatalf("%s returned %d, want %d", path, response.Code, want)
+		}
+	}
+}
