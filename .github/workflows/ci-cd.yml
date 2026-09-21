@@ -44,6 +44,10 @@ jobs:
             exit 1
           fi
 
+      - name: Verify immutable SQL migrations
+        working-directory: backend
+        run: go run ./cmd/migrationcheck ../migrations ../migrations/checksums.sha256
+
       - name: Run go vet
         shell: bash
         run: |
