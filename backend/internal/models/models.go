@@ -110,7 +110,44 @@ type Partner struct {
 	LicenseNumber         string    `json:"license_number,omitempty"`
 	LicenseStatus         string    `json:"license_status,omitempty"`
 	InstitutionStatus     string    `json:"institution_status,omitempty"`
+	OrgUnitsCount         int       `json:"org_units_count"`
+	AcademicGroupsCount   int       `json:"academic_groups_count"`
 	CreatedAt             time.Time `json:"created_at"`
+}
+
+type OrgUnit struct {
+	ID              string    `json:"id"`
+	PartnerID       string    `json:"partner_id"`
+	ParentUnitID    string    `json:"parent_unit_id,omitempty"`
+	ParentUnitName  string    `json:"parent_unit_name,omitempty"`
+	Depth           int       `json:"depth"`
+	UnitLevelType   string    `json:"unit_level_type"`
+	UnitName        string    `json:"unit_name"`
+	HeadFIO         string    `json:"head_fio,omitempty"`
+	HeadPosition    string    `json:"head_position,omitempty"`
+	HeadContacts    string    `json:"head_contacts,omitempty"`
+	ChairFIO        string    `json:"chair_fio,omitempty"`
+	ChairContacts   string    `json:"chair_contacts,omitempty"`
+	CuratorFIO      string    `json:"curator_fio,omitempty"`
+	CuratorContacts string    `json:"curator_contacts,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type AcademicGroup struct {
+	ID              string    `json:"id"`
+	PartnerID       string    `json:"partner_id"`
+	UnitID          string    `json:"unit_id"`
+	UnitName        string    `json:"unit_name"`
+	GroupName       string    `json:"group_name"`
+	EducationLevel  string    `json:"education_level"`
+	CourseNum       int       `json:"course_num"`
+	CurrentSemester int       `json:"current_semester"`
+	SemesterPeriod  string    `json:"semester_period"`
+	SpecialtyCode   string    `json:"specialty_code"`
+	StudentsCount   int       `json:"students_count"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type AgreementResponsiblePerson struct {

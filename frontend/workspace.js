@@ -28,6 +28,10 @@ function canApproveEducationDirectory() {
   return state.me?.role === "super_admin" && state.me?.entity_type === "organization";
 }
 
+function canManageAcademicStructure() {
+  return isStaffUser() || (state.me?.entity_type === "edu_institution" && state.me?.role === "curator");
+}
+
 function canPrepareCategory(category) {
   if (["super_admin", "holding_admin", "org_admin", "curator"].includes(state.me?.role)) return state.me?.entity_type !== "edu_institution";
   if (state.me?.role === "hr_specialist") return ["internship", "employment_practice"].includes(category);
@@ -1281,7 +1285,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     );
     root.querySelector("#partner-count").textContent = `Показано: ${partners.length} из ${state.partners.length}`;
     root.querySelector("#partner-list").innerHTML = partners.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Проверка</th><th>Соглашения</th><th></th></tr></thead><tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</small></td><td><span class="status-badge ${p.verification_status === "verified" ? "active" : "inactive"}">${p.verification_status === "verified" ? "Реестр подтверждён" : "Историческая запись"}</span><br><small>${escapeHTML(p.inn || "ИНН не указан")}</small></td><td>Всего: ${p.agreements_count}<br>Действующих сейчас: ${p.active_agreements_count}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-agreements="${p.id}">Соглашения</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`
+      ? `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Проверка</th><th>Соглашения</th><th>Учебная структура</th><th></th></tr></thead><tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</small></td><td><span class="status-badge ${p.verification_status === "verified" ? "active" : "inactive"}">${p.verification_status === "verified" ? "Реестр подтверждён" : "Историческая запись"}</span><br><small>${escapeHTML(p.inn || "ИНН не указан")}</small></td><td>Всего: ${p.agreements_count}<br>Действующих сейчас: ${p.active_agreements_count}</td><td>Подразделений: ${Number(p.org_units_count || 0)}<br>Групп: ${Number(p.academic_groups_count || 0)}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-agreements="${p.id}">Соглашения</button><button class="btn secondary" data-structure="${p.id}" ${p.partner_kind === "school" ? "disabled" : ""}>Структура и группы</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Партнёры по выбранным условиям не найдены.</p>';
     root.querySelectorAll("[data-partner]").forEach((button) => {
       button.onclick = () => {
@@ -1291,6 +1295,9 @@ async function renderPartnerDirectory(root, embedded = false) {
     });
     root.querySelectorAll("[data-mentors]").forEach((button) => {
       button.onclick = () => openMentors(button.dataset.mentors);
+    });
+    root.querySelectorAll("[data-structure]").forEach((button) => {
+      if (!button.disabled) button.onclick = () => openPartnerStructure(button.dataset.structure, refreshPartners);
     });
     root.querySelectorAll("[data-agreements]").forEach((button) => {
       button.onclick = () => openAgreements(button.dataset.agreements, refreshPartners);
@@ -1330,6 +1337,114 @@ async function renderPartnerDirectory(root, embedded = false) {
     };
   }
   await Promise.all([search(), refreshPartners()]);
+}
+
+const ORG_UNIT_LABELS = {
+  institute: "Институт",
+  faculty: "Факультет",
+  division: "Отделение",
+  department: "Кафедра",
+  laboratory: "Лаборатория",
+};
+
+const EDUCATION_LEVEL_LABELS = {
+  vo_bachelor: "ВО — бакалавриат",
+  vo_master: "ВО — магистратура",
+  vo_specialist: "ВО — специалитет",
+  spo: "СПО",
+};
+
+async function openPartnerStructure(partnerID, onSaved = async () => {}) {
+  const partner = state.partners.find((item) => item.id === partnerID);
+  if (!partner) return;
+  const editable = canManageAcademicStructure();
+  const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Структура учебного заведения"><div class="flex between"><div><span class="eyebrow">Карточка партнёра</span><h2>Структура и группы: ${escapeHTML(partner.name)}</h2></div><button class="btn secondary" id="structure-close">Закрыть</button></div><div class="tabs"><button class="active" data-structure-tab="units">Подразделения</button><button data-structure-tab="groups">Академические группы</button></div><section id="structure-units"></section><section id="structure-groups" hidden></section></div></div>`);
+  document.body.appendChild(modal);
+  modal.querySelector("#structure-close").onclick = () => modal.remove();
+  modal.querySelectorAll("[data-structure-tab]").forEach((button) => {
+    button.onclick = () => {
+      modal.querySelectorAll("[data-structure-tab]").forEach((item) => item.classList.toggle("active", item === button));
+      modal.querySelector("#structure-units").hidden = button.dataset.structureTab !== "units";
+      modal.querySelector("#structure-groups").hidden = button.dataset.structureTab !== "groups";
+    };
+  });
+
+  let units = [];
+  let groups = [];
+  let specialtyCodes = [];
+  let editingUnitID = "";
+  let editingGroupID = "";
+
+  const unitFields = (item = {}) => `<div class="grid cols-3"><div class="field"><label>Родительское подразделение</label><select name="parent_unit_id"><option value="">— Корневой уровень —</option>${units.map((unit) => `<option value="${unit.id}" ${unit.id === item.parent_unit_id ? "selected" : ""} ${unit.id === item.id ? "disabled" : ""}>${"— ".repeat(Math.max(0, unit.depth - 1))}${escapeHTML(unit.unit_name)}</option>`).join("")}</select></div><div class="field"><label>Тип *</label><select name="unit_level_type" required>${Object.entries(ORG_UNIT_LABELS).map(([code, label]) => `<option value="${code}" ${code === item.unit_level_type ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Наименование *</label><input name="unit_name" required minlength="2" maxlength="300" value="${escapeHTML(item.unit_name || "")}"></div><div class="field"><label>Руководитель</label><input name="head_fio" maxlength="200" value="${escapeHTML(item.head_fio || "")}"></div><div class="field"><label>Должность руководителя</label><input name="head_position" maxlength="200" value="${escapeHTML(item.head_position || "")}"></div><div class="field"><label>Контакты руководителя</label><input name="head_contacts" maxlength="500" value="${escapeHTML(item.head_contacts || "")}"></div><div class="field"><label>Заведующий кафедрой</label><input name="chair_fio" maxlength="200" value="${escapeHTML(item.chair_fio || "")}"></div><div class="field"><label>Контакты заведующего</label><input name="chair_contacts" maxlength="500" value="${escapeHTML(item.chair_contacts || "")}"></div><div class="field"><label>Куратор от ОО</label><input name="curator_fio" maxlength="200" value="${escapeHTML(item.curator_fio || "")}"></div><div class="field"><label>Контакты куратора</label><input name="curator_contacts" maxlength="500" value="${escapeHTML(item.curator_contacts || "")}"></div></div>`;
+
+  const groupFields = (item = {}) => {
+    const levels = partner.partner_kind === "kolledj" ? [["spo", "СПО"]] : Object.entries(EDUCATION_LEVEL_LABELS).filter(([code]) => code !== "spo");
+    return `<div class="grid cols-3"><div class="field"><label>Подразделение *</label><select name="unit_id" required><option value="">— Выберите —</option>${units.map((unit) => `<option value="${unit.id}" ${unit.id === item.unit_id ? "selected" : ""}>${"— ".repeat(Math.max(0, unit.depth - 1))}${escapeHTML(unit.unit_name)}</option>`).join("")}</select></div><div class="field"><label>Шифр группы *</label><input name="group_name" required maxlength="100" value="${escapeHTML(item.group_name || "")}" placeholder="БПИ-231"></div><div class="field"><label>Уровень образования *</label><select name="education_level" required>${levels.map(([code, label]) => `<option value="${code}" ${code === item.education_level ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Курс *</label><input name="course_num" type="number" min="1" max="7" required value="${Number(item.course_num || 1)}"></div><div class="field"><label>Сквозной семестр *</label><input name="current_semester" type="number" min="1" max="13" required value="${Number(item.current_semester || 1)}"></div><div class="field"><label>Период *</label><select name="semester_period"><option value="autumn" ${item.semester_period !== "spring" ? "selected" : ""}>Осень</option><option value="spring" ${item.semester_period === "spring" ? "selected" : ""}>Весна</option></select></div><div class="field"><label>Код специальности по Приказу № 27 *</label><input name="specialty_code" required pattern="[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}" maxlength="8" value="${escapeHTML(item.specialty_code || "")}" list="partner-specialty-codes" placeholder="09.03.01"><datalist id="partner-specialty-codes">${specialtyCodes.map((code) => `<option value="${escapeHTML(code)}"></option>`).join("")}</datalist></div><div class="field"><label>Численность студентов *</label><input name="students_count" type="number" min="0" max="10000" required value="${Number(item.students_count || 0)}"></div></div>`;
+  };
+
+  const collectUnit = (form) => Object.fromEntries(["parent_unit_id", "unit_level_type", "unit_name", "head_fio", "head_position", "head_contacts", "chair_fio", "chair_contacts", "curator_fio", "curator_contacts"].map((name) => [name, form.elements[name].value.trim()]));
+  const collectGroup = (form) => ({
+    unit_id: form.elements.unit_id.value,
+    group_name: form.elements.group_name.value.trim(),
+    education_level: form.elements.education_level.value,
+    course_num: Number(form.elements.course_num.value),
+    current_semester: Number(form.elements.current_semester.value),
+    semester_period: form.elements.semester_period.value,
+    specialty_code: form.elements.specialty_code.value.trim(),
+    students_count: Number(form.elements.students_count.value),
+  });
+
+  const renderUnits = () => {
+    const section = modal.querySelector("#structure-units");
+    section.innerHTML = `<div class="card"><div class="flex between"><div><h2>Иерархия подразделений</h2><p class="muted">До 10 уровней; циклические и межорганизационные связи блокируются сервером.</p></div><span class="count-badge">${units.length}</span></div>${units.length ? `<div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Тип</th><th>Руководитель</th><th>Куратор ОО</th>${editable ? "<th></th>" : ""}</tr></thead><tbody>${units.map((unit) => `<tr><td style="padding-left:${10 + Math.max(0, unit.depth - 1) * 18}px"><b>${escapeHTML(unit.unit_name)}</b>${unit.parent_unit_name ? `<br><small>В составе: ${escapeHTML(unit.parent_unit_name)}</small>` : ""}</td><td>${escapeHTML(ORG_UNIT_LABELS[unit.unit_level_type] || unit.unit_level_type)}</td><td>${escapeHTML(unit.head_fio || unit.chair_fio || "—")}<br><small>${escapeHTML(unit.head_contacts || unit.chair_contacts || "")}</small></td><td>${escapeHTML(unit.curator_fio || "—")}<br><small>${escapeHTML(unit.curator_contacts || "")}</small></td>${editable ? `<td><button class="btn secondary" data-edit-unit="${unit.id}">Изменить</button><button class="btn secondary" data-delete-unit="${unit.id}">Удалить</button></td>` : ""}</tr>`).join("")}</tbody></table></div>` : '<p class="muted">Подразделения ещё не внесены.</p>'}</div>${editable ? `<form class="card" id="unit-form"><h2>${editingUnitID ? "Изменить подразделение" : "Добавить подразделение"}</h2>${unitFields(units.find((unit) => unit.id === editingUnitID) || {})}<p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Сохранить</button>${editingUnitID ? '<button class="btn secondary" type="button" data-unit-reset>Отмена</button>' : ""}</div></form>` : ""}`;
+    section.querySelectorAll("[data-edit-unit]").forEach((button) => { button.onclick = () => { editingUnitID = button.dataset.editUnit; renderUnits(); }; });
+    section.querySelectorAll("[data-delete-unit]").forEach((button) => { button.onclick = async () => {
+      if (!confirm("Удалить подразделение? Подразделение с дочерними элементами или группами удалить нельзя.")) return;
+      try { await api(`/org-units/${encodeURIComponent(button.dataset.deleteUnit)}`, {method: "DELETE"}); await load(); showToast("Подразделение удалено", "success"); } catch (error) { showToast(error.message, "error"); }
+    }; });
+    section.querySelector("[data-unit-reset]")?.addEventListener("click", () => { editingUnitID = ""; renderUnits(); });
+    const form = section.querySelector("#unit-form");
+    if (form) form.onsubmit = async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const button = form.querySelector('[type="submit"]'); button.disabled = true;
+      try {
+        await api(editingUnitID ? `/org-units/${encodeURIComponent(editingUnitID)}` : `/partners/${encodeURIComponent(partnerID)}/org-units`, {method: editingUnitID ? "PUT" : "POST", body: JSON.stringify(collectUnit(form))});
+        editingUnitID = ""; await load(); showToast("Структура сохранена", "success");
+      } catch (error) { form.querySelector(".error").textContent = error.message; button.disabled = false; }
+    };
+  };
+
+  const renderGroups = () => {
+    const section = modal.querySelector("#structure-groups");
+    section.innerHTML = `<div class="card"><div class="flex between"><div><h2>Академические группы</h2><p class="muted">Группа связана с подразделением, уровнем образования и специальностью партнёра.</p></div><span class="count-badge">${groups.length} групп · ${groups.reduce((sum, group) => sum + Number(group.students_count || 0), 0)} студентов</span></div>${groups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа</th><th>Подразделение</th><th>Уровень</th><th>Курс / семестр</th><th>Специальность</th><th>Студентов</th>${editable ? "<th></th>" : ""}</tr></thead><tbody>${groups.map((group) => `<tr><td><b>${escapeHTML(group.group_name)}</b></td><td>${escapeHTML(group.unit_name)}</td><td>${escapeHTML(EDUCATION_LEVEL_LABELS[group.education_level] || group.education_level)}</td><td>${group.course_num} курс · ${group.current_semester} семестр<br><small>${group.semester_period === "spring" ? "Весна" : "Осень"}</small></td><td>${escapeHTML(group.specialty_code)}</td><td>${group.students_count}</td>${editable ? `<td><button class="btn secondary" data-edit-group="${group.id}">Изменить</button><button class="btn secondary" data-delete-group="${group.id}">Удалить</button></td>` : ""}</tr>`).join("")}</tbody></table></div>` : '<p class="muted">Академические группы ещё не внесены.</p>'}</div>${editable ? `<form class="card" id="group-form"><h2>${editingGroupID ? "Изменить группу" : "Добавить группу"}</h2>${units.length ? groupFields(groups.find((group) => group.id === editingGroupID) || {}) : '<p class="notice">Сначала добавьте хотя бы одно структурное подразделение.</p>'}<p class="error" role="alert"></p>${units.length ? `<div class="flex"><button class="btn" type="submit">Сохранить</button>${editingGroupID ? '<button class="btn secondary" type="button" data-group-reset>Отмена</button>' : ""}</div>` : ""}</form>` : ""}`;
+    section.querySelectorAll("[data-edit-group]").forEach((button) => { button.onclick = () => { editingGroupID = button.dataset.editGroup; renderGroups(); }; });
+    section.querySelectorAll("[data-delete-group]").forEach((button) => { button.onclick = async () => {
+      if (!confirm("Удалить академическую группу?")) return;
+      try { await api(`/academic-groups/${encodeURIComponent(button.dataset.deleteGroup)}`, {method: "DELETE"}); await load(); showToast("Группа удалена", "success"); } catch (error) { showToast(error.message, "error"); }
+    }; });
+    section.querySelector("[data-group-reset]")?.addEventListener("click", () => { editingGroupID = ""; renderGroups(); });
+    const form = section.querySelector("#group-form");
+    if (form && units.length) form.onsubmit = async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const button = form.querySelector('[type="submit"]'); button.disabled = true;
+      try {
+        await api(editingGroupID ? `/academic-groups/${encodeURIComponent(editingGroupID)}` : `/partners/${encodeURIComponent(partnerID)}/academic-groups`, {method: editingGroupID ? "PUT" : "POST", body: JSON.stringify(collectGroup(form))});
+        editingGroupID = ""; await load(); showToast("Академическая группа сохранена", "success");
+      } catch (error) { form.querySelector(".error").textContent = error.message; button.disabled = false; }
+    };
+  };
+
+  const load = async () => {
+    [units, groups, specialtyCodes] = await Promise.all([
+      api(`/partners/${encodeURIComponent(partnerID)}/org-units`),
+      api(`/partners/${encodeURIComponent(partnerID)}/academic-groups`),
+      api(`/partners/${encodeURIComponent(partnerID)}/specialty-codes`),
+    ]);
+    renderUnits(); renderGroups(); await onSaved();
+  };
+  try { await load(); } catch (error) { modal.querySelector("#structure-units").innerHTML = `<div class="card error">${escapeHTML(error.message)}</div>`; }
 }
 
 async function openAgreements(partnerID, onSaved = async () => {}) {

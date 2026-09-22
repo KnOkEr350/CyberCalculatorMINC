@@ -36,6 +36,30 @@
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
       "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
+    "/api/partners/{partner_id}/org-units": {
+      "parameters": [{ "$ref": "#/components/parameters/PartnerID" }],
+      "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/org-units/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/ID" }],
+      "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "delete": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/partners/{partner_id}/academic-groups": {
+      "parameters": [{ "$ref": "#/components/parameters/PartnerID" }],
+      "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/academic-groups/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/ID" }],
+      "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "delete": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/partners/{partner_id}/specialty-codes": {
+      "parameters": [{ "$ref": "#/components/parameters/PartnerID" }],
+      "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
     "/api/it-companies": {
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
       "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
@@ -126,6 +150,7 @@
     },
     "parameters": {
       "ID": { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/UUID" } },
+      "PartnerID": { "name": "partner_id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/UUID" } },
       "Limit": { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } },
       "Offset": { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "maximum": 1000000, "default": 0 } }
     },

@@ -24,7 +24,9 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		(SELECT count(*) FROM agreement_partners ap JOIN agreements a ON a.id=ap.agreement_id
 		 WHERE ap.partner_id=p.id AND a.status='active' AND CURRENT_DATE BETWEEN a.valid_from AND a.valid_until),
 		COALESCE(d.verification_status,'legacy_unverified'),COALESCE(d.inn,''),COALESCE(d.ogrn,''),
-		COALESCE(d.license_number,''),COALESCE(d.license_status,'unknown'),COALESCE(d.institution_status,'unknown')
+		COALESCE(d.license_number,''),COALESCE(d.license_status,'unknown'),COALESCE(d.institution_status,'unknown'),
+		(SELECT count(*) FROM org_units ou WHERE ou.partner_id=p.id),
+		(SELECT count(*) FROM academic_groups ag WHERE ag.partner_id=p.id)
 		FROM partners p
 		LEFT JOIN education_directory d ON d.id=p.directory_id
 		LEFT JOIN LATERAL (
@@ -45,7 +47,8 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		var otherAgreement sql.NullString
 		if err := rows.Scan(&p.ID, &p.ITCompanyID, &p.Name, &p.PartnerKind, &p.DirectoryID, &p.AgreementNumber,
 			&agreementDate, &otherAgreement, &p.CreatedAt, &p.AgreementsCount, &p.ActiveAgreementsCount,
-			&p.VerificationStatus, &p.INN, &p.OGRN, &p.LicenseNumber, &p.LicenseStatus, &p.InstitutionStatus); err != nil {
+			&p.VerificationStatus, &p.INN, &p.OGRN, &p.LicenseNumber, &p.LicenseStatus, &p.InstitutionStatus,
+			&p.OrgUnitsCount, &p.AcademicGroupsCount); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
