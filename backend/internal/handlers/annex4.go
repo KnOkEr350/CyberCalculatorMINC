@@ -231,5 +231,10 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 500, "не удалось сформировать Приложение № 4")
 		return
 	}
-	h.writeGenerated(w, r, u, "annex4", "xlsx", fmt.Sprintf("приложение_4_%d.xlsx", year), companyID, partnerFilter, strings.TrimSpace(r.URL.Query().Get("agreement_id")), year, body)
+	// Приложение № 4 читает факт исключительно из подписанного снимка на
+	// 1 мая (WF-08) — источник фиксируется в реестре (REPORT-11), а не
+	// только внутри самого файла, чтобы его можно было найти без скачивания.
+	filters := reportFilters("partner_id", partnerFilter, "agreement_id", strings.TrimSpace(r.URL.Query().Get("agreement_id")),
+		"snapshot_id", snapshotID, "snapshot_sha256", snapshotHash)
+	h.writeGenerated(w, r, u, "annex4", "xlsx", fmt.Sprintf("приложение_4_%d.xlsx", year), companyID, filters, year, body)
 }

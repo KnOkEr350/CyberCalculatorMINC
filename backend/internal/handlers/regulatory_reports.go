@@ -58,12 +58,31 @@ func (h *ReportHandlers) ListGenerated(w http.ResponseWriter, r *http.Request, u
 	middleware.WriteJSON(w, 200, items)
 }
 
-func (h *ReportHandlers) writeGenerated(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, kind, format, filename, company, partner, agreement string, year int, body []byte) {
+// reportFilters собирает набор применённых параметров выгрузки из пар
+// ключ/значение, отбрасывая пустые значения, чтобы в реестре хранились
+// только реально применённые фильтры, а не пустые плейсхолдеры.
+func reportFilters(pairs ...string) map[string]string {
+	filters := map[string]string{}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if value := pairs[i+1]; value != "" {
+			filters[pairs[i]] = value
+		}
+	}
+	return filters
+}
+
+// writeGenerated регистрирует сформированный файл в неизменяемом реестре
+// generated_reports (REPORT-11): автор, полный набор применённых
+// параметров (partner_id/agreement_id уходят в отдельные FK-колонки для
+// выборки, остальные — в JSONB filters), hash и время. Повторное скачивание
+// того же файла отдаёт зафиксированные байты через DownloadGenerated.
+func (h *ReportHandlers) writeGenerated(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, kind, format, filename, company string, filters map[string]string, year int, body []byte) {
 	digest := sha256.Sum256(body)
 	hash := hex.EncodeToString(digest[:])
-	filters, _ := json.Marshal(map[string]string{"partner_id": partner, "agreement_id": agreement})
+	partner, agreement := filters["partner_id"], filters["agreement_id"]
+	filtersJSON, _ := json.Marshal(filters)
 	if _, err := h.DB.ExecContext(r.Context(), `INSERT INTO generated_reports(it_company_id,report_type,file_format,report_year,partner_id,agreement_id,file_name,content_sha256,size_bytes,content_bytes,filters,generated_by)
-		VALUES($1,$2,$3,$4,NULLIF($5,'')::uuid,NULLIF($6,'')::uuid,$7,$8,$9,$10,$11,$12)`, company, kind, format, year, partner, agreement, filename, hash, len(body), body, filters, u.ID); err != nil {
+		VALUES($1,$2,$3,$4,NULLIF($5,'')::uuid,NULLIF($6,'')::uuid,$7,$8,$9,$10,$11,$12)`, company, kind, format, year, partner, agreement, filename, hash, len(body), body, filtersJSON, u.ID); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "не удалось зарегистрировать сформированный файл")
 		return
 	}
@@ -179,7 +198,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 			middleware.WriteError(w, 500, "не удалось сформировать справку")
 			return
 		}
-		h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("приложение_3_%d.docx", year), company, partner, agreement, year, body)
+		h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("приложение_3_%d.docx", year), company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
 		return
 	}
 	if len(data) == 0 {
@@ -225,7 +244,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, 500, "не удалось сформировать Excel")
 		return
 	}
-	h.writeGenerated(w, r, u, kind, "xlsx", filename, company, partner, agreement, year, body)
+	h.writeGenerated(w, r, u, kind, "xlsx", filename, company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
 }
 
 func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, kind, company, partner, agreement string) {
@@ -241,7 +260,7 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 	}
 	title := map[string]string{"agreement2": "Типовое соглашение — Приложение № 2", "agreement3": "Типовое соглашение — Приложение № 3"}[kind]
 	body, _ := docx.Table(title, []string{"Реквизит", "Значение"}, [][]string{{"Номер и дата", number + " от " + signed}, {"ИТ-организация", companyName}, {"ИНН / ОГРН", companyINN + " / " + companyOGRN}, {"Адрес", address}, {"Подписант", director}, {"Контрагент", partnerName}, {"ИНН контрагента", partnerINN}, {"Отчётный год", strconv.Itoa(year)}})
-	h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("типовое_соглашение_%s_%d.docx", strings.TrimPrefix(kind, "agreement"), year), company, partner, agreement, year, body)
+	h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("типовое_соглашение_%s_%d.docx", strings.TrimPrefix(kind, "agreement"), year), company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
 }
 
 // formatRuDate переводит ISO-дату (YYYY-MM-DD, как её отдаёт Postgres) в

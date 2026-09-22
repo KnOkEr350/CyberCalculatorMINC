@@ -253,7 +253,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 		localizedName := fmt.Sprintf("отчет_%s_%d.docx", map[string]string{"plan": "план", "fact": "факт"}[periodType], year)
 		if company := itCompanyScope(u); company != "" {
-			h.writeGenerated(w, r, u, "custom", "docx", localizedName, company, q.Get("partner_id"), q.Get("agreement_id"), year, body)
+			h.writeGenerated(w, r, u, "custom", "docx", localizedName, company, reportFilters(
+				"partner_id", q.Get("partner_id"), "agreement_id", q.Get("agreement_id"),
+				"period_type", periodType, "category_code", categoryFilter, "mentor_id", q.Get("mentor_id"),
+			), year, body)
 			return
 		}
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.docx"; filename*=UTF-8''%s`, periodType, year, url.PathEscape(localizedName)))
@@ -324,7 +327,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 
 	filename := fmt.Sprintf("отчет_%s_%d.xlsx", map[string]string{"plan": "план", "fact": "факт"}[periodType], year)
 	if company := itCompanyScope(u); company != "" {
-		h.writeGenerated(w, r, u, "custom", "xlsx", filename, company, q.Get("partner_id"), q.Get("agreement_id"), year, body)
+		h.writeGenerated(w, r, u, "custom", "xlsx", filename, company, reportFilters(
+			"partner_id", q.Get("partner_id"), "agreement_id", q.Get("agreement_id"),
+			"period_type", periodType, "category_code", categoryFilter, "mentor_id", q.Get("mentor_id"),
+		), year, body)
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

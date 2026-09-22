@@ -96,3 +96,40 @@ func TestBuildPlanFactRowsDropsZeroRows(t *testing.T) {
 		t.Fatalf("осталась не та строка: %+v", rows[0])
 	}
 }
+
+// REPORT-11: реестр сформированных файлов должен хранить реально
+// применённые параметры выгрузки (не только партнёра и соглашение), а
+// пустые/невыбранные фильтры не должны засорять запись как "".
+func TestReportFiltersDropsEmptyValues(t *testing.T) {
+	got := reportFilters(
+		"partner_id", "p-1",
+		"agreement_id", "",
+		"period_type", "fact",
+		"category_code", "",
+		"mentor_id", "m-1",
+	)
+	want := map[string]string{"partner_id": "p-1", "period_type": "fact", "mentor_id": "m-1"}
+	if len(got) != len(want) {
+		t.Fatalf("reportFilters() = %+v, want %+v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("reportFilters()[%q] = %q, want %q", k, got[k], v)
+		}
+	}
+	if _, ok := got["agreement_id"]; ok {
+		t.Fatalf("пустой agreement_id не должен попадать в фильтры: %+v", got)
+	}
+	if _, ok := got["category_code"]; ok {
+		t.Fatalf("пустой category_code не должен попадать в фильтры: %+v", got)
+	}
+}
+
+func TestReportFiltersEmptyInput(t *testing.T) {
+	if got := reportFilters(); len(got) != 0 {
+		t.Fatalf("reportFilters() без аргументов = %+v, ожидали пустую карту", got)
+	}
+	if got := reportFilters("partner_id", ""); len(got) != 0 {
+		t.Fatalf("reportFilters(\"partner_id\", \"\") = %+v, ожидали пустую карту", got)
+	}
+}
