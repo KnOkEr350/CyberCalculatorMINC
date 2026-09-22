@@ -786,6 +786,11 @@ function fieldInput(f, value, audience) {
             .map((p) => ({ v: p.id, l: p.name }))
         : f.key === "mentor_id"
           ? state.mentors.map((m) => ({ v: m.id, l: m.full_name }))
+          : f.key === "staff_member_id"
+            ? (state.staffMembers || []).map((m) => ({
+                v: m.id,
+                l: `${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}`,
+              }))
           : (f.options || []).map((o) => ({
               v: o,
               l:
@@ -1034,6 +1039,140 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
   return { payload, valid: !firstInvalid };
 }
 
+async function openStaffMembersDialog() {
+  const role = state.me?.role;
+  const canManage = ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(role);
+  const canConfirm = ["super_admin", "holding_admin", "org_admin"].includes(role);
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true">
+    <div class="flex between"><div><h2>Сотрудники-преподаватели</h2><p class="muted">Единый профиль должности, ОКЗ и подтверждённого ИТ-стажа за последние пять лет.</p></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
+    ${canManage ? `<form id="staff-form"><input type="hidden" name="id"><div class="grid cols-3">
+      <div class="field"><label>ФИО *</label><input name="fio" maxlength="200" required></div>
+      <div class="field"><label>Должность *</label><input name="company_position" maxlength="200" required></div>
+      <div class="field"><label>Подразделение</label><input name="company_department" maxlength="200"></div>
+      <div class="field"><label>Код ОКЗ *</label><input name="okz_code" pattern="[0-9]{4}" maxlength="4" list="staff-okz" required><datalist id="staff-okz"></datalist></div>
+      <div class="field"><label>ИТ-стаж за 5 лет, дней *</label><input name="it_experience_days" type="number" min="0" max="1827" required></div>
+      <div class="field"><label>Статус</label><select name="record_status" ${canConfirm ? "" : "disabled"}><option value="unconfirmed_by_admin">Ожидает подтверждения</option><option value="confirmed">Подтверждён</option></select></div>
+      <div class="field"><label>Документ о стаже</label><input name="experience_document_reference" maxlength="1000" placeholder="СТД-Р / трудовая книжка, номер и дата"></div>
+    </div><div class="flex"><button class="btn" type="submit">Сохранить профиль</button><button class="btn secondary" type="button" data-staff-reset>Новый профиль</button></div><p class="error" data-staff-error></p></form>` : ""}
+    <div id="staff-list">Загрузка…</div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.querySelector("[data-close]").onclick = close;
+  backdrop.onclick = (event) => { if (event.target === backdrop) close(); };
+  const form = backdrop.querySelector("#staff-form");
+  let items = [];
+  const reset = () => {
+    if (!form) return;
+    form.reset();
+    form.elements.id.value = "";
+    form.elements.record_status.value = "unconfirmed_by_admin";
+  };
+  const paint = () => {
+    backdrop.querySelector("#staff-list").innerHTML = items.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Должность</th><th>ОКЗ</th><th>Стаж</th><th>Статус</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.fio)}</b><br><small>${escapeHTML(item.company_department || "—")}</small></td><td>${escapeHTML(item.company_position)}</td><td><code>${escapeHTML(item.okz_code)}</code><br><small>${escapeHTML(item.okz_name)}</small></td><td>${item.it_experience_days} дн.</td><td><span class="status-badge ${item.eligible ? "active" : "inactive"}">${item.eligible ? "Подтверждён" : "Не подтверждён"}</span></td><td>${canManage ? `<button class="btn secondary" data-staff-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="muted">Сотрудники ещё не добавлены.</p>';
+    backdrop.querySelectorAll("[data-staff-edit]").forEach((button) => button.onclick = () => {
+      const item = items.find((value) => value.id === button.dataset.staffEdit);
+      if (!item || !form) return;
+      Object.keys(item).forEach((key) => { if (form.elements[key]) form.elements[key].value = item[key] ?? ""; });
+      form.elements.id.value = item.id;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+  const reload = async () => { items = await api("/staff-members"); paint(); };
+  try {
+    const [, okz] = await Promise.all([reload(), canManage ? api("/okz?level=4&limit=100") : Promise.resolve({ items: [] })]);
+    if (form) backdrop.querySelector("#staff-okz").innerHTML = okz.items.map((item) => `<option value="${escapeHTML(item.code)}">${escapeHTML(item.name)}</option>`).join("");
+  } catch (error) {
+    backdrop.querySelector("#staff-list").innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+  }
+  if (!form) return;
+  backdrop.querySelector("[data-staff-reset]").onclick = reset;
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const errorBox = form.querySelector("[data-staff-error]");
+    const id = form.elements.id.value;
+    const body = Object.fromEntries(new FormData(form));
+    delete body.id;
+    body.it_experience_days = Number(body.it_experience_days);
+    if (!canConfirm) body.record_status = "unconfirmed_by_admin";
+    submit.disabled = true;
+    errorBox.textContent = "";
+    try {
+      await api(id ? `/staff-members/${id}` : "/staff-members", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+      showToast("Профиль сотрудника сохранён", "success");
+      reset();
+      await reload();
+    } catch (error) { errorBox.textContent = error.message; }
+    finally { submit.disabled = false; }
+  };
+}
+
+async function openTeachingPayoutsDialog() {
+  const role = state.me?.role;
+  const canManage = ["super_admin", "holding_admin", "org_admin", "financial_specialist"].includes(role);
+  const teachingEntries = (state.entries || []).filter((item) => item.category_code === "teachers");
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true">
+    <div class="flex between"><div><h2>График компенсаций</h2><p class="muted">Квартальный план и подтверждение фактических выплат преподавателям.</p></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
+    ${canManage ? `<form id="payout-form"><input type="hidden" name="id"><div class="grid cols-3">
+      <div class="field"><label>Педагогическая нагрузка *</label><select name="teaching_activity_id" required><option value="">— Выберите —</option>${teachingEntries.map((item) => `<option value="${item.id}">${escapeHTML(item.payload.teacher_full_name || "Преподаватель")} · ${escapeHTML(item.payload.course_name || "Курс")} · ${escapeHTML(item.period_type === "fact" ? "Факт" : "План")}</option>`).join("")}</select></div>
+      <div class="field"><label>Квартал *</label><select name="target_quarter" required>${[1,2,3,4].map((q) => `<option value="Q${q}">Q${q}</option>`).join("")}</select></div>
+      <div class="field"><label>Финансовый год *</label><input name="target_year" type="number" min="2000" max="2100" value="${state.year}" required></div>
+      <div class="field"><label>Плановая компенсация, ₽ *</label><input name="planned_compensation_rub" type="number" min="0" step="0.01" required></div>
+      <div class="field"><label>Дата выплаты</label><input name="payout_date" type="date"></div>
+      <div class="field"><label>Приказ / платёжный документ</label><input name="payout_order_num" maxlength="200"></div>
+      <div class="field"><label>Ссылка на скан</label><input name="payout_scan_file" maxlength="1000"></div>
+      <label class="check-row"><input name="is_fully_paid" type="checkbox"> Выплачено полностью</label>
+    </div><div class="flex"><button class="btn" type="submit">Сохранить выплату</button><button class="btn secondary" type="button" data-payout-reset>Новая выплата</button></div><p class="error" data-payout-error></p></form>` : ""}
+    <div id="payout-list">Загрузка…</div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.querySelector("[data-close]").onclick = close;
+  let items = [];
+  const form = backdrop.querySelector("#payout-form");
+  const reset = () => { if (form) { form.reset(); form.elements.id.value = ""; form.elements.target_year.value = state.year; } };
+  const paint = () => {
+    backdrop.querySelector("#payout-list").innerHTML = items.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Преподаватель / курс</th><th>Период</th><th>План</th><th>Статус</th><th>Документ</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.teacher_full_name || "—")}</b><br><small>${escapeHTML(item.course_name || "—")}</small></td><td>${escapeHTML(item.target_quarter)} ${item.target_year}</td><td>${fmtMoney(item.planned_compensation_rub)}</td><td><span class="status-badge ${item.is_fully_paid ? "active" : "inactive"}">${item.is_fully_paid ? "Выплачено" : "Запланировано"}</span>${item.payout_date ? `<br><small>${escapeHTML(item.payout_date)}</small>` : ""}</td><td>${escapeHTML(item.payout_order_num || "—")}</td><td>${canManage ? `<button class="btn secondary" data-payout-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="muted">Выплаты ещё не запланированы.</p>';
+    backdrop.querySelectorAll("[data-payout-edit]").forEach((button) => button.onclick = () => {
+      const item = items.find((value) => value.id === button.dataset.payoutEdit);
+      if (!item || !form) return;
+      ["teaching_activity_id", "target_quarter", "target_year", "planned_compensation_rub", "payout_date", "payout_order_num", "payout_scan_file"].forEach((key) => { form.elements[key].value = item[key] ?? ""; });
+      form.elements.is_fully_paid.checked = item.is_fully_paid;
+      form.elements.id.value = item.id;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+  const reload = async () => { items = await api(`/teaching-payouts?year=${state.year}`); paint(); };
+  try { await reload(); } catch (error) { backdrop.querySelector("#payout-list").innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`; }
+  if (!form) return;
+  backdrop.querySelector("[data-payout-reset]").onclick = reset;
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const id = form.elements.id.value;
+    const body = Object.fromEntries(new FormData(form));
+    delete body.id;
+    body.target_year = Number(body.target_year);
+    body.planned_compensation_rub = Number(body.planned_compensation_rub);
+    body.is_fully_paid = form.elements.is_fully_paid.checked;
+    const submit = form.querySelector('button[type="submit"]');
+    const errorBox = form.querySelector("[data-payout-error]");
+    submit.disabled = true;
+    errorBox.textContent = "";
+    try {
+      await api(id ? `/teaching-payouts/${id}` : "/teaching-payouts", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+      showToast("Выплата сохранена", "success");
+      reset();
+      await reload();
+    } catch (error) { errorBox.textContent = error.message; }
+    finally { submit.disabled = false; }
+  };
+}
+
 async function openEntryModal(entry, readOnly = false) {
   const cat = currentCategory();
   if (!cat) {
@@ -1067,6 +1206,7 @@ async function openEntryModal(entry, readOnly = false) {
     state.mentors = await api(
       `/mentors?partner_id=${encodeURIComponent(partner.id)}`,
     );
+    if (cat.code === "teachers") state.staffMembers = await api("/staff-members");
   } catch (e) {
     showToast(e.message);
     return;
@@ -1172,6 +1312,28 @@ async function openEntryModal(entry, readOnly = false) {
         }
       };
       if (add) row.appendChild(add);
+    }
+    if (cat.code === "teachers" && ["teacher_full_name", "employee_position", "okz_code", "it_experience_days", "it_experience_reference"].includes(f.key)) {
+      row.hidden = true;
+    }
+    if (f.key === "staff_member_id") {
+      const select = row.querySelector("select");
+      const hint = el('<div class="field-hint"></div>');
+      const syncStaff = () => {
+        const staff = (state.staffMembers || []).find((item) => item.id === select.value);
+        hint.textContent = staff
+          ? `${staff.record_status === "confirmed" ? "✓ Профиль подтверждён" : "⚠ Профиль пока не подтверждён: запись сохранится, но не попадёт в зачёт"}. Стаж: ${staff.it_experience_days} дней; ОКЗ ${staff.okz_code}.`
+          : "Сначала добавьте сотрудника в справочник преподавателей.";
+        if (!staff) return;
+        const values = { teacher_full_name: staff.fio, employee_position: staff.company_position, okz_code: staff.okz_code, it_experience_days: staff.it_experience_days, it_experience_reference: staff.experience_document_reference };
+        Object.entries(values).forEach(([key, value]) => {
+          const input = fieldsBox.querySelector(`[data-key="${key}"]`);
+          if (input) input.value = value ?? "";
+        });
+      };
+      select.addEventListener("change", syncStaff);
+      row.appendChild(hint);
+      queueMicrotask(syncStaff);
     }
   });
 

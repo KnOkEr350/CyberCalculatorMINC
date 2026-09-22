@@ -407,7 +407,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Режим</label>${canCreate ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : `<input value="${canPrepare ? "Редактирование по роли" : "Просмотр и согласование"}" readonly>`}</div></div>
-    <div class="flex">${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Сотрудники и ОКЗ</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const budgetTargetButton = root.querySelector("#edit-budget-target");
@@ -491,6 +491,10 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   if (addEntry) addEntry.onclick = () => openEntryModal(null);
   const importEntries = root.querySelector("#import-entries");
   if (importEntries) importEntries.onclick = () => openImportDialog(false);
+  const staffMembers = root.querySelector("#staff-members");
+  if (staffMembers) staffMembers.onclick = () => openStaffMembersDialog();
+  const teachingPayouts = root.querySelector("#teaching-payouts");
+  if (teachingPayouts) teachingPayouts.onclick = () => openTeachingPayoutsDialog();
   const query = workspaceQuery();
   const pageKey = String(query);
   if (state.entryPageKey !== pageKey) { state.entryPageKey = pageKey; state.entryPageOffset = 0; }
@@ -604,7 +608,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     const list = entries;
     const fields =
       currentCategory()?.fields.filter(
-        (f) => !["org_name", "mentor_id"].includes(f.key),
+        (f) => !["org_name", "mentor_id", "staff_member_id"].includes(f.key),
       ) || [];
     root.querySelector("#entries-table").innerHTML =
       `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td><span class="risk-label ${escapeHTML(e.compliance?.state || "red")}" title="${escapeHTML([...(e.compliance?.blocking_reasons || []), ...(e.compliance?.warnings || [])].join("; "))}"><i></i>${e.compliance?.state === "green" ? "Готово" : e.compliance?.state === "yellow" ? "Доработать" : "Риск"}</span></td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;

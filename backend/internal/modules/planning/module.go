@@ -10,11 +10,14 @@ import (
 )
 
 type Module struct {
-	db      *sql.DB
-	entries *handlers.EntryHandlers
+	db       *sql.DB
+	entries  *handlers.EntryHandlers
+	teaching *handlers.TeachingDirectoryHandlers
 }
 
-func New(db *sql.DB) *Module { return &Module{db: db, entries: &handlers.EntryHandlers{DB: db}} }
+func New(db *sql.DB) *Module {
+	return &Module{db: db, entries: &handlers.EntryHandlers{DB: db}, teaching: &handlers.TeachingDirectoryHandlers{DB: db}}
+}
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/obligations", middleware.RequireAuth(m.db, m.entries.Obligations))
@@ -29,5 +32,15 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/entries/{id}/comments", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.entries.Comments(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/staff-members", middleware.RequireAuth(m.db, m.teaching.ListStaffMembers))
+	mux.HandleFunc("POST /api/staff-members", middleware.RequireAuth(m.db, m.teaching.CreateStaffMember))
+	mux.HandleFunc("PUT /api/staff-members/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.teaching.UpdateStaffMember(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/teaching-payouts", middleware.RequireAuth(m.db, m.teaching.ListTeachingPayouts))
+	mux.HandleFunc("POST /api/teaching-payouts", middleware.RequireAuth(m.db, m.teaching.CreateTeachingPayout))
+	mux.HandleFunc("PUT /api/teaching-payouts/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.teaching.UpdateTeachingPayout(w, r, u, r.PathValue("id"))
 	}))
 }

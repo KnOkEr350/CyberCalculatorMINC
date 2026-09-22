@@ -181,6 +181,15 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	companyID, ok := requireITCompanyForWrite(w, u)
+	if !ok {
+		return
+	}
+	staffMemberID, err := h.resolveTeachingStaff(r, req.CategoryCode, companyID, req.Payload, true)
+	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := h.validateMentor(r, req.CategoryCode, partnerID, req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
@@ -208,11 +217,6 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, "фактические затраты указываются только в отчёте «Факт»")
 		return
 	}
-	companyID, ok := requireITCompanyForWrite(w, u)
-	if !ok {
-		return
-	}
-
 	payloadJSON, _ := json.Marshal(req.Payload)
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -223,9 +227,9 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 
 	var id string
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, u.ID,
+		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14) RETURNING id`,
+		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
 	).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
@@ -559,6 +563,15 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	companyID, ok := requireITCompanyForWrite(w, u)
+	if !ok {
+		return
+	}
+	staffMemberID, err := h.resolveTeachingStaff(r, categoryCode, companyID, req.Payload, false)
+	if err != nil {
+		middleware.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := h.validateMentor(r, categoryCode, partnerID, req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
@@ -589,9 +602,9 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
 	_, err = tx.ExecContext(r.Context(),
-		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,updated_by=$9,updated_at=now()
-		 WHERE id=$10`,
-		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, u.ID, entryID,
+		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),updated_by=$10,updated_at=now()
+		 WHERE id=$11`,
+		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, u.ID, entryID,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")

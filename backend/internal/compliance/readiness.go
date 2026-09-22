@@ -123,6 +123,11 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 	blockDocuments := period == "fact"
 	switch category {
 	case "teachers":
+		// Legacy rows keep their former inline checks. New rows linked to the
+		// typed directory additionally require administrator verification.
+		if has("staff_member_id") {
+			require("staff_profile", "Профиль сотрудника подтверждён администратором", fmt.Sprint(payload["staff_member_verified"]) == "true", true)
+		}
 		require("it_experience", "ИТ-стаж не менее 365 дней за последние 5 лет", num("it_experience_days") >= 365, true)
 		require("okz", "Проверенный код ОКЗ сотрудника", has("okz_code"), true)
 		require("employment_contract", "Трудовой договор или ГПХ", hasDoc("employment_contract", "employment_contract_reference"), blockDocuments)
