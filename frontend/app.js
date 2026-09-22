@@ -127,9 +127,7 @@ function el(html) {
 }
 
 function fmtMoney(v) {
-  return (
-    Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽"
-  );
+  return CyberCalcUI.formatMoney(v);
 }
 
 function fmtReportDate(value) {
@@ -208,16 +206,7 @@ function initials(name) {
 }
 
 function showToast(message, kind = "error") {
-  const toast = el(
-    `<div class="toast ${escapeHTML(kind)}" role="status"></div>`,
-  );
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add("visible"));
-  setTimeout(() => {
-    toast.classList.remove("visible");
-    setTimeout(() => toast.remove(), 200);
-  }, 3500);
+  return CyberCalcUI.toast(message, kind);
 }
 
 // ---------------------------------------------------------------- ROUTER --
@@ -1266,6 +1255,12 @@ async function openEntryModal(entry, readOnly = false) {
   };
   backdrop.querySelector("#m-cost-method").onchange = syncCostMethod;
   syncCostMethod();
+  const attachmentUpload = readOnly
+    ? null
+    : CyberCalcUI.bindUpload(backdrop.querySelector("[data-upload]"), (files) => {
+        const prompt = backdrop.querySelector(".ui-dropzone span");
+        if (prompt && files.length) prompt.textContent = `Выбрано файлов: ${files.length}`;
+      });
   cat.fields.forEach((f) => {
     const row = el(
       `<div class="field"><label>${escapeHTML(f.label)}${f.required || (cat.code === "teachers" && f.key === "staff_member_id") ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`,
@@ -1410,7 +1405,7 @@ async function openEntryModal(entry, readOnly = false) {
     busy = true;
     saveButton.textContent = isEdit ? "Сохраняем…" : "Создаём…";
     try {
-      validateFileBatch(backdrop.querySelector("#attach-file").files);
+      validateFileBatch(attachmentUpload.files);
       if (!savedID && isEdit) {
         const comment = backdrop.querySelector("#m-comment").value.trim();
         if (!comment)
@@ -1450,7 +1445,7 @@ async function openEntryModal(entry, readOnly = false) {
         .forEach((input) => (input.disabled = true));
       await uploadFileBatch(
         savedID,
-        backdrop.querySelector("#attach-file").files,
+        attachmentUpload.files,
         backdrop.querySelector("#attach-document-type").value,
       );
       busy = false;
@@ -1500,7 +1495,7 @@ async function openEntryModal(entry, readOnly = false) {
   document.body.appendChild(backdrop);
 
   if (isEdit) {
-    wireAttachSection(backdrop, entry.id, attachmentReadOnly);
+    wireAttachSection(backdrop, entry.id, attachmentReadOnly, attachmentUpload);
   } else {
     backdrop.querySelector("#attach-list").textContent =
       "Файлы необязательны. Выбранные файлы загрузятся после создания записи.";
@@ -1514,13 +1509,13 @@ function renderAttachSection(readOnly = false) {
     <div id="attach-list" class="attach-list muted">Загрузка…</div>
     ${readOnly ? "" : `<div class="field" style="margin-top:8px">
       <label>Тип подтверждающего документа</label><select id="attach-document-type">${Object.entries(DOCUMENT_TYPE_LABELS).map(([code, label]) => `<option value="${escapeHTML(code)}">${escapeHTML(label)}</option>`).join("")}</select>
-      <input type="file" id="attach-file" multiple aria-label="Необязательные вложения">
+      ${CyberCalcUI.uploadField({ id: "attach-file", label: "Необязательные вложения", multiple: true, prompt: "Перетащите документы сюда или выберите с диска" })}
       <button type="button" class="btn secondary" id="attach-upload">Загрузить</button>
     </div>`}
   </div>`;
 }
 
-async function wireAttachSection(root, entryId, readOnly = false) {
+async function wireAttachSection(root, entryId, readOnly = false, uploadControl = null) {
   const list = root.querySelector("#attach-list");
   const refresh = async () => {
     try {
@@ -1550,18 +1545,25 @@ async function wireAttachSection(root, entryId, readOnly = false) {
     }
   };
   const upload = root.querySelector("#attach-upload");
+  if (upload && !readOnly && !uploadControl) {
+    uploadControl = CyberCalcUI.bindUpload(root.querySelector("[data-upload]"), (files) => {
+      const prompt = root.querySelector(".ui-dropzone span");
+      if (prompt && files.length) prompt.textContent = `Выбрано файлов: ${files.length}`;
+    });
+  }
   if (upload && !readOnly) upload.onclick = async () => {
-    const fileInput = root.querySelector("#attach-file");
     const uploadButton = root.querySelector("#attach-upload");
-    if (!fileInput.files.length) {
+    if (!uploadControl.files.length) {
       showToast("Сначала выберите файл");
       return;
     }
     uploadButton.disabled = true;
     uploadButton.textContent = "Загружаем…";
     try {
-      await uploadFileBatch(entryId, fileInput.files, root.querySelector("#attach-document-type").value);
-      fileInput.value = "";
+      await uploadFileBatch(entryId, uploadControl.files, root.querySelector("#attach-document-type").value);
+      uploadControl.clear();
+      const prompt = root.querySelector(".ui-dropzone span");
+      if (prompt) prompt.textContent = "Перетащите документы сюда или выберите с диска";
       await refresh();
       showToast("Файлы загружены", "success");
     } catch (e) {

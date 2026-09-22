@@ -59,6 +59,20 @@ func ProvisionRuntime(db *sql.DB, user, password string) error {
 			}
 		}
 	}
+	for _, table := range []string{"normative_sources", "normative_revision_diffs"} {
+		var present bool
+		if err := tx.QueryRowContext(ctx, `SELECT to_regclass('public.'||$1) IS NOT NULL`, table).Scan(&present); err != nil {
+			return err
+		}
+		if present {
+			if _, err := tx.ExecContext(ctx, "GRANT SELECT,INSERT ON TABLE "+pq.QuoteIdentifier(table)+" TO "+name); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "GRANT SELECT ON TABLE normative_trusted_hosts TO "+name); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, "GRANT SELECT ON activity_categories TO "+name); err != nil {
 		return err
 	}

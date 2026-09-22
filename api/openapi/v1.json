@@ -16,6 +16,7 @@
     { "name": "planning" },
     { "name": "documents" },
     { "name": "reporting" },
+    { "name": "normative" },
     { "name": "administration" }
   ],
   "paths": {
@@ -100,6 +101,9 @@
     "/api/admin/okz/versions": { "get": { "tags": ["administration"], "responses": { "200": { "description": "История версий ОКЗ", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/OKZVersion" } } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/admin/okz/template": { "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/admin/okz/import": { "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/OKZImport" }, "responses": { "201": { "description": "Новая версия импортирована и активирована", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OKZVersion" } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/normative-sources": { "get": { "tags": ["normative"], "parameters": [{ "name": "act_code", "in": "query", "required": false, "schema": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]{1,63}$" } }], "responses": { "200": { "description": "Неизменяемые редакции нормативных источников", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/NormativeSource" } } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/normative-sources/import": { "post": { "tags": ["normative"], "requestBody": { "$ref": "#/components/requestBodies/NormativeImport" }, "responses": { "201": { "description": "Официальная редакция зарегистрирована", "content": { "application/json": { "schema": { "type": "object", "required": ["source"], "properties": { "source": { "$ref": "#/components/schemas/NormativeSource" }, "diff": { "oneOf": [{ "$ref": "#/components/schemas/NormativeDiff" }, { "type": "null" }] } } } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/normative-sources/diff": { "get": { "tags": ["normative"], "parameters": [{ "name": "act_code", "in": "query", "required": true, "schema": { "type": "string" } }, { "name": "from_revision", "in": "query", "required": true, "schema": { "type": "string" } }, { "name": "to_revision", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Детерминированный протокол различий редакций", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NormativeDiff" } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
 
     "/api/obligations": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/entries/import-template": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
@@ -259,6 +263,45 @@
         },
         "additionalProperties": false
       },
+      "NormativeSource": {
+        "type": "object",
+        "required": ["id", "act_code", "title", "revision", "effective_on", "source_url", "source_host", "content_sha256", "content_type", "original_filename", "size_bytes", "imported_by", "imported_at"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/UUID" },
+          "act_code": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]{1,63}$" },
+          "title": { "type": "string", "minLength": 3, "maxLength": 500 },
+          "revision": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "published_on": { "$ref": "#/components/schemas/Date" },
+          "effective_on": { "$ref": "#/components/schemas/Date" },
+          "source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "source_host": { "type": "string" },
+          "content_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "content_type": { "type": "string" },
+          "original_filename": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "size_bytes": { "type": "integer", "minimum": 1, "maximum": 26214400 },
+          "imported_by": { "$ref": "#/components/schemas/UUID" },
+          "imported_at": { "$ref": "#/components/schemas/DateTime" }
+        },
+        "additionalProperties": false
+      },
+      "NormativeDiff": {
+        "type": "object",
+        "required": ["act_code", "from_id", "from_revision", "from_sha256", "from_size_bytes", "to_id", "to_revision", "to_sha256", "to_size_bytes", "changed"],
+        "properties": {
+          "act_code": { "type": "string" },
+          "from_id": { "$ref": "#/components/schemas/UUID" },
+          "from_revision": { "type": "string" },
+          "from_sha256": { "type": "string" },
+          "from_size_bytes": { "type": "integer", "minimum": 0 },
+          "to_id": { "$ref": "#/components/schemas/UUID" },
+          "to_revision": { "type": "string" },
+          "to_sha256": { "type": "string" },
+          "to_size_bytes": { "type": "integer", "minimum": 0 },
+          "changed": { "type": "boolean" },
+          "text_changes": { "type": "object", "properties": { "added": { "type": "array", "maxItems": 200, "items": { "type": "string" } }, "removed": { "type": "array", "maxItems": 200, "items": { "type": "string" } }, "truncated": { "type": "boolean" } }, "additionalProperties": false }
+        },
+        "additionalProperties": false
+      },
       "AuditActor": {
         "type": "object",
         "required": ["type"],
@@ -333,6 +376,28 @@
                 "source_url": { "type": "string", "format": "uri" },
                 "effective_on": { "$ref": "#/components/schemas/Date" },
                 "file": { "type": "string", "format": "binary", "contentMediaType": "text/csv" }
+              }
+            }
+          }
+        }
+      },
+      "NormativeImport": {
+        "required": true,
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "required": ["act_code", "title", "revision", "effective_on", "source_url", "sha256", "file"],
+              "properties": {
+                "act_code": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]{1,63}$" },
+                "title": { "type": "string", "minLength": 3, "maxLength": 500 },
+                "revision": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "published_on": { "$ref": "#/components/schemas/Date" },
+                "effective_on": { "$ref": "#/components/schemas/Date" },
+                "source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "content_type": { "type": "string" },
+                "file": { "type": "string", "format": "binary", "contentMediaType": "application/octet-stream", "maxLength": 26214400 }
               }
             }
           }

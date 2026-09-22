@@ -93,6 +93,9 @@ func TestBuildRoutesMountsAllProtectedModuleRoutes(t *testing.T) {
 		{http.MethodGet, "/api/admin/okz/versions"},
 		{http.MethodGet, "/api/admin/okz/template"},
 		{http.MethodPost, "/api/admin/okz/import"},
+		{http.MethodGet, "/api/admin/normative-sources"},
+		{http.MethodPost, "/api/admin/normative-sources/import"},
+		{http.MethodGet, "/api/admin/normative-sources/diff"},
 	}
 
 	for _, route := range routes {

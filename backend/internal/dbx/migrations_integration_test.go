@@ -68,6 +68,46 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := RunMigrations(db, dir); e != nil {
 		t.Fatal("second migration run must be harmless:", e)
 	}
+	var normativeHostCount int
+	if e := db.QueryRow(`SELECT count(*) FROM normative_trusted_hosts`).Scan(&normativeHostCount); e != nil || normativeHostCount != 4 {
+		t.Fatalf("expected four exact official normative hosts, got %d: %v", normativeHostCount, e)
+	}
+	var normativeSource string
+	if e := db.QueryRow(`INSERT INTO normative_sources(
+		act_code,title,revision,published_on,effective_on,source_url,source_host,content_sha256,
+		content_type,original_filename,size_bytes,content_bytes,imported_by
+	) VALUES(
+		'TEST-ACT','Тестовый нормативный акт','1','2026-01-01','2026-02-01',
+		'https://publication.pravo.gov.ru/document/test','publication.pravo.gov.ru',repeat('a',64),
+		'text/plain','test.txt',8,convert_to('official','UTF8'),$1
+	) RETURNING id`, user).Scan(&normativeSource); e != nil {
+		t.Fatal("insert normative source:", e)
+	}
+	if _, e := db.Exec(`UPDATE normative_sources SET title='Подмена' WHERE id=$1`, normativeSource); e == nil {
+		t.Fatal("normative source update must be blocked by the database")
+	}
+	const runtimeRole = "workspace_runtime_test"
+	if e := ProvisionRuntime(db, runtimeRole, "test-only-password"); e != nil {
+		t.Fatal("provision runtime role:", e)
+	}
+	for _, privilege := range []struct {
+		table, operation string
+		want             bool
+	}{
+		{"normative_trusted_hosts", "SELECT", true},
+		{"normative_trusted_hosts", "INSERT", false},
+		{"normative_sources", "SELECT", true},
+		{"normative_sources", "INSERT", true},
+		{"normative_sources", "UPDATE", false},
+		{"normative_sources", "DELETE", false},
+		{"normative_revision_diffs", "SELECT", true},
+		{"normative_revision_diffs", "INSERT", true},
+	} {
+		var allowed bool
+		if e := db.QueryRow(`SELECT has_table_privilege($1,$2,$3)`, runtimeRole, privilege.table, privilege.operation).Scan(&allowed); e != nil || allowed != privilege.want {
+			t.Fatalf("runtime privilege %s on %s: got %v, want %v: %v", privilege.operation, privilege.table, allowed, privilege.want, e)
+		}
+	}
 	for _, test := range []struct {
 		kind, code string
 		want       bool
