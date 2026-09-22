@@ -182,7 +182,7 @@ func validateSchoolClassRange(payload map[string]interface{}) error {
 			return fmt.Errorf("некорректный номер класса: %s", value)
 		}
 		if class < 5 || class > 11 {
-			return fmt.Errorf("Вид 6 засчитывается только для 5–11 классов, указан %d", class)
+			return fmt.Errorf("мероприятие Вида 6 засчитывается только для 5–11 классов, указан %d", class)
 		}
 	}
 	return nil
