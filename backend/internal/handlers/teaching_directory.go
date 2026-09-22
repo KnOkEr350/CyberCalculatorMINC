@@ -209,7 +209,7 @@ func (h *TeachingDirectoryHandlers) CreateStaffMember(w http.ResponseWriter, r *
 		middleware.WriteError(w, http.StatusConflict, "сотрудник с таким ФИО уже существует или данные не прошли проверку")
 		return
 	}
-	_ = logAudit(h.DB, "staff_member", id, "create", u.ID, "", nil, req)
+	_ = logAudit(r.Context(), h.DB, "staff_member", id, "create", u.ID, "", nil, req)
 	middleware.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -249,7 +249,7 @@ func (h *TeachingDirectoryHandlers) UpdateStaffMember(w http.ResponseWriter, r *
 		middleware.WriteError(w, http.StatusNotFound, "сотрудник или код ОКЗ не найден")
 		return
 	}
-	_ = logAudit(h.DB, "staff_member", id, "update", u.ID, "", nil, req)
+	_ = logAudit(r.Context(), h.DB, "staff_member", id, "update", u.ID, "", nil, req)
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
@@ -357,7 +357,7 @@ func (h *TeachingDirectoryHandlers) CreateTeachingPayout(w http.ResponseWriter, 
 		middleware.WriteError(w, http.StatusConflict, "выплата за этот квартал уже существует или данные не прошли проверку")
 		return
 	}
-	_ = logAudit(h.DB, "teaching_payout", id, "create", u.ID, "", nil, req)
+	_ = logAudit(r.Context(), h.DB, "teaching_payout", id, "create", u.ID, "", nil, req)
 	middleware.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -394,6 +394,6 @@ func (h *TeachingDirectoryHandlers) UpdateTeachingPayout(w http.ResponseWriter, 
 		middleware.WriteError(w, http.StatusNotFound, "выплата или педагогическая нагрузка не найдена")
 		return
 	}
-	_ = logAudit(h.DB, "teaching_payout", id, "update", u.ID, "", nil, req)
+	_ = logAudit(r.Context(), h.DB, "teaching_payout", id, "update", u.ID, "", nil, req)
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"id": id})
 }

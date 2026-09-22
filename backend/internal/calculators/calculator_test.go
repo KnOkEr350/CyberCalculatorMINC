@@ -125,6 +125,7 @@ func TestTeacherPayloadEnforcesSemesterMatrix(t *testing.T) {
 	}
 	base := map[string]interface{}{
 		"org_name":          "partner-id",
+		"staff_member_id":   "staff-member-id",
 		"course_name":       "Информационная безопасность",
 		"teacher_full_name": "Петров Пётр Петрович",
 		"employment_form":   "ГПХ",
