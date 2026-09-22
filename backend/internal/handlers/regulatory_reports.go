@@ -26,9 +26,12 @@ type regulatoryRow struct {
 }
 
 var regulatoryHeaders = map[string][]string{
-	"annex1":    {"№", "ОО / РОИВ", "Соглашение", "Вид мероприятия", "Уровень", "Срез", "Показатели и документы", "Сумма, руб."},
-	"annex2":    {"№", "ОО", "Студент", "Наставник", "Месяцев", "Часы студента", "Часы наставника", "Срочный ТД", "Сумма, руб."},
-	"annex5":    {"№", "Контрагент", "План, руб.", "Факт, руб.", "Дельта, руб.", "Дельта, %"},
+	"annex1": {"№", "ОО / РОИВ", "Соглашение", "Вид мероприятия", "Уровень", "Срез", "Показатели и документы", "Сумма, руб."},
+	"annex2": {"№", "ОО", "Студент", "Наставник", "Месяцев", "Часы студента", "Часы наставника", "Срочный ТД", "Сумма, руб."},
+	// Состав Таблицы 1 Приложения № 5 к Приказу № 270: контрагент, его
+	// соглашения, единый для компании норматив 3% сэкономленных льгот и доля
+	// контрагента в нём. Официальная форма не содержит колонки плана.
+	"annex5":    {"№", "ОО или РОИВ", "Реквизиты соглашений", "3% от объёма сэкономленных средств, тыс. руб.", "Сумма затрат, тыс. руб.", "Процент от норматива, %"},
 	"plan_fact": {"Партнёр", "Вид мероприятия", "План, руб.", "Факт, руб.", "Дельта, руб.", "Дельта, %"},
 }
 
@@ -216,18 +219,13 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		wb.AddSheet("Приложение № 1", regulatoryHeaders["annex1"], out)
 		filename = fmt.Sprintf("приложение_1_%d.xlsx", year)
 	case "annex2":
-		out := [][]interface{}{}
-		for i, row := range data {
-			var p map[string]interface{}
-			_ = json.Unmarshal(row.Payload, &p)
-			out = append(out, []interface{}{i + 1, row.Partner, fmt.Sprint(p["student_full_name"]), fmt.Sprint(p["mentor_full_name"]), fmt.Sprint(p["duration_months"]), fmt.Sprint(p["total_student_hours"]), fmt.Sprint(p["total_mentor_hours"]), fmt.Sprint(p["labor_contract_number"]), row.Amount})
-		}
-		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], out)
+		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], buildAnnex2Rows(data))
 		filename = fmt.Sprintf("приложение_2_%d.xlsx", year)
 	case "annex5":
-		out, planTotal, factTotal := buildAnnex5Rows(data)
 		var target sql.NullString
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT target_amount_rub::text FROM organization_budget_targets WHERE it_company_id::text=$1 AND report_year=$2`, company, year).Scan(&target)
+		targetAmount, _ := money.Parse(target.String) // пустая/некорректная база 3% -> 0, процент по норме покажет "—"
+		out, planTotal, factTotal := buildAnnex5Rows(data, targetAmount)
 		wb.AddSheet("Приложение № 5", regulatoryHeaders["annex5"], out)
 		wb.AddSheet("Норматив 3%", []string{"Год", "Норматив, руб.", "План, руб.", "Факт, руб."}, [][]interface{}{{year, target.String, planTotal, factTotal}})
 		filename = fmt.Sprintf("приложение_5_%d.xlsx", year)
@@ -259,7 +257,11 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 	title := map[string]string{"agreement2": "Типовое соглашение — Приложение № 2", "agreement3": "Типовое соглашение — Приложение № 3"}[kind]
-	body, _ := docx.Table(title, []string{"Реквизит", "Значение"}, [][]string{{"Номер и дата", number + " от " + signed}, {"ИТ-организация", companyName}, {"ИНН / ОГРН", companyINN + " / " + companyOGRN}, {"Адрес", address}, {"Подписант", director}, {"Контрагент", partnerName}, {"ИНН контрагента", partnerINN}, {"Отчётный год", strconv.Itoa(year)}})
+	body, err := docx.Table(title, []string{"Реквизит", "Значение"}, [][]string{{"Номер и дата", number + " от " + signed}, {"ИТ-организация", companyName}, {"ИНН / ОГРН", companyINN + " / " + companyOGRN}, {"Адрес", address}, {"Подписант", director}, {"Контрагент", partnerName}, {"ИНН контрагента", partnerINN}, {"Отчётный год", strconv.Itoa(year)}})
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось сформировать типовое соглашение")
+		return
+	}
 	h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("типовое_соглашение_%s_%d.docx", strings.TrimPrefix(kind, "agreement"), year), company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
 }
 
@@ -281,24 +283,37 @@ func formatAbsenceStatement(partnerName, signedOn, number string) string {
 	return fmt.Sprintf("Соглашение с %s от %s № %s", partnerName, formatRuDate(signedOn), number)
 }
 
-// buildAnnex5Rows сводит план/факт по контрагентам для Приложения № 5,
-// Таблицы 1. Строки, где нет ни плана, ни факта, программно удаляются —
-// «Правило выгрузки XLSX» Приказа № 270 требует этого независимо от
-// настроек фильтрации в UI. Итоги плана/факта считаются по всем
-// контрагентам, включая тех, чья строка была удалена как пустая.
-func buildAnnex5Rows(data []regulatoryRow) (out [][]interface{}, planTotal, factTotal money.Amount) {
-	type agg struct{ plan, fact money.Amount }
+// buildAnnex5Rows сводит Таблицу 1 Приложения № 5 к Приказу № 270: по
+// каждому контрагенту — реквизиты его соглашений и фактически
+// подтверждённые затраты (тыс. руб.), а процент считается от ЕДИНОГО для
+// всей компании норматива 3% сэкономленных льгот (target), а не от
+// собственного плана контрагента — официальная форма плана вообще не
+// содержит. Контрагенты без фактических затрат (пустые строки) программно
+// удаляются независимо от настроек фильтрации в UI. planTotal/factTotal —
+// сводка для информационного листа «Норматив 3%», не часть самой формы.
+func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interface{}, planTotal, factTotal money.Amount) {
+	type agg struct {
+		fact       money.Amount
+		agreements []string
+		seen       map[string]bool
+	}
 	totals := map[string]*agg{}
 	names := map[string]string{}
 	for _, row := range data {
 		if totals[row.PartnerID] == nil {
-			totals[row.PartnerID] = &agg{}
+			totals[row.PartnerID] = &agg{seen: map[string]bool{}}
 		}
 		names[row.PartnerID] = row.Partner
+		a := totals[row.PartnerID]
+		if row.Agreement != "" && !a.seen[row.Agreement] {
+			a.seen[row.Agreement] = true
+			a.agreements = append(a.agreements, row.Agreement)
+		}
 		if row.Period == "plan" {
-			totals[row.PartnerID].plan, _ = money.Add(totals[row.PartnerID].plan, row.Amount)
+			planTotal, _ = money.Add(planTotal, row.Amount)
 		} else {
-			totals[row.PartnerID].fact, _ = money.Add(totals[row.PartnerID].fact, row.Amount)
+			a.fact, _ = money.Add(a.fact, row.Amount)
+			factTotal, _ = money.Add(factTotal, row.Amount)
 		}
 	}
 	keys := make([]string, 0, len(totals))
@@ -307,23 +322,58 @@ func buildAnnex5Rows(data []regulatoryRow) (out [][]interface{}, planTotal, fact
 	}
 	sort.Strings(keys)
 	out = [][]interface{}{}
+	targetThousandRub := float64(target) / 100000
 	number := 0
 	for _, key := range keys {
 		a := totals[key]
-		planTotal, _ = money.Add(planTotal, a.plan)
-		factTotal, _ = money.Add(factTotal, a.fact)
-		if a.plan == 0 && a.fact == 0 {
+		if a.fact == 0 {
 			continue
 		}
-		delta := float64(a.fact-a.plan) / 100
-		percent := 0.0
-		if a.plan > 0 {
-			percent = float64(a.fact-a.plan) / float64(a.plan) * 100
+		var percent interface{} = "—"
+		if target > 0 {
+			percent = float64(a.fact) / float64(target) * 100
 		}
 		number++
-		out = append(out, []interface{}{number, names[key], a.plan, a.fact, delta, percent})
+		out = append(out, []interface{}{
+			number,
+			names[key],
+			strings.Join(a.agreements, "; "),
+			targetThousandRub,
+			float64(a.fact) / 100000,
+			percent,
+		})
 	}
 	return out, planTotal, factTotal
+}
+
+// payloadValue возвращает текстовое значение поля payload мероприятия или
+// пустую строку, если поле отсутствует. Голый fmt.Sprint(p[key]) на
+// отсутствующем ключе печатает буквальное "<nil>" в ячейку регламентной
+// формы — это и есть источник дефекта, а не отсутствие данных мероприятия.
+func payloadValue(p map[string]interface{}, key string) string {
+	v, ok := p[key]
+	if !ok || v == nil {
+		return ""
+	}
+	return fmt.Sprint(v)
+}
+
+// buildAnnex2Rows строит реестр стажировок для Приложения № 2 к Отчёту:
+// студент, наставник, срок и реквизиты срочного ТД по каждой строке
+// подтверждённых мероприятий вида «Стажировка/Практика».
+func buildAnnex2Rows(data []regulatoryRow) [][]interface{} {
+	out := [][]interface{}{}
+	for i, row := range data {
+		var p map[string]interface{}
+		_ = json.Unmarshal(row.Payload, &p)
+		out = append(out, []interface{}{
+			i + 1, row.Partner,
+			payloadValue(p, "student_full_name"), payloadValue(p, "mentor_full_name"),
+			payloadValue(p, "duration_months"), payloadValue(p, "total_student_hours"), payloadValue(p, "total_mentor_hours"),
+			payloadValue(p, "labor_contract_number"), row.Amount,
+		})
+	}
+	return out
 }
 
 // buildPlanFactRows сводит план/факт по контрагенту и виду мероприятия для

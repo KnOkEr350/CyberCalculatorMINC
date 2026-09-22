@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -47,38 +48,59 @@ func TestFormatAbsenceStatement(t *testing.T) {
 	}
 }
 
-// REPORT-10: конструктор срезов должен убирать пустые строки (план=0 и
-// факт=0), как того требует «Правило выгрузки XLSX» Приказа № 270,
-// независимо от настроек фильтрации в UI.
+// REPORT-04: Таблица 1 Приложения № 5 считает процент от единого норматива
+// 3% компании (а не от собственного плана контрагента, которого в
+// официальной форме вообще нет), собирает реквизиты соглашений контрагента
+// и переводит суммы в тыс. руб. Контрагенты без факта (пустые строки)
+// программно удаляются независимо от настроек фильтрации в UI (REPORT-10).
 func TestBuildAnnex5RowsDropsZeroRows(t *testing.T) {
+	target := money.Amount(1_000_000_00) // 1 000 000 ₽ = норматив 3% компании
 	data := []regulatoryRow{
-		{PartnerID: "p1", Partner: "МГУ", Period: "plan", Amount: money.Amount(100000)},
-		{PartnerID: "p1", Partner: "МГУ", Period: "fact", Amount: money.Amount(100000)},
-		// p2 имеет только план и только факт по разным категориям — итог по
-		// контрагенту не нулевой, строка должна остаться.
-		{PartnerID: "p2", Partner: "МФТИ", Period: "plan", Amount: money.Amount(50000)},
-		// p3 присутствует в выборке, но план и факт взаимно нулевые не
-		// возникают в реальных данных; проверяем именно "оба по нулю" —
-		// сконструируем это явно через нулевую сумму.
-		{PartnerID: "p3", Partner: "Колледж связи № 54", Period: "plan", Amount: money.Amount(0)},
-		{PartnerID: "p3", Partner: "Колледж связи № 54", Period: "fact", Amount: money.Amount(0)},
+		{PartnerID: "p1", Partner: "МГУ", Agreement: "№ 01/26-МЦ", Period: "plan", Amount: money.Amount(200_000_00)},
+		{PartnerID: "p1", Partner: "МГУ", Agreement: "№ 01/26-МЦ", Period: "fact", Amount: money.Amount(300_000_00)},
+		// Второе соглашение того же партнёра: реквизиты должны попасть в
+		// строку p1 оба, без дублей.
+		{PartnerID: "p1", Partner: "МГУ", Agreement: "№ 01/26-МЦ", Period: "fact", Amount: money.Amount(50_000_00)},
+		{PartnerID: "p1", Partner: "МГУ", Agreement: "Доп. соглашение № 2", Period: "fact", Amount: money.Amount(50_000_00)},
+		// p2 — только план, факта нет: пустая строка, должна быть удалена.
+		{PartnerID: "p2", Partner: "Колледж связи № 54", Agreement: "№ СПО-54/А", Period: "plan", Amount: money.Amount(80_000_00)},
 	}
-	rows, planTotal, factTotal := buildAnnex5Rows(data)
-	if len(rows) != 2 {
-		t.Fatalf("ожидали 2 непустые строки (p1, p2), получили %d: %+v", len(rows), rows)
+	rows, planTotal, factTotal := buildAnnex5Rows(data, target)
+	if len(rows) != 1 {
+		t.Fatalf("ожидали 1 непустую строку (p1), получили %d: %+v", len(rows), rows)
 	}
-	for _, row := range rows {
-		if row[1] == "Колледж связи № 54" {
-			t.Fatalf("нулевая строка p3 не была удалена: %+v", row)
-		}
+	row := rows[0]
+	if row[1] != "МГУ" {
+		t.Fatalf("осталась не та строка: %+v", row)
 	}
-	// Номера строк ("№") идут подряд без пропусков после удаления p3.
-	if rows[0][0] != 1 || rows[1][0] != 2 {
-		t.Fatalf("нумерация строк не пересчитана после удаления пустых: %+v", rows)
+	if agreements := row[2].(string); agreements != "№ 01/26-МЦ; Доп. соглашение № 2" {
+		t.Fatalf("реквизиты соглашений собраны неверно: %q", agreements)
 	}
-	// Итоги считаются по всем контрагентам, включая удалённую нулевую строку.
-	if planTotal != money.Amount(150000) || factTotal != money.Amount(100000) {
-		t.Fatalf("итоги план/факт неверны: plan=%v fact=%v", planTotal, factTotal)
+	if targetThousand := row[3].(float64); targetThousand != 1000 {
+		t.Fatalf("норматив в тыс. руб. = %v, want 1000", targetThousand)
+	}
+	// Факт p1 = 300 000 + 50 000 + 50 000 = 400 000 ₽ = 400 тыс. руб.
+	if factThousand := row[4].(float64); factThousand != 400 {
+		t.Fatalf("факт в тыс. руб. = %v, want 400", factThousand)
+	}
+	// Процент считается от норматива компании (1 000 000), а не от
+	// собственного плана p1 (200 000): 400 000 / 1 000 000 * 100 = 40%.
+	if percent := row[5].(float64); percent != 40 {
+		t.Fatalf("процент от норматива = %v, want 40 (не от собственного плана контрагента)", percent)
+	}
+	if planTotal != money.Amount(280_000_00) || factTotal != money.Amount(400_000_00) {
+		t.Fatalf("итоги план/факт для информационного листа неверны: plan=%v fact=%v", planTotal, factTotal)
+	}
+}
+
+func TestBuildAnnex5RowsWithoutTargetShowsDash(t *testing.T) {
+	data := []regulatoryRow{{PartnerID: "p1", Partner: "МГУ", Period: "fact", Amount: money.Amount(100000)}}
+	rows, _, _ := buildAnnex5Rows(data, 0)
+	if len(rows) != 1 {
+		t.Fatalf("ожидали 1 строку, получили %d", len(rows))
+	}
+	if percent := rows[0][5]; percent != "—" {
+		t.Fatalf("без настроенного норматива 3%% процент должен быть прочерком, получили %v", percent)
 	}
 }
 
@@ -94,6 +116,44 @@ func TestBuildPlanFactRowsDropsZeroRows(t *testing.T) {
 	}
 	if rows[0][1] != "Преподаватели" {
 		t.Fatalf("осталась не та строка: %+v", rows[0])
+	}
+}
+
+// Регрессия: fmt.Sprint(p[key]) на отсутствующем ключе печатает буквальное
+// "<nil>" в ячейку регламентной формы вместо пустой строки.
+func TestPayloadValueMissingKeyIsEmptyNotNilString(t *testing.T) {
+	p := map[string]interface{}{"student_full_name": "Иванов И.И.", "labor_contract_number": nil}
+	if got := payloadValue(p, "student_full_name"); got != "Иванов И.И." {
+		t.Fatalf("payloadValue() = %q, want %q", got, "Иванов И.И.")
+	}
+	if got := payloadValue(p, "mentor_full_name"); got != "" {
+		t.Fatalf("payloadValue() для отсутствующего ключа = %q, want \"\" (не \"<nil>\")", got)
+	}
+	if got := payloadValue(p, "labor_contract_number"); got != "" {
+		t.Fatalf("payloadValue() для nil-значения = %q, want \"\" (не \"<nil>\")", got)
+	}
+}
+
+func TestBuildAnnex2RowsNoNilLiteral(t *testing.T) {
+	payload, _ := json.Marshal(map[string]interface{}{"student_full_name": "Сидоров П.В.", "duration_months": 3})
+	data := []regulatoryRow{{Partner: "МГУ", Amount: money.Amount(100000), Payload: payload}}
+	rows := buildAnnex2Rows(data)
+	if len(rows) != 1 {
+		t.Fatalf("ожидали 1 строку, получили %d", len(rows))
+	}
+	row := rows[0]
+	if row[2] != "Сидоров П.В." {
+		t.Fatalf("студент = %v, want Сидоров П.В.", row[2])
+	}
+	// mentor_full_name и labor_contract_number отсутствуют в payload — не
+	// должны стать строкой "<nil>".
+	for _, idx := range []int{3, 7} {
+		if v := fmt.Sprint(row[idx]); v == "<nil>" {
+			t.Fatalf("row[%d] = %q, отсутствующее поле не должно печататься как \"<nil>\"", idx, v)
+		}
+		if row[idx] != "" {
+			t.Fatalf("row[%d] = %v, want \"\"", idx, row[idx])
+		}
 	}
 }
 
