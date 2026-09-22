@@ -865,7 +865,8 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
     if (!input) return;
     const raw = input.value.trim();
     let message = "";
-    if (!raw && field.required) {
+    const uiRequired = field.required || (category.code === "teachers" && field.key === "staff_member_id");
+    if (!raw && uiRequired) {
       message = "Поле обязательно";
     } else if (raw) {
       if (field.type === "number") {
@@ -1264,12 +1265,13 @@ async function openEntryModal(entry, readOnly = false) {
   syncCostMethod();
   cat.fields.forEach((f) => {
     const row = el(
-      `<div class="field"><label>${escapeHTML(f.label)}${f.required ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`,
+      `<div class="field"><label>${escapeHTML(f.label)}${f.required || (cat.code === "teachers" && f.key === "staff_member_id") ? " *" : ""}</label><div class="field-error" style="display:none"></div></div>`,
     );
     row.insertBefore(
       el(fieldInput(f, payload[f.key], audience)),
       row.querySelector(".field-error"),
     );
+    if (cat.code === "teachers" && f.key === "staff_member_id") row.querySelector("select").required = true;
     if (f.key === "org_name") {
       const hasPartners =
         Array.isArray(state.partners) &&
