@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"cybercalc/internal/docx"
 	"cybercalc/internal/middleware"
@@ -110,6 +111,12 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		h.exportAgreementTemplate(w, r, u, year, kind, company, partner, agreement)
 		return
 	}
+	if kind == "annex3" && (partner == "" || agreement == "") {
+		// Приложение № 3 — справка по конкретному соглашению; без реквизитов
+		// соглашения формулировка «Соглашение с … от … №…» невозможна.
+		middleware.WriteError(w, 400, "выберите партнёра и соглашение")
+		return
+	}
 	conds := []string{"e.it_company_id::text=$1", "e.report_year=$2", "eligibility.eligible"}
 	args := []interface{}{company, year}
 	if partner != "" {
@@ -154,7 +161,24 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 			middleware.WriteError(w, 409, "справка об отсутствии недоступна: по соглашению есть мероприятия")
 			return
 		}
-		body, _ := docx.Table(fmt.Sprintf("Приложение № 3. Информационная справка об отсутствии мероприятий за %d год", year), []string{"Соглашение", "Партнёр", "Основание"}, [][]string{{agreement, partner, "Фактически подтверждённые мероприятия отсутствуют"}})
+		var number, signedOn, partnerName string
+		err := h.DB.QueryRowContext(r.Context(), `SELECT a.number,a.signed_on::text,p.name
+			FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id JOIN partners p ON p.id=ap.partner_id
+			WHERE a.id::text=$1 AND p.id::text=$2 AND a.it_company_id::text=$3`, agreement, partner, company).Scan(&number, &signedOn, &partnerName)
+		if err != nil {
+			middleware.WriteError(w, 404, "соглашение не найдено")
+			return
+		}
+		statement := formatAbsenceStatement(partnerName, signedOn, number)
+		body, err := docx.Table(
+			fmt.Sprintf("Приложение № 3. Информационная справка об отсутствии реализованных мероприятий за %d год", year),
+			[]string{"Соглашение", "Основание"},
+			[][]string{{statement, "Фактически подтверждённые мероприятия отсутствуют"}},
+		)
+		if err != nil {
+			middleware.WriteError(w, 500, "не удалось сформировать справку")
+			return
+		}
 		h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("приложение_3_%d.docx", year), company, partner, agreement, year, body)
 		return
 	}
@@ -182,75 +206,14 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], out)
 		filename = fmt.Sprintf("приложение_2_%d.xlsx", year)
 	case "annex5":
-		type agg struct{ plan, fact money.Amount }
-		totals := map[string]*agg{}
-		names := map[string]string{}
-		for _, row := range data {
-			if totals[row.PartnerID] == nil {
-				totals[row.PartnerID] = &agg{}
-			}
-			names[row.PartnerID] = row.Partner
-			if row.Period == "plan" {
-				totals[row.PartnerID].plan, _ = money.Add(totals[row.PartnerID].plan, row.Amount)
-			} else {
-				totals[row.PartnerID].fact, _ = money.Add(totals[row.PartnerID].fact, row.Amount)
-			}
-		}
-		keys := make([]string, 0, len(totals))
-		for key := range totals {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		out := [][]interface{}{}
-		var planTotal, factTotal money.Amount
-		for i, key := range keys {
-			a := totals[key]
-			delta := float64(a.fact-a.plan) / 100
-			percent := 0.0
-			if a.plan > 0 {
-				percent = float64(a.fact-a.plan) / float64(a.plan) * 100
-			}
-			out = append(out, []interface{}{i + 1, names[key], a.plan, a.fact, delta, percent})
-			planTotal, _ = money.Add(planTotal, a.plan)
-			factTotal, _ = money.Add(factTotal, a.fact)
-		}
+		out, planTotal, factTotal := buildAnnex5Rows(data)
 		var target sql.NullString
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT target_amount_rub::text FROM organization_budget_targets WHERE it_company_id::text=$1 AND report_year=$2`, company, year).Scan(&target)
 		wb.AddSheet("Приложение № 5", regulatoryHeaders["annex5"], out)
 		wb.AddSheet("Норматив 3%", []string{"Год", "Норматив, руб.", "План, руб.", "Факт, руб."}, [][]interface{}{{year, target.String, planTotal, factTotal}})
 		filename = fmt.Sprintf("приложение_5_%d.xlsx", year)
 	case "plan_fact":
-		type agg struct {
-			name, category string
-			plan, fact     money.Amount
-		}
-		totals := map[string]*agg{}
-		for _, row := range data {
-			key := row.PartnerID + "\x00" + row.Category
-			if totals[key] == nil {
-				totals[key] = &agg{name: row.Partner, category: row.CategoryName}
-			}
-			if row.Period == "plan" {
-				totals[key].plan, _ = money.Add(totals[key].plan, row.Amount)
-			} else {
-				totals[key].fact, _ = money.Add(totals[key].fact, row.Amount)
-			}
-		}
-		keys := make([]string, 0, len(totals))
-		for key := range totals {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		out := [][]interface{}{}
-		for _, key := range keys {
-			a := totals[key]
-			delta := float64(a.fact-a.plan) / 100
-			percent := 0.0
-			if a.plan > 0 {
-				percent = float64(a.fact-a.plan) / float64(a.plan) * 100
-			}
-			out = append(out, []interface{}{a.name, a.category, a.plan, a.fact, delta, percent})
-		}
+		out := buildPlanFactRows(data)
 		wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], out)
 		filename = fmt.Sprintf("план_факт_дельта_%d.xlsx", year)
 	default:
@@ -279,4 +242,108 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 	title := map[string]string{"agreement2": "Типовое соглашение — Приложение № 2", "agreement3": "Типовое соглашение — Приложение № 3"}[kind]
 	body, _ := docx.Table(title, []string{"Реквизит", "Значение"}, [][]string{{"Номер и дата", number + " от " + signed}, {"ИТ-организация", companyName}, {"ИНН / ОГРН", companyINN + " / " + companyOGRN}, {"Адрес", address}, {"Подписант", director}, {"Контрагент", partnerName}, {"ИНН контрагента", partnerINN}, {"Отчётный год", strconv.Itoa(year)}})
 	h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("типовое_соглашение_%s_%d.docx", strings.TrimPrefix(kind, "agreement"), year), company, partner, agreement, year, body)
+}
+
+// formatRuDate переводит ISO-дату (YYYY-MM-DD, как её отдаёт Postgres) в
+// формат ДД.ММ.ГГГГ, принятый в формах Приказа № 270. Нераспознанное
+// значение возвращается как есть, чтобы справка не терялась из-за формата.
+func formatRuDate(iso string) string {
+	parsed, err := time.Parse("2006-01-02", iso)
+	if err != nil {
+		return iso
+	}
+	return parsed.Format("02.01.2006")
+}
+
+// formatAbsenceStatement строит формулировку Приложения № 3 к Отчёту:
+// «Соглашение с <ОО> от <дата> № <номер>» — вместо сырых идентификаторов
+// партнёра и соглашения.
+func formatAbsenceStatement(partnerName, signedOn, number string) string {
+	return fmt.Sprintf("Соглашение с %s от %s № %s", partnerName, formatRuDate(signedOn), number)
+}
+
+// buildAnnex5Rows сводит план/факт по контрагентам для Приложения № 5,
+// Таблицы 1. Строки, где нет ни плана, ни факта, программно удаляются —
+// «Правило выгрузки XLSX» Приказа № 270 требует этого независимо от
+// настроек фильтрации в UI. Итоги плана/факта считаются по всем
+// контрагентам, включая тех, чья строка была удалена как пустая.
+func buildAnnex5Rows(data []regulatoryRow) (out [][]interface{}, planTotal, factTotal money.Amount) {
+	type agg struct{ plan, fact money.Amount }
+	totals := map[string]*agg{}
+	names := map[string]string{}
+	for _, row := range data {
+		if totals[row.PartnerID] == nil {
+			totals[row.PartnerID] = &agg{}
+		}
+		names[row.PartnerID] = row.Partner
+		if row.Period == "plan" {
+			totals[row.PartnerID].plan, _ = money.Add(totals[row.PartnerID].plan, row.Amount)
+		} else {
+			totals[row.PartnerID].fact, _ = money.Add(totals[row.PartnerID].fact, row.Amount)
+		}
+	}
+	keys := make([]string, 0, len(totals))
+	for key := range totals {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out = [][]interface{}{}
+	number := 0
+	for _, key := range keys {
+		a := totals[key]
+		planTotal, _ = money.Add(planTotal, a.plan)
+		factTotal, _ = money.Add(factTotal, a.fact)
+		if a.plan == 0 && a.fact == 0 {
+			continue
+		}
+		delta := float64(a.fact-a.plan) / 100
+		percent := 0.0
+		if a.plan > 0 {
+			percent = float64(a.fact-a.plan) / float64(a.plan) * 100
+		}
+		number++
+		out = append(out, []interface{}{number, names[key], a.plan, a.fact, delta, percent})
+	}
+	return out, planTotal, factTotal
+}
+
+// buildPlanFactRows сводит план/факт по контрагенту и виду мероприятия для
+// конструктора срезов (REPORT-10). Пустые строки (план=0 и факт=0)
+// программно удаляются независимо от настроек фильтрации в UI.
+func buildPlanFactRows(data []regulatoryRow) [][]interface{} {
+	type agg struct {
+		name, category string
+		plan, fact     money.Amount
+	}
+	totals := map[string]*agg{}
+	for _, row := range data {
+		key := row.PartnerID + "\x00" + row.Category
+		if totals[key] == nil {
+			totals[key] = &agg{name: row.Partner, category: row.CategoryName}
+		}
+		if row.Period == "plan" {
+			totals[key].plan, _ = money.Add(totals[key].plan, row.Amount)
+		} else {
+			totals[key].fact, _ = money.Add(totals[key].fact, row.Amount)
+		}
+	}
+	keys := make([]string, 0, len(totals))
+	for key := range totals {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := [][]interface{}{}
+	for _, key := range keys {
+		a := totals[key]
+		if a.plan == 0 && a.fact == 0 {
+			continue
+		}
+		delta := float64(a.fact-a.plan) / 100
+		percent := 0.0
+		if a.plan > 0 {
+			percent = float64(a.fact-a.plan) / float64(a.plan) * 100
+		}
+		out = append(out, []interface{}{a.name, a.category, a.plan, a.fact, delta, percent})
+	}
+	return out
 }
