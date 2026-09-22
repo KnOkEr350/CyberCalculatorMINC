@@ -93,6 +93,15 @@ func TestBuildAnnex5RowsDropsZeroRows(t *testing.T) {
 	}
 }
 
+func TestBuildAnnex5RowsRoundsPercentToHundredths(t *testing.T) {
+	// 1 / 3 норматива = 33.333…% — в ячейку формы должно попасть 33.33.
+	data := []regulatoryRow{{PartnerID: "p1", Partner: "МГУ", Period: "fact", Amount: money.Amount(100)}}
+	rows, _, _ := buildAnnex5Rows(data, money.Amount(300))
+	if percent := rows[0][5].(float64); percent != 33.33 {
+		t.Fatalf("процент от норматива = %v, want 33.33", percent)
+	}
+}
+
 func TestBuildAnnex5RowsWithoutTargetShowsDash(t *testing.T) {
 	data := []regulatoryRow{{PartnerID: "p1", Partner: "МГУ", Period: "fact", Amount: money.Amount(100000)}}
 	rows, _, _ := buildAnnex5Rows(data, 0)

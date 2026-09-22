@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -331,7 +332,9 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 		}
 		var percent interface{} = "—"
 		if target > 0 {
-			percent = float64(a.fact) / float64(target) * 100
+			// Округление до сотых процента: без него в ячейку формы
+			// попадает хвост двоичной дроби вида 33.333333333333336.
+			percent = math.Round(float64(a.fact)/float64(target)*100*100) / 100
 		}
 		number++
 		out = append(out, []interface{}{
