@@ -162,8 +162,11 @@ button { touch-action: manipulation; }
 .dashboard-risk-grid { align-items: stretch; }
 .dashboard-risk-grid > .card { min-width: 0; }
 .risk-buckets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.risk-buckets > div { display: flex; min-height: 112px; flex-direction: column; justify-content: center; padding: 13px; border: 1px solid var(--border); background: var(--surface-alt); }
-.risk-buckets span { font-size: 26px; font-weight: 700; }
+/* Карточка корзины — контейнер для размера суммы: сумма вида
+   «999 999 999,99 ₽» с неразрывными пробелами не переносится и при
+   фиксированных 26px вылезала за карточку шириной в 1/6 экрана. */
+.risk-buckets > div { display: flex; min-width: 0; min-height: 112px; flex-direction: column; justify-content: center; padding: 13px; border: 1px solid var(--border); background: var(--surface-alt); container-type: inline-size; }
+.risk-buckets span { max-width: 100%; font-size: 18px; font-size: clamp(13px, 10cqi, 26px); font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .risk-buckets b { margin-top: 2px; color: var(--navy); font-size: 10px; }
 .risk-buckets small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .risk-buckets .green span { color: var(--good); }

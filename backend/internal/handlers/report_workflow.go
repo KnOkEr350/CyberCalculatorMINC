@@ -62,7 +62,8 @@ type reportWorkflowResponse struct {
 	ReadyAt                *time.Time             `json:"ready_at,omitempty"`
 	VerifiedAt             *time.Time             `json:"verified_at,omitempty"`
 	ApprovedAt             *time.Time             `json:"approved_at,omitempty"`
-	ReviewDueAt            *time.Time             `json:"review_due_at,omitempty"`
+	ReviewDueDate          string                 `json:"review_due_date,omitempty"` // последний календарный день срока, YYYY-MM-DD (Москва)
+	ReviewDueAt            *time.Time             `json:"review_due_at,omitempty"`   // момент истечения срока: начало следующего дня по Москве
 	ReviewDays             int                    `json:"review_calendar_days"`
 	ReviewOverdue          bool                   `json:"review_overdue"`
 	History                []reportHistoryItem    `json:"history"`
@@ -143,20 +144,28 @@ func topITAlternativeExists(ctx context.Context, q workflowQuerier, agreementID 
 	}
 	rows.Close()
 	for _, otherID := range otherIDs {
-		var teachers, programs, practice, ministry bool
+		var teachers, programs bool
 		if err = q.QueryRowContext(ctx, `SELECT
 			COALESCE(bool_or(category_code='teachers'),false),
-			COALESCE(bool_or(category_code='ood_rpd'),false),
-			COALESCE(bool_or(category_code IN ('internship','employment_practice')),false),
-			COALESCE(bool_or(category_code='minc_decision'),false)
-			FROM entries WHERE agreement_id::text=$1 AND report_year=$2 AND period_type=$3 AND amount_rub>0`, otherID, year, period).Scan(&teachers, &programs, &practice, &ministry); err != nil {
+			COALESCE(bool_or(category_code='ood_rpd'),false)
+			FROM entries WHERE agreement_id::text=$1 AND report_year=$2 AND period_type=$3 AND amount_rub>0`, otherID, year, period).Scan(&teachers, &programs); err != nil {
 			return false, err
 		}
-		if teachers && programs && practice && ministry {
+		if clause22AlternativeSatisfied(teachers, programs) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// clause22AlternativeSatisfied — условие п. 22 Порядка в трактовке ADR-03:
+// ТОП-ИТ/ТОП-ИИ освобождает ОО «A» от прочих видов, если в иной ОО «B» в том
+// же году одновременно реализованы обязательные Вид 1 (преподаватели) и Вид 3
+// (ООП/РПД). Стажировки, практика и решения Минцифры — вариативные виды и в
+// условие не входят: раньше их требование лишало компанию законного
+// освобождения.
+func clause22AlternativeSatisfied(teachers, programs bool) bool {
+	return teachers && programs
 }
 
 func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser, agreementID string, year int, period string) (reportWorkflowResponse, error) {
@@ -185,13 +194,16 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	}
 	if readyAt.Valid {
 		resp.ReadyAt = &readyAt.Time
+		// Приказ № 270: 10 календарных дней на рассмотрение предварительного
+		// перечня, 20 — итогового; счёт по датам по ADR-02.
 		resp.ReviewDays = 10
 		if period == "fact" {
 			resp.ReviewDays = 20
 		}
-		due := readyAt.Time.AddDate(0, 0, resp.ReviewDays)
-		resp.ReviewDueAt = &due
-		resp.ReviewOverdue = resp.Status == "ready" && time.Now().After(due)
+		lastDay, expiresAt := calendarDeadline(readyAt.Time, resp.ReviewDays)
+		resp.ReviewDueDate = lastDay
+		resp.ReviewDueAt = &expiresAt
+		resp.ReviewOverdue = resp.Status == "ready" && deadlineExpired(expiresAt, time.Now())
 	}
 	if verifiedAt.Valid {
 		resp.VerifiedAt = &verifiedAt.Time
