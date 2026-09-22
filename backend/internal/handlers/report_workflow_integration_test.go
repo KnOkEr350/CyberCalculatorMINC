@@ -11,6 +11,7 @@ import (
 	"cybercalc/internal/dbx"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	"cybercalc/internal/money"
 	"cybercalc/internal/testfixtures"
 )
 
@@ -99,12 +100,37 @@ func TestClause22ExemptionOnDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got, err := topITAlternativeExists(ctx, db, agreementA, year, "fact")
+			basis, err := topITAlternativeBasis(ctx, db, agreementA, year, "fact")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != tc.wantExemption {
-				t.Fatalf("topITAlternativeExists() = %v, want %v", got, tc.wantExemption)
+			if (basis != nil) != tc.wantExemption {
+				t.Fatalf("topITAlternativeBasis() = %+v, освобождение ожидалось: %v", basis, tc.wantExemption)
+			}
+			if basis != nil {
+				// ADR-03: освобождение должно быть проверяемым — видно, какая
+				// ОО и какие именно записи Видов 1 и 3 его подтверждают.
+				if basis.AgreementID != agreementB {
+					t.Fatalf("основание ссылается на соглашение %s, ожидалось %s", basis.AgreementID, agreementB)
+				}
+				if basis.PartnerName == "" || basis.AgreementNumber == "" {
+					t.Fatalf("основание без наименования ОО или номера соглашения: %+v", basis)
+				}
+				gotCategories := map[string]money.Amount{}
+				for _, record := range basis.Records {
+					if record.EntryCount != 1 {
+						t.Fatalf("%s: записей %d, ожидалась 1", record.CategoryCode, record.EntryCount)
+					}
+					if record.CategoryName == "" {
+						t.Fatalf("%s: пустое название вида мероприятия", record.CategoryCode)
+					}
+					gotCategories[record.CategoryCode] = record.AmountRub
+				}
+				for _, category := range []string{"teachers", "ood_rpd"} {
+					if amount, ok := gotCategories[category]; !ok || amount != money.Amount(10000000) {
+						t.Fatalf("в основании нет записи %s на 100 000 ₽: %+v", category, basis.Records)
+					}
+				}
 			}
 			user := middleware.AuthUser{ID: admin.ID, Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization, ITCompanyID: &company.ID}
 			workflow, err := buildWorkflow(ctx, db, user, agreementA, year, "fact")

@@ -12,6 +12,7 @@ import (
 
 	"cybercalc/internal/compliance"
 	"cybercalc/internal/middleware"
+	"cybercalc/internal/money"
 	"github.com/lib/pq"
 )
 
@@ -55,6 +56,7 @@ type reportWorkflowResponse struct {
 	AutomaticChecks        []reportAutomaticCheck `json:"automatic_checks"`
 	Missing                []string               `json:"missing"`
 	TopITException         bool                   `json:"top_it_exception"`
+	TopITBasis             *clause22Basis         `json:"top_it_exception_basis,omitempty"` // ADR-03: чем именно подтверждено освобождение
 	CanMarkReady           bool                   `json:"can_mark_ready"`
 	CanVerify              bool                   `json:"can_verify"`
 	CanApprove             bool                   `json:"can_approve"`
@@ -117,45 +119,97 @@ func requireAgreement(w http.ResponseWriter, r *http.Request, db *sql.DB, u midd
 	return true
 }
 
-func topITAlternativeExists(ctx context.Context, q workflowQuerier, agreementID string, year int, period string) (bool, error) {
-	rows, err := q.QueryContext(ctx, `SELECT DISTINCT other.id::text
+// clause22Basis — обоснование освобождения по п. 22: конкретная иная ОО «B»
+// и записи обязательных Видов 1 и 3, на которых оно держится. ADR-03 требует
+// показывать их, чтобы освобождение можно было проверить, а не принимать на
+// слово.
+type clause22Basis struct {
+	AgreementID     string          `json:"agreement_id"`
+	AgreementNumber string          `json:"agreement_number"`
+	PartnerName     string          `json:"partner_name"`
+	Records         []clause22Entry `json:"records"`
+}
+
+type clause22Entry struct {
+	CategoryCode string       `json:"category_code"`
+	CategoryName string       `json:"category_name"`
+	EntryCount   int          `json:"entry_count"`
+	AmountRub    money.Amount `json:"amount_rub"`
+}
+
+// topITAlternativeBasis ищет иную ОО, закрывающую обязательные Виды 1 и 3, и
+// возвращает обоснование освобождения. nil означает, что освобождения нет.
+func topITAlternativeBasis(ctx context.Context, q workflowQuerier, agreementID string, year int, period string) (*clause22Basis, error) {
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT other.id::text,other.number,p.name
 		FROM agreements other
 		JOIN agreement_reports report ON report.agreement_id=other.id AND report.report_year=$2 AND report.period_type=$3 AND report.status='approved'
 		JOIN agreement_partners op ON op.agreement_id=other.id
 		JOIN partners p ON p.id=op.partner_id AND p.partner_kind<>'school'
 		WHERE other.id::text<>$1 AND other.status='active'
 		AND other.it_company_id=(SELECT it_company_id FROM agreements WHERE id::text=$1)
-		AND EXISTS(SELECT 1 FROM agreement_partners current_ap WHERE current_ap.agreement_id::text=$1 AND current_ap.partner_id<>op.partner_id)`, agreementID, year, period)
+		AND EXISTS(SELECT 1 FROM agreement_partners current_ap WHERE current_ap.agreement_id::text=$1 AND current_ap.partner_id<>op.partner_id)
+		ORDER BY p.name,other.number`, agreementID, year, period)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	otherIDs := []string{}
+	candidates := []clause22Basis{}
 	for rows.Next() {
-		var otherID string
-		if err = rows.Scan(&otherID); err != nil {
+		var candidate clause22Basis
+		if err = rows.Scan(&candidate.AgreementID, &candidate.AgreementNumber, &candidate.PartnerName); err != nil {
 			rows.Close()
-			return false, err
+			return nil, err
 		}
-		otherIDs = append(otherIDs, otherID)
+		candidates = append(candidates, candidate)
 	}
 	if err = rows.Err(); err != nil {
 		rows.Close()
-		return false, err
+		return nil, err
 	}
 	rows.Close()
-	for _, otherID := range otherIDs {
-		var teachers, programs bool
-		if err = q.QueryRowContext(ctx, `SELECT
-			COALESCE(bool_or(category_code='teachers'),false),
-			COALESCE(bool_or(category_code='ood_rpd'),false)
-			FROM entries WHERE agreement_id::text=$1 AND report_year=$2 AND period_type=$3 AND amount_rub>0`, otherID, year, period).Scan(&teachers, &programs); err != nil {
-			return false, err
+	for _, candidate := range candidates {
+		records, teachers, programs, recErr := clause22Records(ctx, q, candidate.AgreementID, year, period)
+		if recErr != nil {
+			return nil, recErr
 		}
 		if clause22AlternativeSatisfied(teachers, programs) {
-			return true, nil
+			candidate.Records = records
+			return &candidate, nil
 		}
 	}
-	return false, nil
+	return nil, nil
+}
+
+// clause22Records собирает записи обязательных видов иной ОО: сколько
+// мероприятий и на какую сумму подтверждено по Виду 1 и Виду 3.
+func clause22Records(ctx context.Context, q workflowQuerier, agreementID string, year int, period string) ([]clause22Entry, bool, bool, error) {
+	rows, err := q.QueryContext(ctx, `SELECT e.category_code,c.name,count(*),COALESCE(sum(e.amount_rub),0)
+		FROM entries e JOIN activity_categories c ON c.code=e.category_code
+		WHERE e.agreement_id::text=$1 AND e.report_year=$2 AND e.period_type=$3 AND e.amount_rub>0
+		AND e.category_code IN ('teachers','ood_rpd')
+		GROUP BY e.category_code,c.name ORDER BY c.name`, agreementID, year, period)
+	if err != nil {
+		return nil, false, false, err
+	}
+	defer rows.Close()
+	records := []clause22Entry{}
+	teachers, programs := false, false
+	for rows.Next() {
+		var record clause22Entry
+		if err = rows.Scan(&record.CategoryCode, &record.CategoryName, &record.EntryCount, &record.AmountRub); err != nil {
+			return nil, false, false, err
+		}
+		switch record.CategoryCode {
+		case "teachers":
+			teachers = true
+		case "ood_rpd":
+			programs = true
+		}
+		records = append(records, record)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, false, false, err
+	}
+	return records, teachers, programs, nil
 }
 
 // clause22AlternativeSatisfied — условие п. 22 Порядка в трактовке ADR-03:
@@ -244,13 +298,14 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	rows.Close()
 	activitiesComplete := len(required) > 0 && len(missingCodes) == 0
 	if !activitiesComplete && kind == "education_organization" && topComplete {
-		alternative, altErr := topITAlternativeExists(ctx, q, agreementID, year, period)
+		basis, altErr := topITAlternativeBasis(ctx, q, agreementID, year, period)
 		if altErr != nil {
 			return resp, altErr
 		}
-		if alternative {
+		if basis != nil {
 			activitiesComplete = true
 			resp.TopITException = true
+			resp.TopITBasis = basis
 		}
 	}
 	yearStart := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)

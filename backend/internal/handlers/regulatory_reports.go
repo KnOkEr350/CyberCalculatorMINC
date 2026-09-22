@@ -27,7 +27,9 @@ type regulatoryRow struct {
 }
 
 var regulatoryHeaders = map[string][]string{
-	"annex1": {"№", "ОО / РОИВ", "Соглашение", "Вид мероприятия", "Уровень", "Срез", "Показатели и документы", "Сумма, руб."},
+	// Графы Приложения № 1 к Отчёту: форма заполняется отдельно по каждой
+	// ОО или РОИВ и только по реализованным мероприятиям.
+	"annex1": {"№ п/п", "Вид мероприятия", "Мероприятие", "Метрика (основная)", "Наименование показателя", "Значение показателя", "Стоимость, тыс. руб.", "Сумма затрат по мероприятию, тыс. руб.", "Дополнительная информация"},
 	"annex2": {"№", "ОО", "Студент", "Наставник", "Месяцев", "Часы студента", "Часы наставника", "Срочный ТД", "Сумма, руб."},
 	// Состав Таблицы 1 Приложения № 5 к Приказу № 270: контрагент, его
 	// соглашения, единый для компании норматив 3% сэкономленных льгот и доля
@@ -157,7 +159,9 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	if kind == "annex2" {
 		conds = append(conds, "e.category_code IN ('internship','employment_practice')")
 	}
-	if kind == "annex3" {
+	if kind == "annex1" || kind == "annex3" {
+		// Приложения № 1 и № 3 к Отчёту говорят о реализованных
+		// мероприятиях, поэтому план в них не попадает.
 		conds = append(conds, "e.period_type='fact'")
 	}
 	// conds contains only fixed SQL fragments and $N placeholders; request values are in args.
@@ -213,11 +217,9 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	filename := ""
 	switch kind {
 	case "annex1":
-		out := [][]interface{}{}
-		for i, row := range data {
-			out = append(out, []interface{}{i + 1, row.Partner, row.Agreement, row.CategoryName, officeValue(row.Audience), officeValue(row.Period), readablePayload(row.Category, row.Payload), row.Amount})
+		for _, sheet := range buildAnnex1Sheets(data) {
+			wb.AddSheet(sheet.Name, regulatoryHeaders["annex1"], sheet.Rows)
 		}
-		wb.AddSheet("Приложение № 1", regulatoryHeaders["annex1"], out)
 		filename = fmt.Sprintf("приложение_1_%d.xlsx", year)
 	case "annex2":
 		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], buildAnnex2Rows(data))
@@ -323,7 +325,7 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 	}
 	sort.Strings(keys)
 	out = [][]interface{}{}
-	targetThousandRub := float64(target) / 100000
+	targetThousandRub := thousandRub(target)
 	number := 0
 	for _, key := range keys {
 		a := totals[key]
@@ -342,11 +344,97 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 			names[key],
 			strings.Join(a.agreements, "; "),
 			targetThousandRub,
-			float64(a.fact) / 100000,
+			thousandRub(a.fact),
 			percent,
 		})
 	}
 	return out, planTotal, factTotal
+}
+
+// thousandRub переводит сумму в тыс. руб. — единицу, в которой напечатаны
+// формы Приказа № 270.
+func thousandRub(amount money.Amount) float64 {
+	return math.Round(float64(amount)/1000) / 100
+}
+
+// annex1Sheet — один лист Приложения № 1: форма заполняется отдельно по
+// каждой ОО или РОИВ, поэтому лист называется именем контрагента.
+type annex1Sheet struct {
+	Name string
+	Rows [][]interface{}
+}
+
+// annex1Indicator — подпись показателя объёма для каждого вида мероприятия.
+// Сама метрика (единица измерения) берётся из activityMetrics, чтобы графы
+// «Метрика» и «Наименование показателя» не дублировали друг друга.
+var annex1Indicator = map[string]string{
+	"teachers":            "Часы преподавания",
+	"internship":          "Часы стажировки",
+	"employment_practice": "Часы практики",
+	"ood_rpd":             "Разработанные и актуализированные документы",
+	"top_it":              "Средства, фактически списанные вузом",
+	"it_clubs":            "Часы занятий и разработанные программы",
+	"teacher_training":    "Часы обучения учителей",
+	"edu_content":         "Месяцы доступа к платформам",
+	"minc_decision":       "Объём по решению Минцифры",
+}
+
+// activityTitle — графа «Мероприятие»: конкретное наименование из реквизитов
+// записи, а не общий вид мероприятия.
+func activityTitle(row regulatoryRow, payload map[string]interface{}) string {
+	for _, key := range []string{"program_name", "course_name", "activity_description", "student_full_name"} {
+		if value := payloadValue(payload, key); value != "" {
+			return value
+		}
+	}
+	return row.CategoryName
+}
+
+// buildAnnex1Sheets строит Приложение № 1 к Отчёту: по листу на каждую ОО или
+// РОИВ, строка на мероприятие и итоговая строка. Суммы — в тыс. руб., как в
+// форме; пустые строки не выгружаются.
+func buildAnnex1Sheets(data []regulatoryRow) []annex1Sheet {
+	order := []string{}
+	byPartner := map[string][]regulatoryRow{}
+	for _, row := range data {
+		if row.Amount == 0 {
+			continue
+		}
+		name := row.Partner
+		if strings.TrimSpace(name) == "" {
+			name = "Без контрагента"
+		}
+		if _, seen := byPartner[name]; !seen {
+			order = append(order, name)
+		}
+		byPartner[name] = append(byPartner[name], row)
+	}
+	sort.Strings(order)
+	sheets := make([]annex1Sheet, 0, len(order))
+	for _, name := range order {
+		rows := [][]interface{}{}
+		var total money.Amount
+		for index, row := range byPartner[name] {
+			payload := map[string]interface{}{}
+			_ = json.Unmarshal(row.Payload, &payload)
+			volume, _, unit := activityMetrics(row.Category, numericPayload(row.Payload))
+			// Стоимость единицы восстанавливается из суммы и объёма: тариф
+			// хранится в расчётах, а не в записи мероприятия.
+			var unitCost interface{} = "—"
+			if volume > 0 {
+				unitCost = math.Round(float64(row.Amount)/volume/1000) / 100
+			}
+			total, _ = money.Add(total, row.Amount)
+			rows = append(rows, []interface{}{
+				index + 1, row.CategoryName, activityTitle(row, payload), unit,
+				annex1Indicator[row.Category], volume,
+				unitCost, thousandRub(row.Amount), readablePayload(row.Category, row.Payload),
+			})
+		}
+		rows = append(rows, []interface{}{"", "ИТОГО", "", "", "", "", "", thousandRub(total), ""})
+		sheets = append(sheets, annex1Sheet{Name: name, Rows: rows})
+	}
+	return sheets
 }
 
 // payloadValue возвращает текстовое значение поля payload мероприятия или

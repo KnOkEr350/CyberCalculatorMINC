@@ -166,6 +166,64 @@ func TestBuildAnnex2RowsNoNilLiteral(t *testing.T) {
 	}
 }
 
+// REPORT-05: Приложение № 1 к Отчёту заполняется отдельно по каждой ОО или
+// РОИВ, суммы приводятся в тыс. руб., а лист закрывается строкой «ИТОГО».
+func TestBuildAnnex1SheetsPerOrganization(t *testing.T) {
+	teachersPayload, _ := json.Marshal(map[string]interface{}{"course_name": "Архитектура ИС", "academic_hours": 64})
+	programPayload, _ := json.Marshal(map[string]interface{}{"program_name": "09.03.01 Информационная безопасность"})
+	data := []regulatoryRow{
+		{PartnerID: "p2", Partner: "МФТИ", Category: "ood_rpd", CategoryName: "ООП и РПД", Period: "fact",
+			Amount: money.Amount(203985000), Payload: programPayload},
+		{PartnerID: "p1", Partner: "МГУ", Category: "teachers", CategoryName: "Преподаватели-практики", Period: "fact",
+			Amount: money.Amount(26496000), Payload: teachersPayload},
+	}
+	sheets := buildAnnex1Sheets(data)
+	if len(sheets) != 2 {
+		t.Fatalf("ожидали отдельный лист на каждую ОО, получили %d: %+v", len(sheets), sheets)
+	}
+	if sheets[0].Name != "МГУ" || sheets[1].Name != "МФТИ" {
+		t.Fatalf("листы названы именами ОО и отсортированы: %q, %q", sheets[0].Name, sheets[1].Name)
+	}
+	row := sheets[0].Rows[0]
+	if row[0] != 1 || row[1] != "Преподаватели-практики" {
+		t.Fatalf("начало строки неверно: %+v", row)
+	}
+	if row[2] != "Архитектура ИС" {
+		t.Fatalf("графа «Мероприятие» = %v, ожидалось наименование дисциплины", row[2])
+	}
+	if row[3] != "академический час" || row[4] != "Часы преподавания" {
+		t.Fatalf("метрика и показатель объёма неверны: %v / %v", row[3], row[4])
+	}
+	if volume := row[5].(float64); volume != 64 {
+		t.Fatalf("значение показателя = %v, ожидалось 64 часа", volume)
+	}
+	// 264 960 ₽ за 64 часа — это тариф ВО 4,14 тыс. руб. за час.
+	if unitCost := row[6].(float64); unitCost != 4.14 {
+		t.Fatalf("стоимость единицы = %v тыс. руб., ожидалось 4.14", unitCost)
+	}
+	if amount := row[7].(float64); amount != 264.96 {
+		t.Fatalf("сумма затрат = %v тыс. руб., ожидалось 264.96", amount)
+	}
+	totals := sheets[0].Rows[len(sheets[0].Rows)-1]
+	if totals[1] != "ИТОГО" || totals[7].(float64) != 264.96 {
+		t.Fatalf("итоговая строка листа неверна: %+v", totals)
+	}
+}
+
+func TestBuildAnnex1SheetsSkipsEmptyRowsAndUnknownPartner(t *testing.T) {
+	data := []regulatoryRow{
+		{PartnerID: "p1", Partner: "", Category: "teachers", CategoryName: "Преподаватели-практики", Period: "fact", Amount: money.Amount(100000)},
+		{PartnerID: "p1", Partner: "", Category: "teachers", CategoryName: "Преподаватели-практики", Period: "fact", Amount: 0},
+	}
+	sheets := buildAnnex1Sheets(data)
+	if len(sheets) != 1 || sheets[0].Name != "Без контрагента" {
+		t.Fatalf("ожидали один лист «Без контрагента», получили %+v", sheets)
+	}
+	if len(sheets[0].Rows) != 2 { // одна запись плюс ИТОГО
+		t.Fatalf("нулевая строка должна быть удалена: %+v", sheets[0].Rows)
+	}
+}
+
 // REPORT-11: реестр сформированных файлов должен хранить реально
 // применённые параметры выгрузки (не только партнёра и соглашение), а
 // пустые/невыбранные фильтры не должны засорять запись как "".
