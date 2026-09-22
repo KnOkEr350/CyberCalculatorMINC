@@ -2,6 +2,11 @@ package calculators
 
 import (
 	"fmt"
+	"math"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 
 	"cybercalc/internal/models"
 )
@@ -144,7 +149,43 @@ func (schoolProgramsCalc) Fields() []FieldSpec {
 }
 
 func (schoolProgramsCalc) Validate(payload map[string]interface{}) error {
-	return validateSchoolFunding(payload)
+	if err := validateSchoolFunding(payload); err != nil {
+		return err
+	}
+	return validateSchoolClassRange(payload)
+}
+
+// schoolClassNumber выхватывает номера классов из свободной записи вида
+// «5-11», «7», «5, 6, 7».
+var schoolClassNumber = regexp.MustCompile(`\d+`)
+
+// validateSchoolClassRange проверяет, что ИТ-кружок ведётся для 5–11 классов
+// (Вид 6 Приказа № 270). Поле необязательное, но если классы указаны, они
+// должны попадать в допустимый диапазон: занятия для младших классов по
+// этому виду не засчитываются.
+func validateSchoolClassRange(payload map[string]interface{}) error {
+	raw, ok := payload["class_range"]
+	if !ok || raw == nil {
+		return nil
+	}
+	text := strings.TrimSpace(fmt.Sprint(raw))
+	if text == "" {
+		return nil
+	}
+	found := schoolClassNumber.FindAllString(text, -1)
+	if len(found) == 0 {
+		return fmt.Errorf("укажите классы числами в диапазоне 5–11")
+	}
+	for _, value := range found {
+		class, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("некорректный номер класса: %s", value)
+		}
+		if class < 5 || class > 11 {
+			return fmt.Errorf("Вид 6 засчитывается только для 5–11 классов, указан %d", class)
+		}
+	}
+	return nil
 }
 
 // teacherTrainingCalc — программы повышения квалификации учителей
@@ -219,11 +260,64 @@ func (educationalContentCalc) Fields() []FieldSpec {
 		{Key: "student_platform_months", Label: "Суммарные месяцы доступа всех учащихся", Type: "number", Required: true, Integer: true},
 		{Key: "teacher_platform_months", Label: "Суммарные месяцы доступа всех учителей", Type: "number", Required: true, Integer: true},
 		{Key: "digital_trace_reference", Label: "Описание/ссылка на подтверждение цифрового следа", Type: "text", Required: true},
+		// SCH-05: выгрузка логов ФГИС «Моя школа» подтверждается периодом,
+		// числом участников и контрольной суммой файла — по одной ссылке
+		// нельзя проверить, что именно выгружено.
+		{Key: "digital_trace_period_start", Label: "Цифровой след: начало периода выгрузки", Type: "date", Required: true},
+		{Key: "digital_trace_period_end", Label: "Цифровой след: конец периода выгрузки", Type: "date", Required: true},
+		{Key: "digital_trace_participants", Label: "Цифровой след: участников в выгрузке", Type: "number", Required: true, Integer: true, Minimum: 1},
+		{Key: "digital_trace_sha256", Label: "Цифровой след: SHA-256 файла выгрузки", Type: "text", Required: true, MaxLength: 64},
 		{Key: "school_agreement_reference", Label: "Соглашение со школой / РОИВ", Type: "text", MaxLength: 1000},
 		{Key: "acceptance_act_reference", Label: "Акт приёмки доступа", Type: "text", MaxLength: 1000},
 	}, schoolFundingFields()...)
 }
 
 func (educationalContentCalc) Validate(payload map[string]interface{}) error {
-	return validateSchoolFunding(payload)
+	if err := validateSchoolFunding(payload); err != nil {
+		return err
+	}
+	return validateDigitalTrace(payload)
+}
+
+// sha256Hex — контрольная сумма файла выгрузки: 64 шестнадцатеричных знака.
+var sha256Hex = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
+
+// validateDigitalTrace проверяет реквизиты выгрузки логов ФГИС «Моя школа»
+// (SCH-05): период, число участников и контрольную сумму файла. Без них
+// «подтверждение цифрового следа» остаётся словами, которые нечем сверить.
+func validateDigitalTrace(payload map[string]interface{}) error {
+	start, err := str(payload, "digital_trace_period_start")
+	if err != nil {
+		return fmt.Errorf("укажите начало периода выгрузки цифрового следа")
+	}
+	end, err := str(payload, "digital_trace_period_end")
+	if err != nil {
+		return fmt.Errorf("укажите конец периода выгрузки цифрового следа")
+	}
+	from, err := time.Parse("2006-01-02", start)
+	if err != nil {
+		return fmt.Errorf("начало периода выгрузки должно быть датой в формате ГГГГ-ММ-ДД")
+	}
+	until, err := time.Parse("2006-01-02", end)
+	if err != nil {
+		return fmt.Errorf("конец периода выгрузки должен быть датой в формате ГГГГ-ММ-ДД")
+	}
+	if until.Before(from) {
+		return fmt.Errorf("период выгрузки цифрового следа заканчивается раньше, чем начинается")
+	}
+	participants, err := positiveNum(payload, "digital_trace_participants")
+	if err != nil {
+		return fmt.Errorf("укажите число участников в выгрузке цифрового следа")
+	}
+	if participants != math.Trunc(participants) {
+		return fmt.Errorf("число участников в выгрузке должно быть целым")
+	}
+	checksum, err := str(payload, "digital_trace_sha256")
+	if err != nil {
+		return fmt.Errorf("укажите контрольную сумму файла выгрузки цифрового следа")
+	}
+	if !sha256Hex.MatchString(checksum) {
+		return fmt.Errorf("контрольная сумма выгрузки должна быть SHA-256: 64 шестнадцатеричных знака")
+	}
+	return nil
 }

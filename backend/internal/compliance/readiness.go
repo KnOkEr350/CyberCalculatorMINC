@@ -128,6 +128,9 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 		if has("staff_member_id") {
 			require("staff_profile", "Профиль сотрудника подтверждён администратором", fmt.Sprint(payload["staff_member_verified"]) == "true", true)
 		}
+		// Матрица рисков ТЗ (§5.1, Вид 1): «Дисциплина не определена» —
+		// красная зона наравне с отсутствием договора и трудоустройства.
+		require("discipline", "Дисциплина согласована с образовательной организацией", has("course_name"), true)
 		require("it_experience", "ИТ-стаж не менее 365 дней за последние 5 лет", num("it_experience_days") >= 365, true)
 		require("okz", "Проверенный код ОКЗ сотрудника", has("okz_code"), true)
 		require("employment_contract", "Трудовой договор или ГПХ", hasDoc("employment_contract", "employment_contract_reference"), blockDocuments)
@@ -159,7 +162,13 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 		plan := num("planned_cofinancing_amount_rub")
 		require("spending", "Фактически израсходованные средства и акт", spent > 0 && hasDoc("spending_act", "spending_act_reference"), blockDocuments)
 		if plan > 0 {
-			require("progress_70", "Освоено не менее 70% планового софинансирования", spent/plan >= .7, true)
+			// Шкала софинансирования ТЗ (§7.5, §5.1): ≥100% — зелёная зона,
+			// 70–99.9% — зона внимания, <70% — красная. Без второй ступени
+			// недоосвоенное софинансирование ошибочно считалось зелёным.
+			// Знаменатель (план X) остаётся предметом открытого ADR-14.
+			ratio := spent / plan
+			require("progress_70", "Освоено не менее 70% планового софинансирования", ratio >= .7, true)
+			require("progress_full", "Софинансирование освоено полностью", ratio >= 1, false)
 		}
 		require("ano_letter", "Письмо-согласование АНО АЦ", hasDoc("ano_letter", "ano_letter_reference"), false)
 	case "it_clubs", "teacher_training":
@@ -169,6 +178,11 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 	case "edu_content":
 		require("school_agreement", "Соглашение со школой или РОИВ", hasDoc("school_agreement", "school_agreement_reference"), blockDocuments)
 		require("digital_trace", "Цифровой след ФГИС «Моя школа»", hasDoc("digital_trace", "digital_trace_reference"), blockDocuments)
+		// SCH-05: выгрузка подтверждается периодом, числом участников и
+		// контрольной суммой файла — иначе «цифровой след» нечем сверить.
+		require("digital_trace_manifest", "Период, участники и SHA-256 выгрузки цифрового следа",
+			has("digital_trace_period_start") && has("digital_trace_period_end") &&
+				num("digital_trace_participants") > 0 && has("digital_trace_sha256"), blockDocuments)
 		require("acceptance_act", "Акт приёмки доступа", hasDoc("acceptance_act", "acceptance_act_reference"), false)
 	case "minc_decision":
 		require("ministry_decision", "Решение Минцифры и исходное поручение", hasDoc("ministry_decision", "decision_reference"), blockDocuments)

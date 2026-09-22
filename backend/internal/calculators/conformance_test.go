@@ -137,6 +137,22 @@ func conformanceCases() []conformanceCase {
 			func(t *testing.T) money.Amount { return annex6(t, "1408,57") + times(t, "3,79", 720) }},
 	)
 
+	// Вид 4. Тарифа нет: в зачёт идёт фактически списанная вузом сумма из
+	// отчёта получателя гранта (ТЗ §7.5). Случай с обоими полями ловит
+	// расхождение экранной и сохраняемой суммы.
+	cases = append(cases,
+		conformanceCase{"Вид 4: в зачёт идёт списанная вузом сумма", "top_it", models.AudienceVuz,
+			map[string]interface{}{
+				"cofinancing_amount_rub":  3000000.0,
+				"transferred_amount_rub":  3000000.0,
+				"actual_spent_amount_rub": 1800000.0,
+			},
+			func(t *testing.T) money.Amount { return money.Amount(180000000) }},
+		conformanceCase{"Вид 4: без поля списания берётся отчёт о софинансировании", "top_it", models.AudienceVuz,
+			map[string]interface{}{"cofinancing_amount_rub": 950000.0},
+			func(t *testing.T) money.Amount { return money.Amount(95000000) }},
+	)
+
 	// Вид 8. Месяц доступа школьника 6,8; учителя 8,59.
 	cases = append(cases,
 		conformanceCase{"Вид 8: 1 мес. школьника", "edu_content", models.AudienceSchool,

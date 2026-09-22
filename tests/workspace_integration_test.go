@@ -385,11 +385,15 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practiceHeaders := []string{
 		"mentor_full_name", "student_full_name", "duration_months", "student_load_hours_per_month", "mentor_load_hours_per_month",
 		"labor_contract_type", "labor_contract_number", "labor_contract_date",
+		// PRA-04: возраст и недельные часы обязательны — без них нечем
+		// подтвердить нормы ТК РФ (ст. 63, 92), и практика к зачёту не
+		// принимается.
+		"student_age", "weekly_hours",
 	}
 	practiceWorkbook := func(contractType string) []byte {
 		wb := xlsx.New()
 		wb.AddSheet("Данные", practiceHeaders, [][]interface{}{{
-			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01",
+			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01", 19, 30,
 		}})
 		book, err := wb.Bytes()
 		if err != nil {
@@ -409,6 +413,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practice := map[string]interface{}{
 		"org_name": p1, "mentor_id": mentor, "student_full_name": "Практикантов Павел", "duration_months": 1,
 		"student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3,
+		// PRA-04: возраст и недельные часы обязательны для практики.
+		"student_age": 19, "weekly_hours": 30,
 	}
 	create(companyClient, p1, agreement1, "employment_practice", "fact", practice, 400)
 	practice["labor_contract_type"] = "other"

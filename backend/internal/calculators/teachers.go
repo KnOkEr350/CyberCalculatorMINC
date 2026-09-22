@@ -52,7 +52,15 @@ func (teachersCalc) Fields() []FieldSpec {
 		{Key: "okz_code", Label: "Код ОКЗ", Type: "text"},
 		{Key: "it_experience_days", Label: "Подтверждённый ИТ-стаж за последние 5 лет, дней", Type: "number", Integer: true, Minimum: 0, Maximum: 1827},
 		{Key: "it_experience_reference", Label: "Основание подтверждения ИТ-стажа", Type: "text", MaxLength: 1000},
-		{Key: "employment_form", Label: "Как оформлен", Type: "select", Required: true, Options: []string{"ТД по совместительству", "ГПХ"}},
+		// ТЗ §7.2: пять форм оформления привлечённого сотрудника. Прежние два
+		// значения сохранены, чтобы не обесценить уже внесённые записи.
+		{Key: "employment_form", Label: "Как оформлен", Type: "select", Required: true, Options: []string{
+			"ТД по совместительству",
+			"ГПХ",
+			"Трудовой договор с ИТ-компанией",
+			"Договор пожертвования",
+			"Прямой договор между ОО и ИТ-компанией",
+		}},
 		{Key: "specialty_code", Label: "Код ИТ-специальности по приказу № 27", Type: "text"},
 		{Key: "academic_group", Label: "Академическая группа", Type: "text"},
 		{Key: "students_reach", Label: "Охват студентов", Type: "number", Integer: true},

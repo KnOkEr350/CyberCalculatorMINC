@@ -24,6 +24,7 @@
     mentors: [],
     dashboardCategory: "",
     dashboardAudience: "",
+    dashboardHideZero: false,
     reportCategory: "",
     legalEntityGroups: [],
     entryFilters: {},

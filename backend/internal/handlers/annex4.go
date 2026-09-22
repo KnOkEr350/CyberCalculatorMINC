@@ -59,11 +59,9 @@ func activityMetrics(category string, payload map[string]interface{}) (volume, r
 	case "teachers":
 		return firstNumber(payload, "academic_hours", "hours"), firstNumber(payload, "students_reach", "students_count", "student_reach"), "академический час"
 	case "internship", "employment_practice":
-		volume = firstNumber(payload, "total_student_hours", "student_hours")
-		if volume == 0 {
-			volume = firstNumber(payload, "duration_months") * firstNumber(payload, "student_load_hours_per_month", "student_hours_per_month")
-		}
-		return volume, 1, "человеко-час"
+		// INT-06: часы нормализуются единственным хелпером, чтобы объём в
+		// отчётности не удваивался при заполненных итогах и помесячной нагрузке.
+		return studentHours(payload), 1, "человеко-час"
 	case "it_clubs":
 		return firstNumber(payload, "academic_hours", "hours"), firstNumber(payload, "participants", "students_count", "teachers_count"), "академический час"
 	case "teacher_training":

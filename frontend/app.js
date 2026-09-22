@@ -493,7 +493,7 @@ async function renderDashboard(root) {
   let d;
   try {
     d = await api(
-      `/dashboard?${new URLSearchParams({ report_year: state.year, partner_id: state.partnerID, category_code: state.dashboardCategory, audience: state.dashboardAudience })}`,
+      `/dashboard?${new URLSearchParams({ report_year: state.year, partner_id: state.partnerID, category_code: state.dashboardCategory, audience: state.dashboardAudience, hide_zero: state.dashboardHideZero ? "1" : "" })}`,
     );
   } catch (e) {
     root.innerHTML = `<div class="error">${escapeHTML(e.message)}</div>`;
@@ -572,16 +572,12 @@ async function renderDashboard(root) {
   const confirmedAmount = Number(
     d.target_confirmed_fact_rub ?? d.eligible_fact_total_rub ?? 0,
   );
-  const targetGap = targetAmount == null
-    ? null
-    : Math.max(targetAmount - confirmedAmount, 0);
-  const targetSurplus = targetAmount == null
-    ? null
-    : Math.max(confirmedAmount - targetAmount, 0);
+  // DASH-01: нехватку, превышение и процент выполнения норматива считает
+  // сервер точной денежной арифметикой — здесь их только показываем.
+  const targetGap = targetAmount == null ? null : Number(d.target_deficit_rub ?? 0);
+  const targetSurplus = targetAmount == null ? null : Number(d.target_surplus_rub ?? 0);
   const targetReached = targetAmount != null && targetGap === 0;
-  const targetCompletionPct = targetAmount
-    ? Math.round((confirmedAmount / targetAmount) * 10000) / 100
-    : 0;
+  const targetCompletionPct = Number(d.target_completion_pct ?? 0);
   const targetPct = clampPercent(targetCompletionPct);
   const amountsByCategory = (items) => (items || []).reduce((result, item) => {
     result[item.category_code] = (result[item.category_code] || 0) + Number(item.amount_rub || 0);
@@ -608,11 +604,14 @@ async function renderDashboard(root) {
     yellow: { entry_count: riskCounts.yellow, amount_rub: 0 },
     red: { entry_count: riskCounts.red, amount_rub: 0 },
   };
-  const mandatory = [
-    { label: "Преподаватели", complete: Number(factAmounts.teachers || 0) > 0 },
-    { label: "ООП / РПД", complete: Number(factAmounts.ood_rpd || 0) > 0 },
-    { label: "ТОП-ИТ / ИИ", complete: Number(factAmounts.top_it || 0) > 0, optional: true },
-  ];
+  // DASH-03: обязательный минимум ВО считает сервер — только по аудитории
+  // высшего образования и с объяснением исключения по пункту 22 Порядка.
+  const mandatory = (d.mandatory_higher_education || []).map((chip) => ({
+    label: chip.label,
+    complete: Boolean(chip.complete),
+    optional: Boolean(chip.alternative),
+    explanation: chip.explanation || "",
+  }));
   const selectedPartner = state.partners.find(
     (partner) => partner.id === state.partnerID,
   );
@@ -632,6 +631,7 @@ async function renderDashboard(root) {
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
+          <div class="field"><label class="check-row" for="dash-hide-zero"><input type="checkbox" id="dash-hide-zero" ${state.dashboardHideZero ? "checked" : ""}> Скрыть нулевые позиции</label></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
         </div>
       </div>
@@ -670,7 +670,7 @@ async function renderDashboard(root) {
     </div>
     <div class="mandatory-strip" aria-label="Обязательный минимум высшего образования">
       <div><span class="eyebrow">Обязательный минимум ВО</span><b>Пункт 22</b></div>
-      ${mandatory.map((item) => `<span class="mandatory-chip ${item.complete ? "complete" : "missing"}">${item.complete ? "✓" : "!"} ${escapeHTML(item.label)}${item.optional ? " · альтернатива" : ""}</span>`).join("")}
+      ${mandatory.map((item) => `<span class="mandatory-chip ${item.complete ? "complete" : "missing"}" title="${escapeHTML(item.explanation)}">${item.complete ? "✓" : "!"} ${escapeHTML(item.label)}${item.optional ? " · альтернатива" : ""}</span>`).join("")}
     </div>
     <div class="progress-card dashboard-progress">
       <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
@@ -709,6 +709,10 @@ async function renderDashboard(root) {
   };
   root.querySelector("#dash-audience").onchange = (event) => {
     state.dashboardAudience = event.target.value;
+    renderDashboard(root);
+  };
+  root.querySelector("#dash-hide-zero").onchange = (event) => {
+    state.dashboardHideZero = event.target.checked;
     renderDashboard(root);
   };
 }

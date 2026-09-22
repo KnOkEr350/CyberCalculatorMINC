@@ -194,8 +194,8 @@ func TestBuildMentorRowsAggregatesByMentor(t *testing.T) {
 		{PartnerID: "p1", Partner: "МГУ", Category: "internship", Period: "fact", Amount: money.Amount(24000000), Payload: noMentor},
 	}
 	rows := buildMentorRows(data)
-	if len(rows) != 1 {
-		t.Fatalf("ожидали одну строку наставника, получили %+v", rows)
+	if len(rows) != 2 { // один наставник плюс строка «ИТОГО» (INT-09)
+		t.Fatalf("ожидали строку наставника и итог, получили %+v", rows)
 	}
 	row := rows[0]
 	if row[1] != "Васильев М.А." || row[3] != 2 {
@@ -204,6 +204,11 @@ func TestBuildMentorRowsAggregatesByMentor(t *testing.T) {
 	// Ставка наставника начисляется за каждого стажёра персонально: 20 ч × 2.
 	if hours := row[4].(float64); hours != 40 {
 		t.Fatalf("часы сопровождения = %v, ожидалось 40", hours)
+	}
+	// Мероприятие без наставника в срез не попадает, поэтому итог считается
+	// только по строкам наставников.
+	if totals := rows[1]; totals[1] != "ИТОГО" || totals[5].(float64) != row[5].(float64) {
+		t.Fatalf("итоговая строка не сходится с единственным наставником: %+v", totals)
 	}
 }
 

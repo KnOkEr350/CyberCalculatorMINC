@@ -255,6 +255,11 @@ func TestSchoolActivitiesRejectProhibitedFunding(t *testing.T) {
 			payload: map[string]interface{}{
 				"org_name": "school-id", "platform_name": "Моя школа", "student_platform_months": 100.0,
 				"teacher_platform_months": 10.0, "digital_trace_reference": "Логи от 01.09.2026",
+				// SCH-05: выгрузка цифрового следа подтверждается периодом,
+				// числом участников и контрольной суммой файла.
+				"digital_trace_period_start": "2026-01-01", "digital_trace_period_end": "2026-05-01",
+				"digital_trace_participants": 110.0,
+				"digital_trace_sha256":       "9f2c1f8b7d6e5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
 			},
 		},
 	}

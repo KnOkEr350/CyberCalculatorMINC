@@ -11,6 +11,7 @@ import (
 
 	"cybercalc/internal/compliance"
 	"cybercalc/internal/middleware"
+	"cybercalc/internal/models"
 	"cybercalc/internal/money"
 	"github.com/lib/pq"
 )
@@ -30,24 +31,44 @@ type categoryBreakdown struct {
 }
 
 type dashboardResponse struct {
-	EligiblePlanTotalRub money.Amount          `json:"eligible_plan_total_rub"`
-	EligibleFactTotalRub money.Amount          `json:"eligible_fact_total_rub"`
-	IncompleteEntries    int                   `json:"incomplete_entries"`
-	ReportYear           int                   `json:"report_year"`
-	GeneratedAt          time.Time             `json:"generated_at"`
-	TargetAmountRub      *money.Amount         `json:"target_amount_rub"` // "Общие затраты (3% от сэкономленных льгот)"
-	SavingsBaseRub       *money.Amount         `json:"savings_base_rub,omitempty"`
-	TargetSource         string                `json:"target_source_reference,omitempty"`
-	TargetNotifiedAt     string                `json:"target_notified_at,omitempty"`
-	TargetConfirmedRub   *money.Amount         `json:"target_confirmed_fact_rub"`
-	PlanTotalRub         money.Amount          `json:"plan_total_rub"`
-	FactTotalRub         money.Amount          `json:"fact_total_rub"`
-	PlanCompletionPct    float64               `json:"plan_completion_pct"` // % реализации плана
-	PlanByCategory       []categoryBreakdown   `json:"plan_by_category"`
-	FactByCategory       []categoryBreakdown   `json:"fact_by_category"`
-	CategoryFilter       string                `json:"category_filter,omitempty"`
-	AudienceFilter       string                `json:"audience_filter,omitempty"`
-	RiskBuckets          map[string]riskBucket `json:"risk_buckets"`
+	EligiblePlanTotalRub money.Amount  `json:"eligible_plan_total_rub"`
+	EligibleFactTotalRub money.Amount  `json:"eligible_fact_total_rub"`
+	IncompleteEntries    int           `json:"incomplete_entries"`
+	ReportYear           int           `json:"report_year"`
+	GeneratedAt          time.Time     `json:"generated_at"`
+	TargetAmountRub      *money.Amount `json:"target_amount_rub"` // "Общие затраты (3% от сэкономленных льгот)"
+	SavingsBaseRub       *money.Amount `json:"savings_base_rub,omitempty"`
+	TargetSource         string        `json:"target_source_reference,omitempty"`
+	TargetNotifiedAt     string        `json:"target_notified_at,omitempty"`
+	TargetConfirmedRub   *money.Amount `json:"target_confirmed_fact_rub"`
+	// DASH-01: выполнение норматива считается точной денежной арифметикой на
+	// сервере и держится отдельно от процента реализации плана. Заполнены
+	// только при известном нормативе; дефицит и профицит не смешиваются —
+	// ненулевым бывает ровно один из них.
+	TargetDeficitRub    *money.Amount         `json:"target_deficit_rub,omitempty"`
+	TargetSurplusRub    *money.Amount         `json:"target_surplus_rub,omitempty"`
+	TargetCompletionPct *float64              `json:"target_completion_pct,omitempty"`
+	PlanTotalRub        money.Amount          `json:"plan_total_rub"`
+	FactTotalRub        money.Amount          `json:"fact_total_rub"`
+	PlanCompletionPct   float64               `json:"plan_completion_pct"` // % реализации плана
+	PlanByCategory      []categoryBreakdown   `json:"plan_by_category"`
+	FactByCategory      []categoryBreakdown   `json:"fact_by_category"`
+	CategoryFilter      string                `json:"category_filter,omitempty"`
+	AudienceFilter      string                `json:"audience_filter,omitempty"`
+	RiskBuckets         map[string]riskBucket `json:"risk_buckets"`
+	MandatoryHigherEd   []mandatoryChip       `json:"mandatory_higher_education"`
+}
+
+// mandatoryChip — чип обязательного минимума ВО (DASH-03). Обязательность
+// считается на сервере и только по аудитории ВО: мероприятие для СПО или
+// школы не закрывает минимум высшего образования.
+type mandatoryChip struct {
+	CategoryCode string       `json:"category_code"`
+	Label        string       `json:"label"`
+	Complete     bool         `json:"complete"`
+	Alternative  bool         `json:"alternative,omitempty"`
+	AmountRub    money.Amount `json:"amount_rub"`
+	Explanation  string       `json:"explanation"`
 }
 
 type riskBucket struct {
@@ -122,6 +143,8 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		}
 		confirmed := companyRisk["green"].AmountRub
 		resp.TargetConfirmedRub = &confirmed
+		deficit, surplus, completion := targetProgress(target, confirmed)
+		resp.TargetDeficitRub, resp.TargetSurplusRub, resp.TargetCompletionPct = &deficit, &surplus, &completion
 	}
 
 	if err := h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2) AND ($3='' OR it_company_id::text=$3) AND ($4='' OR category_code=$4) AND ($5='' OR audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {
@@ -147,6 +170,15 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка аналитики факта")
 		return
+	}
+	// DASH-03: минимум ВО считается до скрытия нулевых позиций, иначе
+	// невыполненный обязательный вид просто исчез бы из чипов.
+	resp.MandatoryHigherEd = higherEducationChips(resp.FactByCategory)
+	// DASH-05: «Скрыть нулевые позиции» из макета экрана 1. Фильтр применяется
+	// на сервере, чтобы срез и его выгрузка показывали одно и то же.
+	if hideZeroPositions(r.URL.Query().Get("hide_zero")) {
+		resp.PlanByCategory = withoutZeroPositions(resp.PlanByCategory)
+		resp.FactByCategory = withoutZeroPositions(resp.FactByCategory)
 	}
 	resp.RiskBuckets, err = h.riskBreakdown(r, year, scope, companyScope, categoryFilter, audienceFilter)
 	if err != nil {
@@ -213,6 +245,92 @@ func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, comp
 	return result, rows.Err()
 }
 
+// targetProgress считает выполнение норматива 3% (DASH-01) подтверждённым
+// фактом: нехватку, превышение и процент. Дефицит и профицит не смешиваются
+// — ненулевым может быть только один из них. Расчёт ведётся в копейках,
+// поэтому копейки не теряются на дробной арифметике.
+func targetProgress(target, confirmed money.Amount) (deficit, surplus money.Amount, completionPct float64) {
+	if confirmed < target {
+		deficit = target - confirmed
+	} else {
+		surplus = confirmed - target
+	}
+	if target > 0 {
+		completionPct = round2(confirmed.Rubles() / target.Rubles() * 100)
+	}
+	return deficit, surplus, completionPct
+}
+
+// higherEducationChips считает обязательный минимум ВО (DASH-03) по
+// фактическим затратам. Учитывается только аудитория ВО: по ТЗ §7.1 Виды 1
+// и 3 обязательны исключительно для высшего образования, поэтому
+// мероприятие для СПО или школы минимум не закрывает. ТОП-ИТ показан как
+// альтернатива с объяснением условия п. 22 Порядка.
+func higherEducationChips(fact []categoryBreakdown) []mandatoryChip {
+	amounts := map[string]money.Amount{}
+	for _, row := range fact {
+		if row.Audience != string(models.AudienceVuz) {
+			continue
+		}
+		amounts[row.CategoryCode], _ = money.Add(amounts[row.CategoryCode], row.AmountRub)
+	}
+	chips := []mandatoryChip{
+		{
+			CategoryCode: "teachers", Label: "Преподаватели (Вид 1)",
+			Explanation: "Обязателен для высшего образования: нужен хотя бы один подтверждённый объём преподавания в вузе.",
+		},
+		{
+			CategoryCode: "ood_rpd", Label: "ООП / РПД (Вид 3)",
+			Explanation: "Обязателен для высшего образования: нужно хотя бы одно подтверждённое мероприятие по ООП или РПД в вузе.",
+		},
+		{
+			CategoryCode: "top_it", Label: "ТОП-ИТ / ТОП-ИИ (Вид 4)", Alternative: true,
+			Explanation: "Альтернатива по пункту 22 Порядка: освобождает от прочих видов в этой ОО, только если обязательные Виды 1 и 3 одновременно реализованы в другой образовательной организации.",
+		},
+	}
+	for i := range chips {
+		chips[i].AmountRub = amounts[chips[i].CategoryCode]
+		chips[i].Complete = chips[i].AmountRub > 0
+	}
+	return chips
+}
+
+// hideZeroPositions разбирает флаг «Скрыть нулевые позиции» (DASH-05).
+// Умолчание — показывать всё: скрытие данных включается явно.
+func hideZeroPositions(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// withoutZeroPositions убирает строки без суммы и без объёма. Строка с
+// нулевой суммой, но ненулевым объёмом остаётся: это не пустая позиция, а
+// мероприятие, у которого объём есть, а затраты ещё не подтверждены.
+func withoutZeroPositions(rows []categoryBreakdown) []categoryBreakdown {
+	out := make([]categoryBreakdown, 0, len(rows))
+	for _, row := range rows {
+		if row.AmountRub == 0 && row.UnitCount == 0 {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// effectiveObligation приводит обязательность вида к аудитории строки
+// (DASH-04). Справочник помечает Виды 1 и 3 обязательными, но по ТЗ (§7.1)
+// обязательных видов нет ни для СПО, ни для школ: «Виды 1 и 3 являются
+// обязательными исключительно для программ высшего образования».
+func effectiveObligation(dictionary, audience string) string {
+	if dictionary == "mandatory" && audience != string(models.AudienceVuz) {
+		return "variable"
+	}
+	return dictionary
+}
+
 func (h *DashboardHandlers) breakdown(r *http.Request, year int, period, scope, companyScope, categoryFilter, audienceFilter string) ([]categoryBreakdown, error) {
 	rows, err := h.DB.QueryContext(r.Context(),
 		`SELECT e.category_code,e.audience,c.obligation,count(*),
@@ -238,6 +356,7 @@ func (h *DashboardHandlers) breakdown(r *http.Request, year int, period, scope, 
 		if err := rows.Scan(&b.CategoryCode, &b.Audience, &b.Obligation, &b.EntryCount, &b.UnitCount, &b.AmountRub); err != nil {
 			return nil, err
 		}
+		b.Obligation = effectiveObligation(b.Obligation, b.Audience)
 		var sumErr error
 		total, sumErr = money.Add(total, b.AmountRub)
 		if sumErr != nil {

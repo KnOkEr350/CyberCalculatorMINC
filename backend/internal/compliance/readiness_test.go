@@ -10,7 +10,7 @@ func TestTeacherReadinessCannotBeOverriddenByDocuments(t *testing.T) {
 }
 
 func TestTeacherReadinessGreen(t *testing.T) {
-	got := Evaluate("teachers", "fact", map[string]interface{}{"okz_code": "2512", "it_experience_days": 365, "class_schedule": "Пн"}, []string{"employment_contract", "appointment_order", "individual_plan"})
+	got := Evaluate("teachers", "fact", map[string]interface{}{"okz_code": "2512", "it_experience_days": 365, "class_schedule": "Пн", "course_name": "Архитектура ИС"}, []string{"employment_contract", "appointment_order", "individual_plan"})
 	if got.State != "green" || !got.Ready || !got.Eligible {
 		t.Fatalf("expected green, got %+v", got)
 	}
@@ -47,7 +47,7 @@ func TestRejectedTypedDocumentOverridesLegacyReference(t *testing.T) {
 
 func TestPendingTypedDocumentCannotBecomeGreen(t *testing.T) {
 	got := Evaluate("teachers", "fact", map[string]interface{}{
-		"okz_code": "2512", "it_experience_days": 365, "class_schedule": "Пн",
+		"okz_code": "2512", "it_experience_days": 365, "class_schedule": "Пн", "course_name": "Архитектура ИС",
 	}, []string{"employment_contract:pending", "appointment_order:approved", "individual_plan:approved"})
 	if got.State != "yellow" || got.Eligible {
 		t.Fatalf("pending legal review must remain yellow, got %+v", got)

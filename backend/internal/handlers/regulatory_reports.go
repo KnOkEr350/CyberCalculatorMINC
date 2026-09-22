@@ -590,16 +590,6 @@ func buildAnnex2Rows(data []regulatoryRow) [][]interface{} {
 	return out
 }
 
-// mentorHours — часы сопровождения наставника: готовый итог, а при его
-// отсутствии — помесячная нагрузка, умноженная на срок. Складывать оба
-// значения нельзя, иначе часы удвоятся (INT-06).
-func mentorHours(payload map[string]interface{}) float64 {
-	if total := firstNumber(payload, "total_mentor_hours"); total > 0 {
-		return total
-	}
-	return firstNumber(payload, "mentor_load_hours_per_month") * firstNumber(payload, "duration_months")
-}
-
 // buildMentorRows строит специализированный «Отчёт по наставникам»: сколько
 // стажёров закреплено за наставником, сколько часов сопровождения
 // подтверждено и на какую сумму. Ставка наставника по Приказу начисляется
@@ -636,9 +626,20 @@ func buildMentorRows(data []regulatoryRow) [][]interface{} {
 	}
 	sort.Strings(order)
 	out := [][]interface{}{}
+	var totalHours float64
+	var totalAmount money.Amount
+	totalStudents := 0
 	for index, key := range order {
 		item := mentors[key]
+		totalHours += item.hours
+		totalStudents += len(item.students)
+		totalAmount, _ = money.Add(totalAmount, item.amount)
 		out = append(out, []interface{}{index + 1, item.name, item.partner, len(item.students), item.hours, thousandRub(item.amount)})
+	}
+	// INT-09: срез по наставникам закрывается итогом, который должен
+	// сходиться с суммой тех же мероприятий в других формах.
+	if len(out) > 0 {
+		out = append(out, []interface{}{"", "ИТОГО", "", totalStudents, totalHours, thousandRub(totalAmount)})
 	}
 	return out
 }

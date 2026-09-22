@@ -57,7 +57,15 @@ func CalculateAmount(code string, audience models.Audience, p map[string]interfa
 		rate, _ := c.Calculate(audience, p)
 		result = i(int64(rate))
 	case "top_it":
-		result = n("cofinancing_amount_rub")
+		// TOP-02: в зачёт норматива идёт фактически списанная вузом сумма
+		// (ТЗ §7.5). Раньше точный путь всегда брал объём по отчёту, поэтому
+		// на экране показывалась списанная сумма, а в БД сохранялась
+		// перечисленная — зачёт получался завышенным.
+		amountKey := "cofinancing_amount_rub"
+		if _, ok := p["actual_spent_amount_rub"]; ok {
+			amountKey = "actual_spent_amount_rub"
+		}
+		result = n(amountKey)
 	case "minc_decision":
 		result = n("amount_manual")
 	case "it_clubs":

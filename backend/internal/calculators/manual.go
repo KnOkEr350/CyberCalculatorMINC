@@ -1,7 +1,10 @@
 package calculators
 
 import (
+	"fmt"
 	"math"
+	"math/big"
+	"strings"
 
 	"cybercalc/internal/models"
 )
@@ -34,6 +37,43 @@ func (manualCalc) Fields() []FieldSpec {
 		{Key: "amount_manual", Label: "Сумма затрат, руб.", Type: "number", Required: true},
 		{Key: "expense_evidence_reference", Label: "Акты, платежи и первичные документы", Type: "text", MaxLength: 2000},
 	}
+}
+
+// Validate проверяет динамические показатели мероприятия по Решению
+// Минцифры (MIN-02) и подтверждённую стоимость (MIN-03). Метрика, единица и
+// объёмы задаются самим Решением, поэтому система не знает их наперёд — но
+// обязана убедиться, что значения имеют правильный тип и смысл.
+func (manualCalc) Validate(payload map[string]interface{}) error {
+	unit, err := str(payload, "metric_unit")
+	if err != nil {
+		return fmt.Errorf("укажите единицу измерения объёма из Решения Минцифры")
+	}
+	// Единица измерения — это название («модуль ПО», «мероприятие»), а не
+	// число: числовая единица означает, что поля перепутали местами.
+	if _, numeric := new(big.Rat).SetString(strings.ReplaceAll(unit, ",", ".")); numeric {
+		return fmt.Errorf("единица измерения должна быть названием, а не числом: %q", unit)
+	}
+	actual, err := positiveNum(payload, "actual_volume")
+	if err != nil {
+		return fmt.Errorf("укажите фактический объём мероприятия в единицах «%s»", unit)
+	}
+	if planned, ok := payload["planned_volume"]; ok && planned != nil {
+		if _, err := nonNegativeNum(payload, "planned_volume"); err != nil {
+			return fmt.Errorf("плановый объём должен быть неотрицательным числом")
+		}
+	}
+	// MIN-03: в зачёт идёт фактически подтверждённая стоимость, поэтому она
+	// обязана быть положительной и опираться на описанную методику.
+	if _, err := positiveNum(payload, "amount_manual"); err != nil {
+		return fmt.Errorf("укажите фактически подтверждённую стоимость мероприятия")
+	}
+	if _, err := str(payload, "calculation_basis"); err != nil {
+		return fmt.Errorf("укажите основание и методику расчёта подтверждённой стоимости")
+	}
+	if actual <= 0 {
+		return fmt.Errorf("фактический объём должен быть больше нуля")
+	}
+	return nil
 }
 
 func round2(v float64) float64 {
