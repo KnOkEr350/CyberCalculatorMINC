@@ -112,6 +112,16 @@
     "/api/entries/summary": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/entries/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/entries/{id}/comments": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/staff-members": {
+      "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/staff-members/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/teaching-payouts": {
+      "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/teaching-payouts/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
 
     "/api/entries/{id}/attachments": {
       "parameters": [{ "$ref": "#/components/parameters/ID" }],
