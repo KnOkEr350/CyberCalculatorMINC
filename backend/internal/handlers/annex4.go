@@ -226,5 +226,10 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 	data = append(data, []interface{}{"Источник факта", "Snapshot " + snapshotID, "SHA-256 " + snapshotHash, "", "", "", "", "", "", "", "", "", ""})
 	wb := xlsx.New()
 	wb.AddSheet("Приложение № 4", headers, data)
-	writeWorkbook(w, wb, fmt.Sprintf("приложение_4_%d.xlsx", year))
+	body, err := wb.Bytes()
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось сформировать Приложение № 4")
+		return
+	}
+	h.writeGenerated(w, r, u, "annex4", "xlsx", fmt.Sprintf("приложение_4_%d.xlsx", year), companyID, partnerFilter, strings.TrimSpace(r.URL.Query().Get("agreement_id")), year, body)
 }

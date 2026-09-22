@@ -25,6 +25,10 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/dashboard", middleware.RequireAuth(m.db, m.dashboard.Get))
 	mux.HandleFunc("POST /api/dashboard/target", middleware.RequireAuth(m.db, m.dashboard.SetBudgetTarget))
 	mux.HandleFunc("GET /api/reports/export", middleware.RequireAuth(m.db, m.reports.Export))
+	mux.HandleFunc("GET /api/reports/generated", middleware.RequireAuth(m.db, m.reports.ListGenerated))
+	mux.HandleFunc("GET /api/reports/generated/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.reports.DownloadGenerated(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(m.db, m.workflow.Get))
 	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(m.db, m.workflow.Transition))
 	mux.HandleFunc("GET /api/report-snapshots", middleware.RequireAuth(m.db, m.snapshots.List))

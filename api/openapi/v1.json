@@ -134,6 +134,8 @@
     "/api/dashboard": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/dashboard/target": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/reports/export": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/reports/generated": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/reports/generated/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-workflow": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-workflow/transition": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-snapshots": {

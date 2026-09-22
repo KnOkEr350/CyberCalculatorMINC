@@ -56,6 +56,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		h.exportAnnex4(w, r, u, year)
 		return
 	}
+	if reportType := q.Get("report_type"); reportType != "" {
+		h.ExportRegulatory(w, r, u, year, reportType)
+		return
+	}
 	periodType := q.Get("period_type")
 	if periodType != "plan" && periodType != "fact" {
 		middleware.WriteError(w, http.StatusBadRequest, "period_type должен быть plan или fact")
@@ -248,6 +252,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		}
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 		localizedName := fmt.Sprintf("отчет_%s_%d.docx", map[string]string{"plan": "план", "fact": "факт"}[periodType], year)
+		if company := itCompanyScope(u); company != "" {
+			h.writeGenerated(w, r, u, "custom", "docx", localizedName, company, q.Get("partner_id"), q.Get("agreement_id"), year, body)
+			return
+		}
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.docx"; filename*=UTF-8''%s`, periodType, year, url.PathEscape(localizedName)))
 		w.Write(body)
 		return
@@ -315,6 +323,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 
 	filename := fmt.Sprintf("отчет_%s_%d.xlsx", map[string]string{"plan": "план", "fact": "факт"}[periodType], year)
+	if company := itCompanyScope(u); company != "" {
+		h.writeGenerated(w, r, u, "custom", "xlsx", filename, company, q.Get("partner_id"), q.Get("agreement_id"), year, body)
+		return
+	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.xlsx"; filename*=UTF-8''%s`, periodType, year, url.PathEscape(filename)))
 	w.Write(body)
