@@ -1,13 +1,16 @@
 package handlers
 
-import "testing"
+import (
+	"cybercalc/internal/models"
+	"testing"
+)
 
 func TestValidateAndNormalizeNewUser(t *testing.T) {
 	req := createUserRequest{
 		Email:    "  USER@Example.COM ",
 		Password: "StrongPass1!",
 		FullName: "  Иван   Иванов  ",
-		Role:     "user",
+		Role:     string(models.RoleSuperAdmin),
 	}
 	if err := validateAndNormalizeNewUser(&req); err != nil {
 		t.Fatalf("valid user rejected: %v", err)
@@ -20,10 +23,19 @@ func TestValidateAndNormalizeNewUser(t *testing.T) {
 	}
 }
 
-func TestValidateAndNormalizeModerator(t *testing.T) {
-	req := createUserRequest{Email: "moderator@example.com", Password: "StrongPass1!", FullName: "Иван Иванов", Role: "moderator", EntityType: "organization"}
-	if err := validateAndNormalizeNewUser(&req); err != nil {
-		t.Fatalf("valid moderator rejected: %v", err)
+func TestValidateAndNormalizeEveryRBACRole(t *testing.T) {
+	itCompanyID := "11111111-1111-1111-1111-111111111111"
+	roles := []models.Role{models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator, models.RoleHRSpecialist, models.RoleFinancialSpecialist, models.RoleLegalSpecialist, models.RoleAuditorViewer}
+	for _, role := range roles {
+		t.Run(string(role), func(t *testing.T) {
+			req := createUserRequest{Email: string(role) + "@example.com", Password: "StrongPass1!", FullName: "Иван Иванов", Role: string(role), EntityType: "organization"}
+			if role != models.RoleSuperAdmin {
+				req.ITCompanyID = &itCompanyID
+			}
+			if err := validateAndNormalizeNewUser(&req); err != nil {
+				t.Fatalf("valid role rejected: %v", err)
+			}
+		})
 	}
 }
 
@@ -33,7 +45,7 @@ func TestValidateAndNormalizeOrganizationUserWithITCompany(t *testing.T) {
 		Email:       "company-user@example.com",
 		Password:    "StrongPass1!",
 		FullName:    "Иван Иванов",
-		Role:        "user",
+		Role:        string(models.RoleCurator),
 		EntityType:  "organization",
 		ITCompanyID: &itCompanyID,
 	}
@@ -47,12 +59,12 @@ func TestValidateAndNormalizeNewUserRejectsInvalidData(t *testing.T) {
 		name string
 		req  createUserRequest
 	}{
-		{"bad email", createUserRequest{Email: "wrong", Password: "StrongPass1!", FullName: "Иван", Role: "user"}},
-		{"weak password", createUserRequest{Email: "user@example.com", Password: "password", FullName: "Иван", Role: "user"}},
-		{"blank name", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: " ", Role: "user"}},
+		{"bad email", createUserRequest{Email: "wrong", Password: "StrongPass1!", FullName: "Иван", Role: string(models.RoleSuperAdmin)}},
+		{"weak password", createUserRequest{Email: "user@example.com", Password: "password", FullName: "Иван", Role: string(models.RoleSuperAdmin)}},
+		{"blank name", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: " ", Role: string(models.RoleSuperAdmin)}},
 		{"bad role", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "owner"}},
-		{"education user without partner", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "user", EntityType: "edu_institution"}},
-		{"IT company user without company", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: "user", EntityType: "organization"}},
+		{"education user without partner", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: string(models.RoleCurator), EntityType: "edu_institution"}},
+		{"IT company user without company", createUserRequest{Email: "user@example.com", Password: "StrongPass1!", FullName: "Иван", Role: string(models.RoleCurator), EntityType: "organization"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

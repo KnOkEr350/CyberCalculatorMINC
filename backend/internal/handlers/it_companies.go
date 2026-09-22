@@ -62,13 +62,15 @@ func normalizeITCompany(req itCompanyWriteRequest) (itCompanyWriteRequest, error
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.Website = strings.TrimSpace(req.Website)
 	req.DirectorName = strings.Join(strings.Fields(req.DirectorName), " ")
-	registryDate, dateErr := time.Parse("2006-01-02", req.RegistryUpdatedAt)
-	today := time.Now().UTC().Truncate(24 * time.Hour)
+	_, dateErr := time.Parse("2006-01-02", req.RegistryUpdatedAt)
+	// Regulatory dates are Moscow calendar dates. Comparing UTC midnights made a
+	// valid date look like "tomorrow" during the first three hours of the day.
+	moscowToday := time.Now().In(time.FixedZone("Europe/Moscow", 3*60*60)).Format("2006-01-02")
 	if utf8.RuneCountInString(req.Name) < 2 || utf8.RuneCountInString(req.Name) > 1000 ||
 		!validINN(req.INN) || !validOGRN(req.OGRN) ||
 		utf8.RuneCountInString(req.AccreditationNumber) > 100 ||
 		req.RegistryRecordID == "" || utf8.RuneCountInString(req.RegistryRecordID) > 200 ||
-		dateErr != nil || registryDate.After(today) || !officialITRegistryURL(req.SourceURL) ||
+		dateErr != nil || req.RegistryUpdatedAt > moscowToday || !officialITRegistryURL(req.SourceURL) ||
 		utf8.RuneCountInString(req.Notes) > 1000 || utf8.RuneCountInString(req.LegalAddress) > 1000 ||
 		utf8.RuneCountInString(req.Phone) > 100 || utf8.RuneCountInString(req.Email) > 254 ||
 		utf8.RuneCountInString(req.Website) > 1000 || utf8.RuneCountInString(req.DirectorName) > 300 {

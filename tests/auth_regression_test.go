@@ -22,7 +22,7 @@ func checkAtomicAuthentication(t *testing.T, db *sql.DB) {
 	}
 	email := fmt.Sprintf("race%d@workspace.test", time.Now().UnixNano())
 	var id string
-	if err := db.QueryRowContext(ctx, `INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES($1,$2,'Регрессия входа','admin','organization') RETURNING id`, email, hash).Scan(&id); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES($1,$2,'Регрессия входа','super_admin','organization') RETURNING id`, email, hash).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := db.BeginTx(ctx, nil)

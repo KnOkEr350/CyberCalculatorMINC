@@ -2,6 +2,7 @@
 package models
 
 import (
+	"cybercalc/internal/compliance"
 	"cybercalc/internal/money"
 	"time"
 )
@@ -9,10 +10,31 @@ import (
 type Role string
 
 const (
-	RoleAdmin     Role = "admin"
-	RoleModerator Role = "moderator"
-	RoleUser      Role = "user"
+	RoleSuperAdmin          Role = "super_admin"
+	RoleHoldingAdmin        Role = "holding_admin"
+	RoleOrgAdmin            Role = "org_admin"
+	RoleCurator             Role = "curator"
+	RoleHRSpecialist        Role = "hr_specialist"
+	RoleFinancialSpecialist Role = "financial_specialist"
+	RoleLegalSpecialist     Role = "legal_specialist"
+	RoleAuditorViewer       Role = "auditor_viewer"
+
+	// Compatibility names keep internal Go call sites source-compatible while
+	// their serialized values use the v4.4 roles.
+	RoleAdmin     = RoleSuperAdmin
+	RoleModerator = RoleOrgAdmin
+	RoleUser      = RoleCurator
 )
+
+func ValidRole(role Role) bool {
+	switch role {
+	case RoleSuperAdmin, RoleHoldingAdmin, RoleOrgAdmin, RoleCurator,
+		RoleHRSpecialist, RoleFinancialSpecialist, RoleLegalSpecialist, RoleAuditorViewer:
+		return true
+	default:
+		return false
+	}
+}
 
 // EntityType — тот самый выбор в админке "кто он": организация или вуз.
 type EntityType string
@@ -164,6 +186,7 @@ type Entry struct {
 	UpdatedBy        *string                `json:"updated_by,omitempty"`
 	CreatedAt        time.Time              `json:"created_at"`
 	UpdatedAt        time.Time              `json:"updated_at"`
+	Compliance       compliance.Result      `json:"compliance"`
 }
 
 type LegalEntityGroupMember struct {
@@ -196,9 +219,13 @@ type Attachment struct {
 	StoragePath        string    `json:"-"`
 	ContentType        string    `json:"content_type"`
 	SizeBytes          int64     `json:"size_bytes"`
+	ContentSHA256      string    `json:"content_sha256,omitempty"`
 	UploadedBy         string    `json:"uploaded_by"`
 	UploadedAt         time.Time `json:"uploaded_at"`
 	RetentionExpiresAt time.Time `json:"retention_expires_at"`
+	DocumentType       string    `json:"document_type"`
+	ReviewStatus       string    `json:"review_status"`
+	ReviewComment      string    `json:"review_comment,omitempty"`
 }
 
 type EntryComment struct {

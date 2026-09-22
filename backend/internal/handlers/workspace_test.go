@@ -3,6 +3,7 @@ package handlers
 import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	"cybercalc/internal/money"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,8 +19,10 @@ func TestPartnerAccess(t *testing.T) {
 		want bool
 	}{
 		{middleware.AuthUser{Role: models.RoleAdmin}, "partner-b", true},
-		{middleware.AuthUser{Role: models.RoleModerator}, "partner-b", true},
-		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, "partner-b", true},
+		{middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}, "partner-b", true},
+		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, "partner-b", false},
+		{middleware.AuthUser{Role: models.RoleCurator, EntityType: models.EntityOrganization, PartnerID: &p}, p, true},
+		{middleware.AuthUser{Role: models.RoleCurator, EntityType: models.EntityOrganization, PartnerID: &p}, "partner-b", false},
 		{own, p, true}, {own, "partner-b", false}, {middleware.AuthUser{Role: models.RoleUser}, p, false},
 		{educationAdmin, p, true}, {educationAdmin, "partner-b", false},
 		{middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, p, false},
@@ -34,6 +37,10 @@ func TestPartnerAccess(t *testing.T) {
 	}
 	if partnerScope(educationAdmin, "partner-b") != p {
 		t.Fatal("education admin query must remain scoped to the assigned institution")
+	}
+	organizationCurator := middleware.AuthUser{Role: models.RoleCurator, EntityType: models.EntityOrganization, PartnerID: &p}
+	if partnerScope(organizationCurator, "partner-b") != p {
+		t.Fatal("organization curator query must remain scoped to the assigned institution")
 	}
 }
 
@@ -71,9 +78,70 @@ func TestOrderBasedReportRoles(t *testing.T) {
 	}
 }
 
+func TestExtendedRBACFieldBoundaries(t *testing.T) {
+	organization := func(role models.Role) middleware.AuthUser {
+		return middleware.AuthUser{Role: role, EntityType: models.EntityOrganization}
+	}
+	if !canEditEntryCategory(organization(models.RoleHRSpecialist), "internship") ||
+		!canEditEntryCategory(organization(models.RoleHRSpecialist), "employment_practice") ||
+		canEditEntryCategory(organization(models.RoleHRSpecialist), "teachers") {
+		t.Fatal("HR specialist category boundary is incorrect")
+	}
+	if !canEditEntryCategory(organization(models.RoleFinancialSpecialist), "teachers") ||
+		canEditEntryCategory(organization(models.RoleFinancialSpecialist), "top_it") {
+		t.Fatal("financial specialist category boundary is incorrect")
+	}
+	if canCreateEntryCategory(organization(models.RoleFinancialSpecialist), "teachers") ||
+		!canCreateEntryCategory(organization(models.RoleHRSpecialist), "internship") {
+		t.Fatal("specialist create boundary is incorrect")
+	}
+	for _, role := range []models.Role{models.RoleLegalSpecialist, models.RoleAuditorViewer} {
+		user := organization(role)
+		if canEditAnyEntry(user) || canPrepareReports(user) || isStaff(user) {
+			t.Fatalf("%s received a general write permission", role)
+		}
+		if !canReadTenantData(user) {
+			t.Fatalf("%s lost tenant read access", role)
+		}
+	}
+	if canUploadAnyDocument(organization(models.RoleAuditorViewer)) {
+		t.Fatal("auditor must not upload documents")
+	}
+	educationCurator := middleware.AuthUser{Role: models.RoleCurator, EntityType: models.EntityEduInst}
+	if !canUploadDocument(educationCurator, "internship", "outgoing_certificate") ||
+		canUploadDocument(educationCurator, "internship", "labor_contract") {
+		t.Fatal("education curator document boundary is incorrect")
+	}
+}
+
+func TestFinancialUpdateAllowsOnlyCompensationFields(t *testing.T) {
+	oldPayload := []byte(`{"org_name":"partner","course_name":"Курс","academic_hours":2,"payment_status":"planned"}`)
+	req := updateEntryRequest{Payload: map[string]interface{}{
+		"org_name": "partner", "course_name": "Курс", "academic_hours": float64(2),
+		"payment_status": "paid", "payment_date": "2026-09-22", "payment_order_reference": "ПП-1",
+	}}
+	if !financialUpdateAllowed(oldPayload, req, "vuz", "agreement", "average", nil) {
+		t.Fatal("valid compensation confirmation was rejected")
+	}
+	req.Payload["academic_hours"] = float64(3)
+	if financialUpdateAllowed(oldPayload, req, "vuz", "agreement", "average", nil) {
+		t.Fatal("financial role changed a calculation field")
+	}
+	req.Payload["academic_hours"] = float64(2)
+	delete(req.Payload, "payment_order_reference")
+	if financialUpdateAllowed(oldPayload, req, "vuz", "agreement", "average", nil) {
+		t.Fatal("paid compensation without payment document was accepted")
+	}
+	actual := money.Amount(10000)
+	req.ActualAmountRub = &actual
+	if financialUpdateAllowed(oldPayload, req, "vuz", "agreement", "average", nil) {
+		t.Fatal("financial role changed the report amount")
+	}
+}
+
 func TestEducationRepresentativeCannotWriteReportData(t *testing.T) {
 	partner := "partner-a"
-	for _, role := range []models.Role{models.RoleUser, models.RoleModerator, models.RoleAdmin} {
+	for _, role := range []models.Role{models.RoleOrgAdmin, models.RoleSuperAdmin} {
 		u := middleware.AuthUser{Role: role, EntityType: models.EntityEduInst, PartnerID: &partner}
 		entryHandlers := &EntryHandlers{}
 		attachmentHandlers := &AttachmentHandlers{}
@@ -111,7 +179,7 @@ func TestEducationDirectoryReviewAccess(t *testing.T) {
 		{"education moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst}, false},
 		{"unassigned moderator", middleware.AuthUser{Role: models.RoleModerator}, false},
 		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, true},
-		{"IT organization", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, false},
+		{"IT organization", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, true},
 		{"unassigned", middleware.AuthUser{Role: models.RoleUser}, false},
 	}
 	for _, test := range tests {
@@ -179,14 +247,11 @@ func TestITCompanyDirectoryAccess(t *testing.T) {
 		user middleware.AuthUser
 		want bool
 	}{
-		{"education admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityEduInst}, true},
-		{"IT organization admin", middleware.AuthUser{Role: models.RoleAdmin, EntityType: models.EntityOrganization}, false},
-		{"unassigned admin", middleware.AuthUser{Role: models.RoleAdmin}, false},
-		{"IT organization moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}, false},
-		{"education moderator", middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityEduInst}, true},
-		{"unassigned moderator", middleware.AuthUser{Role: models.RoleModerator}, false},
-		{"IT organization user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityOrganization}, true},
-		{"education user", middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}, false},
+		{"super administrator", middleware.AuthUser{Role: models.RoleSuperAdmin}, true},
+		{"holding administrator", middleware.AuthUser{Role: models.RoleHoldingAdmin, EntityType: models.EntityOrganization}, true},
+		{"organization administrator", middleware.AuthUser{Role: models.RoleOrgAdmin, EntityType: models.EntityOrganization}, false},
+		{"curator", middleware.AuthUser{Role: models.RoleCurator, EntityType: models.EntityOrganization}, false},
+		{"auditor", middleware.AuthUser{Role: models.RoleAuditorViewer, EntityType: models.EntityOrganization}, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -198,44 +263,48 @@ func TestITCompanyDirectoryAccess(t *testing.T) {
 }
 
 func TestITCompanyReadAccess(t *testing.T) {
-	for _, role := range []models.Role{models.RoleAdmin, models.RoleModerator, models.RoleUser} {
+	for _, role := range []models.Role{models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator, models.RoleHRSpecialist, models.RoleFinancialSpecialist, models.RoleLegalSpecialist, models.RoleAuditorViewer} {
 		for _, entity := range []models.EntityType{models.EntityOrganization, models.EntityEduInst, ""} {
 			u := middleware.AuthUser{Role: role, EntityType: entity}
-			want := entity == models.EntityEduInst || (role == models.RoleUser && entity == models.EntityOrganization)
-			if got := canViewITCompanies(u); got != want {
-				t.Fatalf("%s / %s: read access=%v, want %v", role, entity, got, want)
+			if got := canViewITCompanies(u); !got {
+				t.Fatalf("%s / %s: valid RBAC role must have read access", role, entity)
 			}
 		}
+	}
+	if canViewITCompanies(middleware.AuthUser{Role: "unknown"}) {
+		t.Fatal("unknown role must not have read access")
 	}
 }
 
 func TestITCompanyHandlersEnforceProfileAccess(t *testing.T) {
 	h := ITCompanyHandlers{}
-	u := middleware.AuthUser{Role: models.RoleModerator, EntityType: models.EntityOrganization}
+	invalid := middleware.AuthUser{Role: "unknown", EntityType: models.EntityOrganization}
+	w := httptest.NewRecorder()
+	h.List(w, httptest.NewRequest("GET", "/it-companies", nil), invalid)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unknown role: list status=%d, want 403", w.Code)
+	}
+
+	u := middleware.AuthUser{Role: models.RoleOrgAdmin, EntityType: models.EntityOrganization}
 	for _, handler := range []struct {
 		name   string
 		handle func(http.ResponseWriter, *http.Request, middleware.AuthUser)
-	}{{"list", h.List}, {"search", h.RegistrySearch}, {"create", h.Create}, {"import", h.Import}, {"template", h.Template}} {
+	}{{"create", h.Create}, {"import", h.Import}, {"template", h.Template}} {
 		t.Run(handler.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			handler.handle(w, httptest.NewRequest("GET", "/it-companies", nil), u)
 			if w.Code != http.StatusForbidden {
-				t.Fatalf("IT moderator: status=%d, want 403", w.Code)
+				t.Fatalf("organization administrator: status=%d, want 403", w.Code)
 			}
 		})
 	}
-	reader := middleware.AuthUser{Role: models.RoleUser, EntityType: models.EntityEduInst}
+	reader := middleware.AuthUser{Role: models.RoleAuditorViewer, EntityType: models.EntityOrganization}
 	for _, handler := range []func(http.ResponseWriter, *http.Request, middleware.AuthUser){h.Create, h.Import, h.Template} {
 		w := httptest.NewRecorder()
 		handler(w, httptest.NewRequest("POST", "/it-companies", nil), reader)
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("education reader: write status=%d, want 403", w.Code)
 		}
-	}
-	w := httptest.NewRecorder()
-	h.RegistrySearch(w, httptest.NewRequest("GET", "/it-companies/registry-search", nil), reader)
-	if w.Code != http.StatusOK {
-		t.Fatalf("education reader: search status=%d, want 200", w.Code)
 	}
 }
 func TestObligations(t *testing.T) {

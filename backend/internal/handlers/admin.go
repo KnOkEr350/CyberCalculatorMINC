@@ -91,6 +91,17 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, http.StatusConflict, "не удалось создать пользователя; возможно, email уже занят")
 		return
 	}
+	if req.EntityType == string(models.EntityOrganization) && req.Role == string(models.RoleCurator) && req.PartnerID != nil {
+		var belongs bool
+		if err := tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1 AND it_company_id::text=$2)`, *req.PartnerID, *req.ITCompanyID).Scan(&belongs); err != nil || !belongs {
+			middleware.WriteError(w, 400, "закреплённая ОО должна относиться к выбранной ИТ-компании")
+			return
+		}
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO user_partner_assignments(user_id,partner_id,assigned_by) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, id, *req.PartnerID, admin.ID); err != nil {
+			middleware.WriteError(w, 500, "не удалось закрепить ОО за куратором")
+			return
+		}
+	}
 	if logAudit(tx, "user", id, "create", admin.ID, "", nil, map[string]string{"email": req.Email, "role": req.Role}) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
@@ -190,8 +201,8 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		return
 	}
 	if req.Role != nil {
-		if *req.Role != string(models.RoleAdmin) && *req.Role != string(models.RoleModerator) && *req.Role != string(models.RoleUser) {
-			middleware.WriteError(w, http.StatusBadRequest, "role должен быть admin, moderator или user")
+		if !models.ValidRole(models.Role(*req.Role)) {
+			middleware.WriteError(w, http.StatusBadRequest, "неизвестная роль RBAC")
 			return
 		}
 	}
@@ -233,7 +244,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 	}
 	if entity == "edu_institution" {
 		itCompany = ""
-	} else {
+	} else if role != string(models.RoleCurator) {
 		partner = ""
 	}
 	if entity == "edu_institution" && partner == "" {
@@ -247,7 +258,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 			return
 		}
 	}
-	if role == string(models.RoleUser) && entity == "organization" && itCompany == "" {
+	if role != string(models.RoleSuperAdmin) && entity == "organization" && itCompany == "" {
 		middleware.WriteError(w, 400, "назначьте ИТ-компанию")
 		return
 	}
@@ -258,9 +269,16 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 			return
 		}
 	}
-	if !active || role != "admin" {
+	if entity == "organization" && role == string(models.RoleCurator) && partner != "" {
+		var belongs bool
+		if tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1 AND it_company_id::text=$2)`, partner, itCompany).Scan(&belongs) != nil || !belongs {
+			middleware.WriteError(w, 400, "закреплённая ОО должна относиться к выбранной ИТ-компании")
+			return
+		}
+	}
+	if !active || role != string(models.RoleSuperAdmin) {
 		var count int
-		if tx.QueryRowContext(r.Context(), `SELECT count(*) FROM users WHERE role='admin' AND is_active AND id::text<>$1`, userID).Scan(&count) != nil {
+		if tx.QueryRowContext(r.Context(), `SELECT count(*) FROM users WHERE role='super_admin' AND is_active AND id::text<>$1`, userID).Scan(&count) != nil {
 			middleware.WriteError(w, 500, "ошибка проверки администраторов")
 			return
 		}
@@ -272,6 +290,16 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET is_active=$1,role=$2,entity_type=NULLIF($3,''),partner_id=NULLIF($4,'')::uuid,it_company_id=NULLIF($5,'')::uuid,updated_at=now() WHERE id::text=$6`, active, role, entity, partner, itCompany, userID); err != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
+	}
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM user_partner_assignments WHERE user_id::text=$1`, userID); err != nil {
+		middleware.WriteError(w, 500, "ошибка обновления закреплённых ОО")
+		return
+	}
+	if entity == "organization" && role == string(models.RoleCurator) && partner != "" {
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO user_partner_assignments(user_id,partner_id,assigned_by) VALUES($1,$2,$3)`, userID, partner, admin.ID); err != nil {
+			middleware.WriteError(w, 500, "ошибка закрепления ОО")
+			return
+		}
 	}
 	if logAudit(tx, "user", userID, "update", admin.ID, "", old, req) != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")

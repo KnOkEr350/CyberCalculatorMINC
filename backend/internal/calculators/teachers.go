@@ -44,11 +44,25 @@ func (teachersCalc) Fields() []FieldSpec {
 		{Key: "department", Label: "Кафедра", Type: "text"},
 		{Key: "teaching_area", Label: "Направление преподавания", Type: "text"},
 		{Key: "teacher_full_name", Label: "ФИО преподавателя", Type: "text", Required: true},
+		{Key: "employee_position", Label: "Должность в ИТ-компании", Type: "text"},
+		{Key: "okz_code", Label: "Код ОКЗ", Type: "text"},
+		{Key: "it_experience_days", Label: "Подтверждённый ИТ-стаж за последние 5 лет, дней", Type: "number", Integer: true, Minimum: 0, Maximum: 1827},
+		{Key: "it_experience_reference", Label: "Основание подтверждения ИТ-стажа", Type: "text", MaxLength: 1000},
 		{Key: "employment_form", Label: "Как оформлен", Type: "select", Required: true, Options: []string{"ТД по совместительству", "ГПХ"}},
+		{Key: "specialty_code", Label: "Код ИТ-специальности по приказу № 27", Type: "text"},
+		{Key: "academic_group", Label: "Академическая группа", Type: "text"},
 		{Key: "students_reach", Label: "Охват студентов", Type: "number", Integer: true},
 		{Key: "academic_hours", Label: "Количество ак.ч.", Type: "number", Required: true},
 		{Key: "class_schedule", Label: "Расписание занятий", Type: "text", MaxLength: 2000},
 		{Key: "work_schedule", Label: "График работы", Type: "text", MaxLength: 2000},
+		{Key: "employment_contract_reference", Label: "Реквизиты ТД / ГПХ", Type: "text", MaxLength: 1000},
+		{Key: "appointment_order_reference", Label: "Реквизиты приказа о допуске", Type: "text", MaxLength: 1000},
+		{Key: "individual_plan_reference", Label: "Реквизиты индивидуального плана", Type: "text", MaxLength: 1000},
+		{Key: "compensation_quarter", Label: "Квартал компенсации", Type: "number", Integer: true, Minimum: 1, Maximum: 4},
+		{Key: "planned_compensation_rub", Label: "Плановая компенсация, руб.", Type: "number", Minimum: 0},
+		{Key: "payment_status", Label: "Статус выплаты", Type: "select", Options: []string{"planned", "partially_paid", "paid"}},
+		{Key: "payment_date", Label: "Дата выплаты", Type: "date"},
+		{Key: "payment_order_reference", Label: "Номер платёжного поручения", Type: "text", MaxLength: 100},
 	}
 }
 
@@ -61,5 +75,15 @@ func (teachersCalc) Validate(payload map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	return teachingdomain.ValidateSemester(teachingdomain.EducationLevel(level), int(semester))
+	if err := teachingdomain.ValidateSemester(teachingdomain.EducationLevel(level), int(semester)); err != nil {
+		return err
+	}
+	if status, _ := payload["payment_status"].(string); status == "paid" {
+		paymentDate, _ := payload["payment_date"].(string)
+		paymentReference, _ := payload["payment_order_reference"].(string)
+		if paymentDate == "" || paymentReference == "" {
+			return fmt.Errorf("для полностью выплаченной компенсации укажите дату и платёжный документ")
+		}
+	}
+	return nil
 }

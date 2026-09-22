@@ -33,7 +33,7 @@ func TestITCompanyBulkImportAndPagination(t *testing.T) {
 		t.Fatal(err)
 	}
 	var userID string
-	err = db.QueryRow(`INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES('it-registry@workspace.test','test-only','Тест импорта ИТ','admin','edu_institution') ON CONFLICT(email) DO UPDATE SET full_name=EXCLUDED.full_name RETURNING id::text`).Scan(&userID)
+	err = db.QueryRow(`INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES('it-registry@workspace.test','test-only','Тест импорта ИТ','super_admin','edu_institution') ON CONFLICT(email) DO UPDATE SET full_name=EXCLUDED.full_name,role=EXCLUDED.role RETURNING id::text`).Scan(&userID)
 	if err != nil {
 		t.Fatal(err)
 	}

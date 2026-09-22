@@ -76,6 +76,14 @@ const VALUE_LABELS = {
   user: "Пользователь",
   moderator: "Модератор",
   admin: "Администратор",
+  super_admin: "Главный администратор",
+  holding_admin: "Администратор холдинга",
+  org_admin: "Администратор организации",
+  curator: "Куратор",
+  hr_specialist: "HR-специалист",
+  financial_specialist: "Финансовый специалист",
+  legal_specialist: "Юрист",
+  auditor_viewer: "Аудитор (только чтение)",
   organization: "ИТ-организация",
   edu_institution: "Образовательная организация",
   entry: "Запись",
@@ -277,7 +285,7 @@ function render() {
   if (
     !state.me.entity_type ||
     (state.me.entity_type === "edu_institution" && !state.me.partner_id) ||
-    (state.me.role === "user" &&
+    (state.me.role !== "super_admin" &&
       state.me.entity_type === "organization" &&
       !state.me.it_company_id)
   ) {
@@ -376,8 +384,8 @@ function activateScreen(view) {
 }
 
 function renderLayout() {
-  const isAdmin = state.me.role === "admin";
-  const isModerator = state.me.role === "moderator";
+  const isAdmin = state.me.role === "super_admin";
+  const isModerator = state.me.role === "org_admin";
   const profileLabel =
     state.me.entity_type === "organization"
       ? "ИТ-организация"
@@ -393,7 +401,7 @@ function renderLayout() {
       <button type="button" class="topbar-menu" id="sidebar-toggle" aria-label="Свернуть меню" aria-controls="primary-sidebar" aria-expanded="true"><span></span><span></span><span></span></button>
       <div class="product-context"><strong>${escapeHTML(activeScreen.title)}</strong><span>${escapeHTML(activeScreen.subtitle)}</span></div>
       <div class="who">
-        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel}${isAdmin ? " · Администратор" : isModerator ? " · Модератор" : ""}</small></span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel} · ${escapeHTML(valueLabel(state.me.role))}</small></span>
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
         <button class="header-action" id="change-password" title="Изменить пароль" aria-label="Изменить пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v10H4zM8 11V7a4 4 0 0 1 8 0v4"></path></svg></button>
         ${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="header-action header-action-text" id="setup-mfa" title="Настроить двухфакторную аутентификацию">2FA</button>' : ''}
@@ -512,6 +520,22 @@ function reportLink(href, label, description, enabled) {
   return `<article class="report-format-card${enabled ? "" : " disabled"}"><div class="report-format-icon">${navigationIcon("reports")}</div><div><h3>${escapeHTML(label)}</h3><p>${escapeHTML(description)}</p></div><a class="btn secondary${enabled ? "" : " disabled"}" ${enabled ? `href="${escapeHTML(href)}"` : 'aria-disabled="true"'}>${enabled ? "Сформировать" : "Недоступно"}</a></article>`;
 }
 
+function regulatoryTimelineMarkup(year) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const milestones = [
+    ["Срез предварительного перечня", new Date(year, 10, 1)],
+    ["Направить перечень ОО / РОИВ", new Date(year, 10, 10)],
+    ["Предварительный отчёт в Минцифры", new Date(year, 11, 10)],
+    ["Итоговый срез", new Date(year, 11, 31)],
+    ["Направить итоговый перечень", new Date(year + 1, 2, 1)],
+  ];
+  return `<div class="card"><h2>Регламентный календарь приказа № 270</h2><div class="readiness-list">${milestones.map(([label, date]) => {
+    const days = Math.ceil((date - today) / 86400000);
+    const status = days < 0 ? "red" : days <= 14 ? "yellow" : "green";
+    return `<div><span class="risk-dot ${status}"></span><span>${escapeHTML(label)} · ${date.toLocaleDateString("ru-RU")}</span><b>${days < 0 ? `просрочено на ${Math.abs(days)} дн.` : days === 0 ? "сегодня" : `${days} календ. дн.`}</b></div>`;
+  }).join("")}</div><p class="field-hint">Сроки согласования после направления: 10 календарных дней для предварительного и 20 календарных дней для итогового перечня.</p></div>`;
+}
+
 async function renderReportsScreen(root) {
   const screen = CyberCalcScreens.get("reports");
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div><span class="year-badge">${state.year}</span></section><div class="card loading-state"><span class="spinner"></span>Загрузка отчётного контура…</div>`;
@@ -549,6 +573,11 @@ async function renderReportsScreen(root) {
   if (partner && agreement) {
     workflow = await api(`/report-workflow?${new URLSearchParams({ agreement_id: agreement.id, report_year: state.year, period_type: state.period })}`);
   }
+  let snapshots = [];
+  if (state.me.entity_type === "organization" && state.me.it_company_id) {
+    try { snapshots = await api("/report-snapshots"); } catch (_) { snapshots = []; }
+  }
+  const hasMaySnapshot = snapshots.some((item) => Number(item.report_year) === state.year);
   const approved = workflow?.status === "approved";
   const statusLabels = { draft: "Черновик", ready: "На рассмотрении", verified: "Согласовано", approved: "Утверждено" };
   const base = new URLSearchParams({ partner_id: state.partnerID, agreement_id: state.agreementID, period_type: state.period, report_year: state.year });
@@ -564,7 +593,8 @@ async function renderReportsScreen(root) {
     <div class="card report-builder"><div class="flex between"><div><h2>Конструктор среза</h2><p class="muted">Выберите контекст отчёта; пустые строки сервер удалит при формировании документа.</p></div><span class="status-badge ${approved ? "active" : "pending"}">${escapeHTML(statusLabels[workflow?.status] || "Контекст не выбран")}</span></div>
       <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">— Выберите —</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">— Выберите —</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
     </div>
-    <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", approved)}${reportLink(`/api/reports/export?${categoryQuery}&format=docx`, "Таблица Word", "Печатная таблица для согласования.", approved)}${reportLink(`/api/reports/export?${base}`, "Полный Excel партнёра", "Все мероприятия выбранного соглашения.", approved)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
+    <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", approved)}${reportLink(`/api/reports/export?${categoryQuery}&format=docx`, "Таблица Word", "Печатная таблица для согласования.", approved)}${reportLink(`/api/reports/export?${base}`, "Полный Excel партнёра", "Все мероприятия выбранного соглашения.", approved)}${reportLink(`/api/reports/export?${new URLSearchParams({ report_type: "annex4", report_year: state.year, ...(state.partnerID ? { partner_id: state.partnerID } : {}) })}`, "Приложение № 4", hasMaySnapshot ? "13 граф формы приказа № 270; факт читается из неизменяемого снимка на 1 мая." : "Сначала сформируйте снимок на 1 мая в настройках.", hasMaySnapshot)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
+    ${regulatoryTimelineMarkup(state.year)}
     <div class="grid cols-2"><div class="card"><h2>Комплектность и согласование</h2>${workflow ? `<div class="readiness-list">${workflow.automatic_checks.map((check) => `<div><span class="risk-dot ${check.complete ? "green" : "red"}"></span><span>${escapeHTML(check.label)}</span><b>${check.complete ? "Готово" : "Не выполнено"}</b></div>`).join("")}</div>${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : '<p class="notice">Автоматические проверки пройдены.</p>'}` : '<p class="muted">После выбора соглашения здесь появится готовность комплекта.</p>'}</div><div class="card"><h2>Обменные пакеты .pkg</h2><p>Шифрованный обмен и Diff Engine предусмотрены ТЗ, но требуют серверного CryptoEngine и API сверки.</p><div class="field"><label>Пакет для сверки</label><input type="file" accept=".pkg" disabled></div><div class="flex"><button class="btn" disabled>Сформировать .pkg</button><button class="btn secondary" disabled>Сверить пакет</button></div><p class="field-hint">Контролы заранее размещены в отдельном контуре и не имитируют ещё не реализованную серверную операцию.</p></div></div>`;
 
   const rerender = () => renderReportsScreen(root).catch((error) => showToast(error.message));
@@ -575,18 +605,35 @@ async function renderReportsScreen(root) {
   root.querySelector("#report-agreement").onchange = (event) => { state.agreementID = event.target.value; rerender(); };
 }
 
-function renderSettingsOverview(box) {
+async function renderSettingsOverview(box) {
   const flags = globalThis.CyberCalcFeatures?.snapshot?.() || {};
   const enabledFlags = Object.values(flags).filter(Boolean).length;
-  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>В текущем контексте доступно договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p><p class="field-hint">Состав группы применяется в соглашениях и консолидированной оценке норматива.</p></div><div class="card"><h2>Снимки и криптография</h2><p>Фиксация среза на 1 мая и выбор криптопровайдера требуют соответствующих серверных модулей.</p><div class="flex"><button class="btn secondary" disabled>Создать снимок</button><button class="btn secondary" disabled>Проверить CryptoEngine</button></div></div></div>`;
+  let snapshots = [];
+  if (state.me.entity_type === "organization" && state.me.it_company_id) {
+    try { snapshots = await api("/report-snapshots"); } catch (_) { snapshots = []; }
+  }
+  const canSealSnapshot = ["super_admin", "holding_admin", "org_admin"].includes(state.me.role) && state.me.entity_type === "organization" && state.me.it_company_id;
+  const canDownloadSnapshot = ["super_admin", "holding_admin", "org_admin", "auditor_viewer"].includes(state.me.role);
+  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>В текущем контексте доступно договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p><p class="field-hint">Состав группы применяется в соглашениях и консолидированной оценке норматива.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить CryptoEngine</button></div><p class="field-hint">Снимок формируется только 1 мая отчётного года по московскому времени и защищается SHA-256.</p></div></div>`;
   box.querySelector("#settings-target")?.addEventListener("click", (event) => openBudgetTargetDialog(event.currentTarget));
   box.querySelector("#settings-password").onclick = openPasswordDialog;
   box.querySelector("#settings-mfa")?.addEventListener("click", () => app.replaceChildren(renderMFASetup()));
+  box.querySelector("#settings-snapshot")?.addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      await api(`/report-snapshots?report_year=${state.year}`, { method: "POST" });
+      showToast("Неизменяемый снимок сформирован", "success");
+      await renderSettingsOverview(box);
+    } catch (error) {
+      showToast(error.message);
+      event.currentTarget.disabled = false;
+    }
+  });
 }
 
 async function renderSettingsScreen(root) {
   const screen = CyberCalcScreens.get("settings");
-  const isAdmin = state.me.role === "admin";
+  const isAdmin = state.me.role === "super_admin";
   const tabs = [{ id: "context", label: "Контекст и безопасность" }, ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
   if (!tabs.some((tab) => tab.id === state.settingsTab)) state.settingsTab = "context";
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
@@ -720,6 +767,11 @@ async function renderDashboard(root) {
     counts[item.risk] += 1;
     return counts;
   }, { green: 0, yellow: 0, red: 0 });
+  const riskBuckets = d.risk_buckets || {
+    green: { entry_count: riskCounts.green, amount_rub: 0 },
+    yellow: { entry_count: riskCounts.yellow, amount_rub: 0 },
+    red: { entry_count: riskCounts.red, amount_rub: 0 },
+  };
   const mandatory = [
     { label: "Преподаватели", complete: Number(factAmounts.teachers || 0) > 0 },
     { label: "ООП / РПД", complete: Number(factAmounts.ood_rpd || 0) > 0 },
@@ -790,7 +842,7 @@ async function renderDashboard(root) {
       ${targetAmount ? `<div class="progress-header target"><span>Подтверждённые расходы к минимальному объёму 3%</span><strong>${targetCompletionPct.toLocaleString("ru-RU")}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
     </div>
     <div class="grid cols-2 dashboard-risk-grid">
-      <div class="card"><h2>Распределение рисков</h2><div class="risk-buckets"><div class="green"><span>${riskCounts.green}</span><b>Гарантировано</b><small>Факт закрывает план</small></div><div class="yellow"><span>${riskCounts.yellow}</span><b>В процессе</b><small>Есть план или частичный факт</small></div><div class="red"><span>${riskCounts.red}</span><b>В зоне риска</b><small>Нет подтверждённых данных</small></div></div><p class="field-hint">Оперативная UI-оценка; юридический зачёт определяется утверждённым отчётом.</p></div>
+      <div class="card"><h2>Распределение документальных рисков</h2><div class="risk-buckets"><div class="green"><span>${fmtMoney(riskBuckets.green?.amount_rub || 0)}</span><b>Гарантировано · ${Number(riskBuckets.green?.entry_count || 0)}</b><small>Комплект зелёный и отчёт утверждён</small></div><div class="yellow"><span>${fmtMoney(riskBuckets.yellow?.amount_rub || 0)}</span><b>Прогноз · ${Number(riskBuckets.yellow?.entry_count || 0)}</b><small>Нужна проверка или часть документов</small></div><div class="red"><span>${fmtMoney(riskBuckets.red?.amount_rub || 0)}</span><b>В зоне риска · ${Number(riskBuckets.red?.entry_count || 0)}</b><small>Есть объективные блокирующие причины</small></div></div><p class="field-hint">Расчёт по документам и правилам ${escapeHTML("mincifry-270-2026.1")}; ручной чекбокс не снимает объективную блокировку.</p></div>
       <div class="card"><h2>Все виды мероприятий</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
@@ -831,19 +883,24 @@ async function openBudgetTargetDialog(button) {
     const dashboard = await api(
       `/dashboard?${new URLSearchParams({ report_year: state.year })}`,
     );
-    const value = prompt(
-      `Целевая сумма затрат на ${state.year} год, руб. (3% от сэкономленных льгот):`,
-      dashboard.target_amount_rub || "",
+    const baseValue = prompt(
+      `База экономии на льготах за ${state.year - 2} год, руб.:`,
+      dashboard.savings_base_rub || "",
     );
-    if (value == null) return;
-    const amount = Number(String(value).replace(",", "."));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      alert("Введите положительную целевую сумму.");
+    if (baseValue == null) return;
+    const base = Number(String(baseValue).replace(",", "."));
+    if (!Number.isFinite(base) || base <= 0) {
+      alert("Введите положительную базу экономии.");
       return;
     }
+    const amount = Math.round(base * 3) / 100;
+    const source = prompt("Источник подтверждения ФНС / Минцифры:", dashboard.target_source_reference || "")?.trim();
+    if (!source) return;
+    const notifiedAt = prompt("Дата доведения Минцифры (ГГГГ-ММ-ДД):", dashboard.target_notified_at || `${state.year}-07-31`)?.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(notifiedAt || "")) { alert("Укажите дату в формате ГГГГ-ММ-ДД."); return; }
     await api("/dashboard/target", {
       method: "POST",
-      body: JSON.stringify({ report_year: state.year, target_amount_rub: amount }),
+      body: JSON.stringify({ report_year: state.year, savings_base_rub: base, target_amount_rub: amount, source_reference: source, notified_at: notifiedAt }),
     });
     showToast("Целевая сумма сохранена", "success");
   } catch (error) {
@@ -1139,6 +1196,9 @@ async function openEntryModal(entry, readOnly = false) {
     return;
   }
   const isEdit = !!entry;
+  const financialOnly = isEdit && !readOnly && state.me?.role === "financial_specialist" && cat.code === "teachers";
+  const attachmentOnly = isEdit && readOnly && state.me?.entity_type === "edu_institution" && state.me?.role === "curator" && cat.code === "internship";
+  const attachmentReadOnly = readOnly && !attachmentOnly;
   const partner = state.partners.find(
     (p) => p.id === (entry?.partner_id || state.partnerID),
   );
@@ -1175,18 +1235,23 @@ async function openEntryModal(entry, readOnly = false) {
   const audience = entry ? entry.audience : partner.partner_kind;
   let savedID = null;
   let busy = false;
+  const complianceMarkup = entry?.compliance
+    ? `<div class="card compliance-card"><div class="flex between"><h3>Документальная готовность</h3><span class="risk-label ${escapeHTML(entry.compliance.state)}"><i></i>${entry.compliance.state === "green" ? "Готово" : entry.compliance.state === "yellow" ? "Нужна доработка" : "Заблокировано"}</span></div><ul>${entry.compliance.checks.map((check) => `<li>${check.complete ? "✓" : check.blocking ? "✕" : "!"} ${escapeHTML(check.label)}</li>`).join("")}</ul><small>Набор правил: ${escapeHTML(entry.compliance.ruleset_version)}</small></div>`
+    : "";
 
   const backdrop =
     el(`<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true">
     <form id="m-form" novalidate>
-    <h2 style="margin-top:0">${readOnly ? "Просмотр записи" : isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
+    <h2 style="margin-top:0">${readOnly ? "Просмотр записи" : financialOnly ? "Подтверждение компенсации" : isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
+    ${financialOnly ? '<p class="notice">Финансовая роль изменяет только квартал, плановую компенсацию и реквизиты выплаты. Учебные показатели и расчётная сумма защищены от изменения.</p>' : ""}
     <div class="field"><label>Аудитория</label>
       <select id="m-audience" disabled><option value="${escapeHTML(audience)}">${escapeHTML(AUDIENCE_LABELS[audience])}</option></select>
     </div>
     <div class="field"><label>Соглашение</label><input value="${escapeHTML(agreementLabel(agreement))}" disabled></div>
-    <div class="field"><label>Метод определения стоимости</label><select id="m-cost-method" ${readOnly ? "disabled" : ""}><option value="average" ${(entry?.cost_method || "average") === "average" ? "selected" : ""}>Средние значения Минцифры</option><option value="actual" ${entry?.cost_method === "actual" ? "selected" : ""} ${state.period === "fact" ? "" : "disabled"}>Фактические затраты</option></select><div class="field-hint">${state.period === "fact" ? "Для фактических затрат при утверждении отчёта потребуются реквизиты аудиторского заключения." : "В плане используется расчёт по методике. Фактически понесённые затраты указываются в отчёте «Факт»."}</div></div>
-    <div class="field" id="m-actual-field"><label>Фактическая сумма, руб. *</label><input id="m-actual-amount" type="number" min="0.01" max="99999999999999.99" step="0.01" value="${escapeHTML(entry?.actual_amount_rub || "")}" ${readOnly ? "disabled" : ""}></div>
+    <div class="field"><label>Метод определения стоимости</label><select id="m-cost-method" ${readOnly || financialOnly ? "disabled" : ""}><option value="average" ${(entry?.cost_method || "average") === "average" ? "selected" : ""}>Средние значения Минцифры</option><option value="actual" ${entry?.cost_method === "actual" ? "selected" : ""} ${state.period === "fact" ? "" : "disabled"}>Фактические затраты</option></select><div class="field-hint">${state.period === "fact" ? "Для фактических затрат при утверждении отчёта потребуются реквизиты аудиторского заключения." : "В плане используется расчёт по методике. Фактически понесённые затраты указываются в отчёте «Факт»."}</div></div>
+    <div class="field" id="m-actual-field"><label>Фактическая сумма, руб. *</label><input id="m-actual-amount" type="number" min="0.01" max="99999999999999.99" step="0.01" value="${escapeHTML(entry?.actual_amount_rub || "")}" ${readOnly || financialOnly ? "disabled" : ""}></div>
     <div id="m-fields"></div>
+    ${complianceMarkup}
     ${
       isEdit && !readOnly
         ? `<div class="field"><label>Комментарий к изменению (обязателен)</label><textarea id="m-comment" rows="2"></textarea></div>`
@@ -1200,7 +1265,7 @@ async function openEntryModal(entry, readOnly = false) {
         ${readOnly ? "" : `<button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>`}
       </div>
     </div>
-    ${renderAttachSection(readOnly)}
+    ${renderAttachSection(attachmentReadOnly)}
     </form>
   </div></div>`);
 
@@ -1264,6 +1329,27 @@ async function openEntryModal(entry, readOnly = false) {
       if (add) row.appendChild(add);
     }
   });
+
+  if (financialOnly) {
+    const allowed = new Set(["compensation_quarter", "planned_compensation_rub", "payment_status", "payment_date", "payment_order_reference"]);
+    fieldsBox.querySelectorAll("[data-key]").forEach((input) => {
+      if (!allowed.has(input.dataset.key)) input.disabled = true;
+    });
+  }
+  const documentType = backdrop.querySelector("#attach-document-type");
+  if (documentType) {
+    const restrictedTypes = state.me?.role === "financial_specialist"
+      ? ["payment_order"]
+      : state.me?.role === "hr_specialist"
+        ? ["labor_contract", "incoming_certificate", "mentor_order"]
+        : state.me?.entity_type === "edu_institution" && state.me?.role === "curator"
+          ? ["outgoing_certificate"]
+          : null;
+    if (restrictedTypes) {
+      [...documentType.options].forEach((option) => { option.disabled = !restrictedTypes.includes(option.value); });
+      documentType.value = restrictedTypes[0];
+    }
+  }
 
   if (cat.code === "teachers") {
     const level = fieldsBox.querySelector('[data-key="education_level"]');
@@ -1353,6 +1439,7 @@ async function openEntryModal(entry, readOnly = false) {
       await uploadFileBatch(
         savedID,
         backdrop.querySelector("#attach-file").files,
+        backdrop.querySelector("#attach-document-type").value,
       );
       busy = false;
       closeModal();
@@ -1401,7 +1488,7 @@ async function openEntryModal(entry, readOnly = false) {
   document.body.appendChild(backdrop);
 
   if (isEdit) {
-    wireAttachSection(backdrop, entry.id, readOnly);
+    wireAttachSection(backdrop, entry.id, attachmentReadOnly);
   } else {
     backdrop.querySelector("#attach-list").textContent =
       "Файлы необязательны. Выбранные файлы загрузятся после создания записи.";
@@ -1411,9 +1498,10 @@ async function openEntryModal(entry, readOnly = false) {
 
 function renderAttachSection(readOnly = false) {
   return `<div class="card" style="margin-top:14px;background:transparent;padding:0;border:none">
-    <h2>Вложения</h2><p class="muted">${readOnly ? "Документы, приложенные ИТ-организацией к перечню мероприятий." : "Необязательно: до 20 файлов за раз, суммарно до 64 МБ."}</p>
+    <h2>Вложения</h2><p class="muted">${readOnly ? "Документы, приложенные ИТ-организацией к перечню мероприятий." : "Необязательно: до 20 файлов за раз, суммарно до 20 МБ."}</p>
     <div id="attach-list" class="attach-list muted">Загрузка…</div>
     ${readOnly ? "" : `<div class="field" style="margin-top:8px">
+      <label>Тип подтверждающего документа</label><select id="attach-document-type">${Object.entries(DOCUMENT_TYPE_LABELS).map(([code, label]) => `<option value="${escapeHTML(code)}">${escapeHTML(label)}</option>`).join("")}</select>
       <input type="file" id="attach-file" multiple aria-label="Необязательные вложения">
       <button type="button" class="btn secondary" id="attach-upload">Загрузить</button>
     </div>`}
@@ -1429,12 +1517,22 @@ async function wireAttachSection(root, entryId, readOnly = false) {
         ? items
             .map(
               (a) =>
-                `<div>📄 <a href="/api/attachments/${encodeURIComponent(a.id)}/download">${escapeHTML(a.file_name)}</a> <span class="muted">(до ${new Date(
+                `<div>📄 <a href="/api/attachments/${encodeURIComponent(a.id)}/download">${escapeHTML(a.file_name)}</a> · ${escapeHTML(DOCUMENT_TYPE_LABELS[a.document_type] || a.document_type)} <span class="status-badge ${a.review_status === "approved" ? "active" : a.review_status === "rejected" ? "inactive" : "pending"}">${a.review_status === "approved" ? "Проверен" : a.review_status === "rejected" ? "Отклонён" : "Ожидает проверки"}</span>${a.content_sha256 ? ` <code title="SHA-256: ${escapeHTML(a.content_sha256)}">SHA ${escapeHTML(a.content_sha256.slice(0, 10))}…</code>` : ""} <span class="muted">(до ${new Date(
                   a.retention_expires_at,
-                ).toLocaleDateString("ru-RU")})</span></div>`,
+                ).toLocaleDateString("ru-RU")})</span>${a.review_comment ? `<small>${escapeHTML(a.review_comment)}</small>` : ""}${["super_admin", "holding_admin", "org_admin", "legal_specialist"].includes(state.me.role) && a.review_status === "pending" ? `<button type="button" class="btn secondary" data-review="${escapeHTML(a.id)}" data-status="approved">Принять</button><button type="button" class="btn secondary" data-review="${escapeHTML(a.id)}" data-status="rejected">Отклонить</button>` : ""}</div>`,
             )
             .join("")
         : `<span class="muted">Файлов пока нет</span>`;
+      list.querySelectorAll("[data-review]").forEach((button) => { button.onclick = async () => {
+        const rejected = button.dataset.status === "rejected";
+        const comment = prompt(rejected ? "Причина отклонения (обязательно)" : "Комментарий проверяющего", "") ?? "";
+        if (rejected && !comment.trim()) return;
+        button.disabled = true;
+        try {
+          await api(`/attachments/${encodeURIComponent(button.dataset.review)}/review`, { method: "PATCH", body: JSON.stringify({ status: button.dataset.status, comment: comment.trim() }) });
+          await refresh();
+        } catch (error) { showToast(error.message); button.disabled = false; }
+      }; });
     } catch (e) {
       list.innerHTML = `<span class="error">${escapeHTML(e.message)}</span>`;
     }
@@ -1450,7 +1548,7 @@ async function wireAttachSection(root, entryId, readOnly = false) {
     uploadButton.disabled = true;
     uploadButton.textContent = "Загружаем…";
     try {
-      await uploadFileBatch(entryId, fileInput.files);
+      await uploadFileBatch(entryId, fileInput.files, root.querySelector("#attach-document-type").value);
       fileInput.value = "";
       await refresh();
       showToast("Файлы загружены", "success");
@@ -1467,7 +1565,7 @@ async function wireAttachSection(root, entryId, readOnly = false) {
 // ----------------------------------------------------------------- ADMIN --
 
 async function renderAdmin(root) {
-  const isAdmin = state.me.role === "admin";
+  const isAdmin = state.me.role === "super_admin";
   const showEducationDirectory = canReviewEducationDirectory();
   const showITDirectory = canViewITCompanies();
   const initialDirectoryTab = showEducationDirectory ? "partners" : "it-companies";
@@ -1497,7 +1595,7 @@ async function renderAdminTab(box, tab) {
   box.innerHTML = `<div class="card loading-state"><span class="spinner"></span>Загрузка данных…</div>`;
   try {
     const adminOnly = new Set(["users", "okz", "settings", "logs"]);
-    if (adminOnly.has(tab) && state.me.role !== "admin")
+    if (adminOnly.has(tab) && state.me.role !== "super_admin")
       throw new Error("Этот раздел доступен только администратору");
     if (tab === "users") return await renderAdminUsers(box);
     if (tab === "okz") return await CyberCalcOKZ.render(box, { api, escapeHTML, showToast });
@@ -1523,7 +1621,7 @@ async function renderAdminUsers(box) {
       <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select><div class="field-hint">Модератор не управляет пользователями и настройками.</div></div>
+      <div class="field"><label>Роль</label><select id="u-role"><option value="super_admin">SUPER_ADMIN</option><option value="holding_admin">HOLDING_ADMIN</option><option value="org_admin">ORG_ADMIN</option><option value="curator" selected>CURATOR</option><option value="hr_specialist">HRD / HR_SPECIALIST</option><option value="financial_specialist">FINANCIAL_SPECIALIST</option><option value="legal_specialist">LEGAL_SPECIALIST</option><option value="auditor_viewer">AUDITOR_VIEWER</option></select><div class="field-hint">Права назначаются по матрице RBAC; аудитор работает только в режиме чтения.</div></div>
       <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div>
       <div class="field" id="u-partner-field" hidden><label id="u-partner-label">Учебное заведение *</label><select id="u-partner"><option value="">Выберите учебное заведение</option>${(Array.isArray(
         state.partners,
@@ -1555,14 +1653,15 @@ async function renderAdminUsers(box) {
   const roleSelect = box.querySelector("#u-role");
   const syncUserType = () => {
     const education = entitySelect.value === "edu_institution";
-    box.querySelector("#u-partner-field").hidden = !education;
+    const curator = !education && roleSelect.value === "curator";
+    box.querySelector("#u-partner-field").hidden = !education && !curator;
     box.querySelector("#u-company-field").hidden = education;
-    const companyRequired = roleSelect.value === "user";
-    box.querySelector("#u-partner-label").textContent = "Учебное заведение *";
+    const companyRequired = roleSelect.value !== "super_admin";
+    box.querySelector("#u-partner-label").textContent = education ? "Учебное заведение *" : "Закреплённая ОО куратора";
     box.querySelector("#u-company-label").textContent = `ИТ-компания${companyRequired ? " *" : ""}`;
-    if (!education)
+    if (!education && !curator)
       box.querySelector("#u-partner").value = "";
-    else box.querySelector("#u-company").value = "";
+    if (education) box.querySelector("#u-company").value = "";
   };
   entitySelect.onchange = syncUserType;
   roleSelect.onchange = syncUserType;
@@ -1609,7 +1708,7 @@ async function renderAdminUsers(box) {
     }
     if (
       entitySelect.value === "edu_institution" ||
-      roleSelect.value === "user"
+      roleSelect.value !== "super_admin"
     ) {
       const assignmentInput = entitySelect.value === "edu_institution"
         ? box.querySelector("#u-partner")
@@ -1678,11 +1777,11 @@ async function renderAdminUsers(box) {
         ? `Найдено пользователей: ${users.length}`
         : `Всего пользователей: ${users.length}`;
       listBox.innerHTML = users.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Организация</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Организация</th><th>Закреплённая ОО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
           <tbody>${users
             .map(
               (u) => `<tr>
-            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.entity_type === "edu_institution" ? state.partners.find((partner) => partner.id === u.partner_id)?.name || "Учебное заведение не назначено" : state.itCompanies.find((company) => company.id === u.it_company_id)?.name || "ИТ-компания не назначена")}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
+            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.entity_type === "edu_institution" ? "Образовательная организация" : state.itCompanies.find((company) => company.id === u.it_company_id)?.name || "ИТ-компания не назначена")}</td><td>${escapeHTML(state.partners.find((partner) => partner.id === u.partner_id)?.name || "—")}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
             <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
             <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
           </tr>`,
@@ -1734,6 +1833,7 @@ async function renderAdminUsers(box) {
 
 async function renderAdminSettings(box) {
   const settings = await api("/admin/settings");
+  const companies = (await api("/admin/it-company-options")) || [];
   box.innerHTML = `<div class="card"><h2>Настройки хранения</h2>
     <div class="grid cols-2">
       <div class="field"><label>Хранение подтверждающих документов, дней</label>
@@ -1743,6 +1843,15 @@ async function renderAdminSettings(box) {
     </div>
     <button class="btn" id="s-save">Сохранить</button>
     <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
+  </div>
+  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2><p class="muted">Снимок фиксирует фактические мероприятия и SHA-256 каждого документа в одной транзакции, защищён собственной контрольной суммой и после формирования не изменяется.</p></div><span class="status-badge">Europe/Moscow</span></div>
+    <div class="grid cols-3">
+      <div class="field"><label>ИТ-компания</label><select id="snapshot-company"><option value="">Выберите компанию</option>${companies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
+      <div class="field"><label>Отчётный год</label><input id="snapshot-year" type="number" min="2000" max="2100" value="${state.year}"></div>
+      <div class="field"><label>&nbsp;</label><button class="btn" id="snapshot-create" type="button">Сформировать снимок</button></div>
+    </div>
+    <p class="field-hint">Формирование разрешено только 1 мая выбранного отчётного года по московскому времени. Повторная запись за тот же год запрещена.</p>
+    <div id="snapshot-list" class="loading-state"><span class="spinner"></span>Загрузка снимков…</div>
   </div>`;
   box.querySelector("#s-save").onclick = async () => {
     const button = box.querySelector("#s-save");
@@ -1782,6 +1891,48 @@ async function renderAdminSettings(box) {
       button.textContent = "Сохранить";
     }
   };
+
+  const companySelect = box.querySelector("#snapshot-company");
+  const snapshotList = box.querySelector("#snapshot-list");
+  const loadSnapshots = async () => {
+    if (!companySelect.value) {
+      snapshotList.className = "empty-state";
+      snapshotList.innerHTML = "<span>Выберите ИТ-компанию, чтобы увидеть снимки.</span>";
+      return;
+    }
+    snapshotList.className = "loading-state";
+    snapshotList.innerHTML = '<span class="spinner"></span>Загрузка снимков…';
+    try {
+      const items = await api(`/report-snapshots?it_company_id=${encodeURIComponent(companySelect.value)}`);
+      snapshotList.className = "";
+      snapshotList.innerHTML = items.length
+        ? `<div class="table-wrap"><table><thead><tr><th>Дата среза</th><th>Зафиксирован</th><th>Состав</th><th>SHA-256</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>${escapeHTML(item.snapshot_date)}</td><td>${new Date(item.captured_at).toLocaleString("ru-RU")}</td><td>${item.entries_count} мероприятий · ${item.documents_count} документов</td><td><code title="${escapeHTML(item.sha256)}">${escapeHTML(item.sha256.slice(0, 16))}…</code></td><td><a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(item.id)}?it_company_id=${encodeURIComponent(companySelect.value)}">Скачать JSON</a></td></tr>`).join("")}</tbody></table></div>`
+        : '<div class="empty-state"><b>Снимков пока нет</b><span>Система разрешит фиксацию 1 мая отчётного года.</span></div>';
+    } catch (error) {
+      snapshotList.className = "error-state";
+      snapshotList.textContent = error.message;
+    }
+  };
+  companySelect.onchange = loadSnapshots;
+  box.querySelector("#snapshot-create").onclick = async (event) => {
+    const year = Number(box.querySelector("#snapshot-year").value);
+    if (!companySelect.value || !Number.isInteger(year) || year < 2000 || year > 2100) {
+      showToast("Выберите ИТ-компанию и корректный отчётный год");
+      return;
+    }
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await api(`/report-snapshots?it_company_id=${encodeURIComponent(companySelect.value)}&report_year=${year}`, { method: "POST" });
+      showToast("Неизменяемый снимок сформирован", "success");
+      await loadSnapshots();
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  await loadSnapshots();
 }
 
 async function renderAdminLogs(box) {

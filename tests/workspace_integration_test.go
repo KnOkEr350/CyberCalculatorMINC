@@ -51,7 +51,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	password := "WorkspaceTest1!"
 	hash, _ := auth.HashPassword(password)
 	email := "test" + stamp + "@workspace.test"
-	if _, e := db.Exec(`INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES($1,$2,'Тест Администратор','admin','organization')`, email, hash); e != nil {
+	if _, e := db.Exec(`INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES($1,$2,'Тест Администратор','super_admin','organization')`, email, hash); e != nil {
 		t.Fatal(e)
 	}
 	newClient := func() *http.Client { jar, _ := cookiejar.New(nil); return &http.Client{Jar: jar} }
@@ -122,19 +122,19 @@ func TestWorkspaceIntegration(t *testing.T) {
 		ON CONFLICT (inn) DO UPDATE SET name=EXCLUDED.name,accreditation_status='active' RETURNING id`, "А Тестовая ИТ-компания "+stamp, "test-"+stamp, email).Scan(&itCompanyID); err != nil {
 		t.Fatal(err)
 	}
-	call(admin, "GET", "/it-companies", nil, 403)
-	call(admin, "POST", "/it-companies", map[string]string{}, 403)
+	call(admin, "GET", "/it-companies", nil, 200)
+	call(admin, "POST", "/it-companies", map[string]string{}, 400)
 	if options := call(admin, "GET", "/admin/it-company-options", nil, 200); !bytes.Contains(options, []byte(itCompanyID)) || bytes.Contains(options, []byte("source_url")) {
 		t.Fatal("assignment options must include the company without registry details")
 	}
 	companyEmail := "company" + stamp + "@workspace.test"
 	companyUser := map[string]interface{}{
 		"email": companyEmail, "password": password, "full_name": "Представитель ИТ-компании",
-		"role": "user", "entity_type": "organization",
+		"role": "curator", "entity_type": "organization",
 	}
 	call(admin, "POST", "/admin/users", companyUser, 400)
 	companyUser["it_company_id"] = itCompanyID
-	call(admin, "POST", "/admin/users", companyUser, 201)
+	companyUserID := object(call(admin, "POST", "/admin/users", companyUser, 201))["id"].(string)
 	call(companyClient, "POST", "/auth/login", map[string]string{"email": companyEmail, "password": password}, 200)
 	call(companyClient, "GET", "/admin/it-company-options", nil, 403)
 	companyProfile := object(call(companyClient, "GET", "/auth/me", nil, 200))
@@ -144,8 +144,9 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if _, err := db.Exec(`UPDATE users SET it_company_id=$1 WHERE email=$2`, itCompanyID, email); err != nil {
 		t.Fatal(err)
 	}
-	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 5000}, 200)
-	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 6000}, 200)
+	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "savings_base_rub": 200000, "target_amount_rub": 5999, "source_reference": "Уведомление Минцифры", "notified_at": "2026-07-31"}, 400)
+	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "savings_base_rub": 166666.67, "target_amount_rub": 5000, "source_reference": "Уведомление Минцифры № 1", "notified_at": "2026-07-31"}, 200)
+	call(admin, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "savings_base_rub": 200000, "target_amount_rub": 6000, "source_reference": "Уведомление Минцифры № 2", "notified_at": "2026-07-31"}, 200)
 	adminDashboard := object(call(admin, "GET", "/dashboard?report_year=2026", nil, 200))
 	if money(adminDashboard["target_amount_rub"]) != "6000.00" {
 		t.Fatal("owner-scoped target upsert failed")
@@ -196,6 +197,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": staleDirectory, "initial_agreement": agreement("STALE-" + stamp)}, 409)
 	p1, agreement1 := created1["id"].(string), created1["agreement_id"].(string)
 	p2, agreement2 := created2["id"].(string), created2["agreement_id"].(string)
+	call(admin, "PATCH", "/admin/users/"+companyUserID, map[string]interface{}{"partner_id": p1}, 200)
+	call(companyClient, "POST", "/auth/login", map[string]string{"email": companyEmail, "password": password}, 200)
 	badSchoolAgreement := agreement("BAD-SCHOOL-" + stamp)
 	call(admin, "POST", "/partners", map[string]interface{}{"directory_id": schoolDirectory, "initial_agreement": badSchoolAgreement}, 400)
 	authorityBody := map[string]interface{}{
@@ -247,9 +250,9 @@ func TestWorkspaceIntegration(t *testing.T) {
 	groupAgreement["status"] = "suspended"
 	call(admin, "PUT", "/agreements/"+groupID, groupAgreement, 200)
 	partnerEmail := "partner" + stamp + "@workspace.test"
-	call(admin, "POST", "/admin/users", map[string]interface{}{"email": partnerEmail, "password": password, "full_name": "Представитель Вуза", "role": "user", "entity_type": "edu_institution", "partner_id": p1}, 201)
+	call(admin, "POST", "/admin/users", map[string]interface{}{"email": partnerEmail, "password": password, "full_name": "Представитель Вуза", "role": "curator", "entity_type": "edu_institution", "partner_id": p1}, 201)
 	educationAdminEmail := "education-admin" + stamp + "@workspace.test"
-	call(admin, "POST", "/admin/users", map[string]interface{}{"email": educationAdminEmail, "password": password, "full_name": "Администратор Вуза", "role": "admin", "entity_type": "edu_institution", "partner_id": p1}, 201)
+	call(admin, "POST", "/admin/users", map[string]interface{}{"email": educationAdminEmail, "password": password, "full_name": "Администратор Вуза", "role": "org_admin", "entity_type": "edu_institution", "partner_id": p1}, 201)
 	usersByName := call(admin, "GET", "/admin/users?q="+url.QueryEscape("Представитель Вуза"), nil, 200)
 	if !bytes.Contains(usersByName, []byte(partnerEmail)) || bytes.Contains(usersByName, []byte(email)) {
 		t.Fatal("admin user search by full name returned the wrong users")
@@ -267,12 +270,12 @@ func TestWorkspaceIntegration(t *testing.T) {
 	educationAdminClient := newClient()
 	call(educationAdminClient, "POST", "/auth/login", map[string]string{"email": educationAdminEmail, "password": password}, 200)
 	educationAdminProfile := object(call(educationAdminClient, "GET", "/auth/me", nil, 200))
-	if educationAdminProfile["role"] != "admin" || educationAdminProfile["entity_type"] != "edu_institution" || educationAdminProfile["partner_id"] != p1 {
+	if educationAdminProfile["role"] != "org_admin" || educationAdminProfile["entity_type"] != "edu_institution" || educationAdminProfile["partner_id"] != p1 {
 		t.Fatal("education admin profile lost its assigned institution")
 	}
 	call(partnerClient, "POST", "/auth/entity-type", map[string]string{"entity_type": "organization"}, 403)
 	call(partnerClient, "POST", "/partners", map[string]interface{}{"directory_id": directory2, "initial_agreement": agreement("foreign")}, 403)
-	call(partnerClient, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "target_amount_rub": 1000}, 403)
+	call(partnerClient, "POST", "/dashboard/target", map[string]interface{}{"report_year": 2026, "savings_base_rub": 33333.33, "target_amount_rub": 1000, "source_reference": "Уведомление", "notified_at": "2026-07-31"}, 403)
 	reviewBody := map[string]interface{}{
 		"name": "Тестовый вуз B " + stamp, "partner_kind": "vuz", "region": "г. Москва",
 		"inn": "7707083893", "ogrn": "1027700132195", "license_number": "Л035-ТЕСТ-2",
@@ -324,7 +327,12 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p2, "full_name": "Иванов Иван Иванович"}, 403)
 	call(partnerClient, "POST", "/mentors", map[string]string{"partner_id": p1, "full_name": "123"}, 400)
 	teacher := func(p string) map[string]interface{} {
-		return map[string]interface{}{"org_name": p, "course_name": "ИТ", "education_level": "bachelor", "semester": 1, "teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 2}
+		return map[string]interface{}{
+			"org_name": p, "course_name": "ИТ", "education_level": "bachelor", "semester": 1,
+			"teacher_full_name": "Петров Пётр", "employment_form": "ГПХ", "academic_hours": 2,
+			"it_experience_days": 365, "okz_code": "2512", "employment_contract_reference": "ГПХ-1",
+			"appointment_order_reference": "Приказ-1", "individual_plan_reference": "План-1", "class_schedule": "По расписанию",
+		}
 	}
 	create := func(client *http.Client, p, agreementID, category, period string, payload map[string]interface{}, want int) []byte {
 		return call(client, "POST", "/entries", map[string]interface{}{"partner_id": p, "agreement_id": agreementID, "category_code": category, "period_type": period, "report_year": 2026, "audience": "vuz", "payload": payload}, want)
@@ -341,6 +349,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	create(companyClient, p1, agreement2, "teachers", "plan", teacher(p1), 400)
 	create(companyClient, p1, groupID, "teachers", "plan", teacher(p1), 400)
 	foreign := object(create(admin, p2, agreement2, "teachers", "fact", teacher(p2), 201))["id"].(string)
+	create(companyClient, p2, agreement2, "teachers", "plan", teacher(p2), 403)
 	shared := object(create(admin, p1, agreement1, "teachers", "plan", teacher(p1), 201))["id"].(string)
 	create(partnerClient, p2, agreement2, "teachers", "plan", teacher(p2), 403)
 	call(partnerClient, "PUT", "/entries/"+foreign, map[string]interface{}{"payload": teacher(p2), "comment": "изменение"}, 403)
@@ -353,8 +362,18 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if !bytes.Contains(listed, []byte(shared)) {
 		t.Fatal("representatives must share their partner's entries, not only see their own")
 	}
+	companyListed := call(companyClient, "GET", "/entries?report_year=2026", nil, 200)
+	if bytes.Contains(companyListed, []byte(foreign)) || !bytes.Contains(companyListed, []byte(shared)) {
+		t.Fatal("organization curator scope is not limited to the assigned educational organization")
+	}
 	call(partnerClient, "GET", "/entries?report_year=oops", nil, 400)
-	internship := map[string]interface{}{"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор", "duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3}
+	internship := map[string]interface{}{
+		"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор",
+		"duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3,
+		"internship_agreement_reference": "Соглашение-1", "mentor_order_reference": "Приказ-2",
+		"individual_program_reference": "Программа-1", "incoming_certificate_reference": "Справка-вход",
+		"outgoing_certificate_reference": "Справка-итог",
+	}
 	trainee := object(create(companyClient, p1, agreement1, "internship", "fact", internship, 201))
 	traineeID := trainee["id"].(string)
 	if money(trainee["amount_rub"]) != "30340.00" {
@@ -431,7 +450,12 @@ func TestWorkspaceIntegration(t *testing.T) {
 	create(admin, p2, agreement2, "teachers", "plan", teacher(p2), 201)
 	create(admin, p2, agreement2, "ood_rpd", "plan", map[string]interface{}{"org_name": p2, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Другая программа"}, 201)
 	create(admin, p2, agreement2, "internship", "plan", map[string]interface{}{"org_name": p2, "mentor_id": mentor2, "student_full_name": "Орлов Студент", "duration_months": 1, "student_load_hours_per_month": 2, "mentor_load_hours_per_month": 1}, 201)
-	create(admin, p2, agreement2, "minc_decision", "plan", map[string]interface{}{"org_name": p2, "decision_reference": "Решение МЦ-1", "activity_description": "Тестовое мероприятие", "metric_description": "Одна единица", "calculation_basis": "Фактическая стоимость", "amount_manual": 1000}, 201)
+	create(admin, p2, agreement2, "minc_decision", "plan", map[string]interface{}{
+		"org_name": p2, "decision_reference": "Решение МЦ-1", "instruction_authority": "president",
+		"instruction_reference": "Поручение П-1", "implementation_deadline": "2026-12-31",
+		"activity_description": "Тестовое мероприятие", "metric_description": "Одна единица",
+		"metric_unit": "ед.", "actual_volume": 1, "calculation_basis": "Фактическая стоимость", "amount_manual": 1000,
+	}, 201)
 	otherTransition := "/report-workflow/transition?agreement_id=" + agreement2 + "&report_year=2026&period_type=plan"
 	call(admin, "POST", otherTransition, map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "comment": "Другая ОО комплектна"}, 200)
 	call(admin, "POST", otherTransition, map[string]interface{}{"status": "verified", "comment": "Проверена другая ОО"}, 200)
@@ -455,19 +479,34 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "GET", strings.ReplaceAll(statusPath, p1, p2), nil, 403)
 	// Batch upload: optional, supported even on plan, and scoped on download.
 	attachments := object(upload(companyClient, "/entries/"+id+"/attachments", map[string][]byte{"Акт 1.txt": []byte("one"), "Акт 2.txt": []byte("two")}, 201))
-	if len(attachments["files"].([]interface{})) != 2 {
+	uploadedFiles := attachments["files"].([]interface{})
+	if len(uploadedFiles) != 2 {
 		t.Fatal("batch not saved")
 	}
-	attachID := attachments["id"].(string)
+	for _, raw := range uploadedFiles {
+		if len(raw.(map[string]interface{})["content_sha256"].(string)) != 64 {
+			t.Fatal("uploaded file has no SHA-256")
+		}
+	}
+	attachID := uploadedFiles[0].(map[string]interface{})["id"].(string)
+	expiringAttachID := uploadedFiles[1].(map[string]interface{})["id"].(string)
 	call(partnerClient, "GET", "/attachments/"+attachID+"/download", nil, 200)
+	var storedPath string
+	if err := db.QueryRow(`SELECT storage_path FROM attachments WHERE id=$1`, attachID).Scan(&storedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(storedPath, []byte("tampered"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	call(partnerClient, "GET", "/attachments/"+attachID+"/download", nil, 410)
 	foreignAttach := object(upload(admin, "/entries/"+foreign+"/attachments", map[string][]byte{"private.txt": []byte("secret")}, 201))["id"].(string)
 	call(partnerClient, "GET", "/attachments/"+foreignAttach+"/download", nil, 403)
 	upload(companyClient, "/entries/"+id+"/attachments", map[string][]byte{"empty.txt": {}}, 400)
-	db.Exec(`UPDATE attachments SET retention_expires_at=now()-interval '1 second' WHERE id=$1`, attachID)
-	call(partnerClient, "GET", "/attachments/"+attachID+"/download", nil, 410)
+	db.Exec(`UPDATE attachments SET retention_expires_at=now()-interval '1 second' WHERE id=$1`, expiringAttachID)
+	call(partnerClient, "GET", "/attachments/"+expiringAttachID+"/download", nil, 410)
 	// Excel: preview doesn't insert; commit recalculates; same batch cannot duplicate.
 	wb := xlsx.New()
-	wb.AddSheet("Данные", []string{"course_name", "education_level", "semester", "teacher_full_name", "employment_form", "academic_hours"}, [][]interface{}{{"Импорт", "bachelor", 1, "Петров Пётр", "ГПХ", 3}})
+	wb.AddSheet("Данные", []string{"course_name", "education_level", "semester", "teacher_full_name", "employment_form", "academic_hours", "it_experience_days", "okz_code", "employment_contract_reference", "appointment_order_reference", "individual_plan_reference", "class_schedule"}, [][]interface{}{{"Импорт", "bachelor", 1, "Петров Пётр", "ГПХ", 3, 365, "2512", "ГПХ-1", "Приказ-1", "План-1", "По расписанию"}})
 	book, _ := wb.Bytes()
 	importPath := "/entries/import?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&category_code=teachers&period_type=fact&report_year=2026"
 	upload(partnerClient, importPath, map[string][]byte{"data.xlsx": book}, 403)
@@ -501,8 +540,16 @@ func TestWorkspaceIntegration(t *testing.T) {
 	confirmations := map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "counterparty_confirmed": true, "comment": "Комплект проверен"}
 	call(companyClient, "POST", transitionPath, confirmations, 422)
 	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
-	create(companyClient, p1, agreement1, "ood_rpd", "fact", map[string]interface{}{"org_name": p1, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Безопасность"}, 201)
-	create(companyClient, p1, agreement1, "top_it", "fact", map[string]interface{}{"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт факт", "cofinancing_amount_rub": 1000}, 201)
+	create(companyClient, p1, agreement1, "ood_rpd", "fact", map[string]interface{}{
+		"org_name": p1, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Безопасность",
+		"expert_full_name": "Эксперт Эксперт", "project_document_reference": "Проект-1",
+		"expert_conclusion_reference": "Заключение-1", "approval_reference": "Протокол-1",
+	}, 201)
+	create(companyClient, p1, agreement1, "top_it", "fact", map[string]interface{}{
+		"org_name": p1, "project_name": "ТОП ИТ", "program_name": "ИТ", "cofinancing_report_reference": "Отчёт факт", "cofinancing_amount_rub": 1000,
+		"planned_cofinancing_amount_rub": 1000, "transferred_amount_rub": 1000, "actual_spent_amount_rub": 1000,
+		"top_agreement_reference": "Договор-1", "payment_order_reference": "Платёж-1", "spending_act_reference": "Акт-1", "ano_letter_reference": "Письмо-1",
+	}, 201)
 	call(companyClient, "POST", transitionPath, confirmations, 200)
 	workflow = object(call(companyClient, "GET", workflowPath, nil, 200))
 	if workflow["counterparty_confirmed"].(bool) {

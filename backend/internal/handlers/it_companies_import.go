@@ -140,7 +140,7 @@ func ImportITCompanies(ctx context.Context, db *sql.DB, data []byte, userID stri
 		return 0, err
 	}
 	if userID == "" {
-		if err = tx.QueryRowContext(ctx, `SELECT id::text FROM users WHERE role='admin' ORDER BY created_at,id LIMIT 1`).Scan(&userID); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT id::text FROM users WHERE role='super_admin' ORDER BY created_at,id LIMIT 1`).Scan(&userID); err != nil {
 			return 0, err
 		}
 	}

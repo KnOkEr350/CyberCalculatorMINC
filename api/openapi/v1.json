@@ -92,15 +92,21 @@
     "/api/entries/{id}/attachments": {
       "parameters": [{ "$ref": "#/components/parameters/ID" }],
       "get": { "tags": ["documents"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["documents"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["documents"], "parameters": [{ "name": "document_type", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/DocumentType" } }], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/attachments/{id}/download": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["documents"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/attachments/{id}/review": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "patch": { "tags": ["documents"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
 
     "/api/dashboard": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/dashboard/target": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/reports/export": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-workflow": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-workflow/transition": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/report-snapshots": {
+      "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "post": { "tags": ["reporting"], "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/report-snapshots/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
 
     "/api/admin/users": {
       "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
@@ -128,6 +134,7 @@
       "Date": { "type": "string", "format": "date", "examples": ["2026-09-21"] },
       "DateTime": { "type": "string", "format": "date-time", "examples": ["2026-09-21T12:00:00Z"] },
       "Money": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,14})\\.[0-9]{2}$", "examples": ["125000.00"], "description": "Рубли и копейки; JSON float и экспоненциальная запись запрещены." },
+      "DocumentType": { "type": "string", "enum": ["other", "employment_contract", "organization_agreement", "individual_plan", "appointment_order", "program_project", "expert_conclusion", "academic_council_protocol", "internship_agreement", "practice_agreement", "labor_contract", "mentor_order", "individual_program", "incoming_certificate", "outgoing_certificate", "top_agreement", "payment_order", "spending_act", "ano_letter", "school_agreement", "participant_groups", "acceptance_act", "digital_trace", "ministry_decision", "expense_evidence", "auditor_report"] },
       "FieldError": {
         "type": "object",
         "required": ["field", "message"],
@@ -162,13 +169,17 @@
       },
       "UploadMetadata": {
         "type": "object",
-        "required": ["id", "file_name", "content_type", "size_bytes", "uploaded_at"],
+        "required": ["id", "file_name", "size_bytes", "document_type", "review_status"],
         "properties": {
           "id": { "$ref": "#/components/schemas/UUID" },
           "file_name": { "type": "string", "minLength": 1, "maxLength": 255 },
           "content_type": { "type": "string" },
           "size_bytes": { "type": "integer", "minimum": 1, "maximum": 20971520 },
-          "uploaded_at": { "$ref": "#/components/schemas/DateTime" }
+          "content_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "document_type": { "$ref": "#/components/schemas/DocumentType" },
+          "review_status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+          "uploaded_at": { "$ref": "#/components/schemas/DateTime" },
+          "retention_expires_at": { "$ref": "#/components/schemas/DateTime" }
         },
         "additionalProperties": true
       },
@@ -265,7 +276,8 @@
         "description": "Потоковая загрузка файла",
         "headers": {
           "Content-Disposition": { "required": true, "schema": { "type": "string" } },
-          "Content-Length": { "required": false, "schema": { "type": "integer", "minimum": 0 } }
+          "Content-Length": { "required": false, "schema": { "type": "integer", "minimum": 0 } },
+          "X-Content-SHA256": { "required": false, "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
         },
         "content": {
           "application/octet-stream": { "schema": { "type": "string", "contentMediaType": "application/octet-stream" } },

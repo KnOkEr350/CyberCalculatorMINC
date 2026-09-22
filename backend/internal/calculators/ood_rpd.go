@@ -66,5 +66,9 @@ func (oodRpdCalc) Fields() []FieldSpec {
 		{Key: "program_name", Label: "Наименование РПД/ООП", Type: "text", Required: true},
 		{Key: "expert_full_name", Label: "ФИО эксперта", Type: "text"},
 		{Key: "students_reach", Label: "Охват студентов", Type: "number", Integer: true},
+		{Key: "specialty_code", Label: "Код ИТ-специальности по приказу № 27", Type: "text"},
+		{Key: "project_document_reference", Label: "Реквизиты проекта ООП/РПД", Type: "text", MaxLength: 1000},
+		{Key: "expert_conclusion_reference", Label: "Реквизиты экспертного заключения", Type: "text", MaxLength: 1000},
+		{Key: "approval_reference", Label: "Решение об утверждении / учёный совет", Type: "text", MaxLength: 1000},
 	}
 }

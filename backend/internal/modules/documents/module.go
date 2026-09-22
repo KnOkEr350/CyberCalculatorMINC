@@ -36,4 +36,7 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/attachments/{id}/download", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.attachments.Download(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("PATCH /api/attachments/{id}/review", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.attachments.Review(w, r, u, r.PathValue("id"))
+	}))
 }

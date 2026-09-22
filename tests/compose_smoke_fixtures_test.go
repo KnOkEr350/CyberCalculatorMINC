@@ -28,9 +28,9 @@ func (s *composeSmoke) seedID(t *testing.T, query string) string {
 	return requireSmokeID(t, "fixture result", id)
 }
 
-func (s *composeSmoke) seedTenant(t *testing.T) {
+func (s *composeSmoke) seedTenant(t *testing.T) string {
 	t.Helper()
-	s.seedID(t, `WITH company AS (
+	return s.seedID(t, `WITH company AS (
 		INSERT INTO accredited_it_companies(
 			name,inn,ogrn,accreditation_status,registry_record_id,
 			registry_updated_at,source_url,created_by
@@ -87,15 +87,18 @@ func (s *composeSmoke) createPartner(t *testing.T, admin *smokeClient) smokePart
 	return partner
 }
 
-func (s *composeSmoke) createModerator(t *testing.T, admin *smokeClient, email, entityType, partnerID string) *smokeClient {
+func (s *composeSmoke) createOrgAdmin(t *testing.T, admin *smokeClient, email, entityType, partnerID, companyID string) *smokeClient {
 	t.Helper()
 	const password = "ModeratorPass1!"
 	payload := map[string]string{
-		"email": email, "password": password, "full_name": "CI Moderator",
-		"role": "moderator", "entity_type": entityType,
+		"email": email, "password": password, "full_name": "CI Organization Administrator",
+		"role": "org_admin", "entity_type": entityType,
 	}
 	if partnerID != "" {
 		payload["partner_id"] = partnerID
+	}
+	if companyID != "" {
+		payload["it_company_id"] = companyID
 	}
 	admin.json(t, "POST", "/api/admin/users", payload, http.StatusCreated)
 	return s.login(t, email, password)

@@ -66,12 +66,11 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 			return
 		}
 		u.Role = models.Role(role)
-		privileged := role == string(models.RoleAdmin) || role == string(models.RoleModerator)
-		if required, _ := r.Context().Value(ctxKey("require_mfa")).(bool); required && privileged && !mfaEnabled {
+		if required, _ := r.Context().Value(ctxKey("require_mfa")).(bool); required && !mfaEnabled {
 			switch r.URL.Path {
-			case "/api/auth/me", "/api/auth/password", "/api/auth/mfa/enroll", "/api/auth/mfa/confirm":
+			case "/api/auth/me", "/api/auth/logout", "/api/auth/password", "/api/auth/mfa/enroll", "/api/auth/mfa/confirm":
 			default:
-				WriteError(w, 403, "сначала настройте двухфакторную защиту администратора")
+				WriteError(w, 403, "сначала настройте двухфакторную защиту профиля")
 				return
 			}
 		}

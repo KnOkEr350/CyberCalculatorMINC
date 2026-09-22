@@ -150,7 +150,7 @@ func (h *AuthHandlers) ChangePassword(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 429, "повторите позже")
 		return
 	}
-	check := createUserRequest{Email: "check@example.com", FullName: "Проверка пароля", Password: req.New, Role: "user"}
+	check := createUserRequest{Email: "check@example.com", FullName: "Проверка пароля", Password: req.New, Role: string(models.RoleCurator)}
 	if err := validateAndNormalizeNewUser(&check); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
@@ -228,7 +228,7 @@ func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request, u middleware.A
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
-	user.MFARequired = h.RequireMFA && (user.Role == models.RoleAdmin || user.Role == models.RoleModerator) && !user.MFAEnabled
+	user.MFARequired = h.RequireMFA && !user.MFAEnabled
 	user.MFAAvailable = h.MFAKey != ""
 	middleware.WriteJSON(w, http.StatusOK, user)
 }

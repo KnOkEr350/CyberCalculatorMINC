@@ -155,12 +155,12 @@ func main() {
 
 func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 	var count int
-	if err := db.QueryRow(`SELECT count(*) FROM users WHERE role = 'admin'`).Scan(&count); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM users WHERE role = 'super_admin'`).Scan(&count); err != nil {
 		return err
 	}
 	if count > 0 {
 		_, err := db.Exec(`UPDATE users SET entity_type='organization',updated_at=now()
-			WHERE role='admin' AND entity_type IS NULL`)
+			WHERE role='super_admin' AND entity_type IS NULL`)
 		return err
 	}
 	hash, err := auth.HashPassword(cfg.AdminBootPassword)
@@ -169,7 +169,7 @@ func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
 	}
 	result, err := db.Exec(
 		`INSERT INTO users (email, password_hash, full_name, role, entity_type)
-		 VALUES ($1,$2,$3,'admin','organization')
+			 VALUES ($1,$2,$3,'super_admin','organization')
 		 ON CONFLICT (email) DO NOTHING`,
 		cfg.AdminBootEmail, hash, "Администратор",
 	)

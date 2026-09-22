@@ -98,7 +98,8 @@ func normalizeDirectoryWrite(req *directoryWriteRequest) error {
 	}
 	if req.RegistryUpdatedAt != "" {
 		date, err := time.Parse("2006-01-02", req.RegistryUpdatedAt)
-		if err != nil || date.After(time.Now().UTC().Truncate(24*time.Hour)) {
+		moscowToday := time.Now().In(time.FixedZone("Europe/Moscow", 3*60*60)).Format("2006-01-02")
+		if err != nil || req.RegistryUpdatedAt > moscowToday {
 			return fmt.Errorf("дата актуальности должна быть корректной и не из будущего")
 		}
 		if req.Confirm && !freshRegistryDate(date, time.Now()) {

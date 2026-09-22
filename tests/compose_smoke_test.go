@@ -45,14 +45,14 @@ func TestComposeWorkspace(t *testing.T) {
 	s := newComposeSmoke(t)
 	admin := s.login(t, smokeAdminEmail, smokeAdminPassword)
 	admin.json(t, "POST", "/api/auth/entity-type", map[string]string{"entity_type": "organization"}, http.StatusOK)
-	s.seedTenant(t)
+	tenantID := s.seedTenant(t)
 	partner := s.createPartner(t, admin)
 
 	t.Run("create_edit_and_attachments", func(t *testing.T) {
 		testComposeAttachments(t, admin, partner)
 	})
 	t.Run("moderator_boundaries_and_registry", func(t *testing.T) {
-		testComposeModerators(t, s, admin, partner)
+		testComposeOrgAdmins(t, s, admin, partner, tenantID)
 	})
 }
 
@@ -99,15 +99,16 @@ func testComposeAttachments(t *testing.T, admin *smokeClient, partner smokePartn
 	}
 }
 
-func testComposeModerators(t *testing.T, s *composeSmoke, admin *smokeClient, partner smokePartner) {
-	moderator := s.createModerator(t, admin, "ci-moderator@example.invalid", "organization", "")
-	for _, path := range []string{"it-companies", "it-companies/registry-search", "it-companies/template"} {
-		moderator.json(t, "GET", "/api/"+path, nil, http.StatusForbidden)
+func testComposeOrgAdmins(t *testing.T, s *composeSmoke, admin *smokeClient, partner smokePartner, tenantID string) {
+	orgAdmin := s.createOrgAdmin(t, admin, "ci-org-admin@example.invalid", "organization", "", tenantID)
+	for _, path := range []string{"it-companies", "it-companies/registry-search"} {
+		orgAdmin.json(t, "GET", "/api/"+path, nil, http.StatusOK)
 	}
+	orgAdmin.json(t, "GET", "/api/it-companies/template", nil, http.StatusForbidden)
 	for _, path := range []string{"it-companies", "it-companies/import"} {
-		moderator.json(t, "POST", "/api/"+path, nil, http.StatusForbidden)
+		orgAdmin.json(t, "POST", "/api/"+path, nil, http.StatusForbidden)
 	}
-	moderator.request(t, "GET", "/api/admin/directory-template", "", nil, http.StatusOK)
+	orgAdmin.request(t, "GET", "/api/admin/directory-template", "", nil, http.StatusOK)
 	// Resolve the partner through nginx as well as checking the creation response.
 	partners := decodeSmoke[[]struct{ ID, Name string }](t, admin.json(t, "GET", "/api/partners", nil, http.StatusOK))
 	found := false
@@ -119,13 +120,13 @@ func testComposeModerators(t *testing.T, s *composeSmoke, admin *smokeClient, pa
 	if !found {
 		t.Fatal("created university missing from the administrator's workspace")
 	}
-	education := s.createModerator(t, admin, "ci-education-moderator@example.invalid", "edu_institution", partner.ID)
-	for _, client := range []*smokeClient{moderator, education} {
+	education := s.createOrgAdmin(t, admin, "ci-education-org-admin@example.invalid", "edu_institution", partner.ID, "")
+	for _, client := range []*smokeClient{orgAdmin, education} {
 		for _, path := range []string{"admin/users", "admin/settings", "admin/logs"} {
 			client.json(t, "GET", "/api/"+path, nil, http.StatusForbidden)
 		}
 	}
-	education.json(t, "POST", "/api/it-companies", map[string]string{
+	admin.json(t, "POST", "/api/it-companies", map[string]string{
 		"name": "CI accredited IT company", "inn": "7707083893", "ogrn": "1027700132195",
 		"accreditation_number": "CI-ACCREDITATION-1", "registry_record_id": "ci-it-company-1",
 		"registry_updated_at": time.Now().UTC().Format(time.DateOnly),

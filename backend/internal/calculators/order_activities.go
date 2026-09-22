@@ -20,14 +20,38 @@ const (
 type topITCalc struct{}
 
 func (topITCalc) Calculate(audience models.Audience, payload map[string]interface{}) (float64, error) {
-	if audience != models.AudienceVuz && audience != models.AudienceKolledj {
-		return 0, fmt.Errorf("категория «ТОП ИТ / ТОП ИИ» не поддерживает аудиторию %q", audience)
+	if audience != models.AudienceVuz {
+		return 0, fmt.Errorf("категория «ТОП ИТ / ТОП ИИ» поддерживает только высшее образование")
 	}
-	amount, err := positiveNum(payload, "cofinancing_amount_rub")
+	amountKey := "cofinancing_amount_rub"
+	if _, ok := payload["actual_spent_amount_rub"]; ok {
+		amountKey = "actual_spent_amount_rub"
+	}
+	amount, err := positiveNum(payload, amountKey)
 	if err != nil {
 		return 0, err
 	}
 	return round2(amount), nil
+}
+
+func (topITCalc) Validate(payload map[string]interface{}) error {
+	spentRaw, spentOK := payload["actual_spent_amount_rub"]
+	transferredRaw, transferredOK := payload["transferred_amount_rub"]
+	if !spentOK || !transferredOK || spentRaw == nil || transferredRaw == nil {
+		return nil
+	}
+	spent, err := nonNegativeNum(payload, "actual_spent_amount_rub")
+	if err != nil {
+		return err
+	}
+	transferred, err := nonNegativeNum(payload, "transferred_amount_rub")
+	if err != nil {
+		return err
+	}
+	if spent > transferred {
+		return fmt.Errorf("фактически израсходованная сумма не может превышать перечисленную")
+	}
+	return nil
 }
 
 func (topITCalc) Fields() []FieldSpec {
@@ -41,6 +65,17 @@ func (topITCalc) Fields() []FieldSpec {
 		{Key: "cost_type", Label: "Тип затрат", Type: "text"},
 		{Key: "cofinancing_report_reference", Label: "Реквизиты отчёта о софинансировании", Type: "text", Required: true},
 		{Key: "cofinancing_amount_rub", Label: "Объём софинансирования по отчёту, руб.", Type: "number", Required: true},
+		{Key: "program_wave", Label: "Волна программы", Type: "text"},
+		{Key: "partner_role", Label: "Роль организации", Type: "select", Options: []string{"anchor", "partner"}},
+		{Key: "grant_amount_rub", Label: "Размер гранта, руб.", Type: "number", Minimum: 0},
+		{Key: "planned_cofinancing_amount_rub", Label: "План софинансирования X, руб.", Type: "number", Minimum: 0},
+		{Key: "transferred_amount_rub", Label: "Перечислено, руб.", Type: "number", Minimum: 0},
+		{Key: "actual_spent_amount_rub", Label: "Фактически израсходовано, руб.", Type: "number", Minimum: 0},
+		{Key: "expense_article", Label: "Статья расходов", Type: "text", MaxLength: 500},
+		{Key: "top_agreement_reference", Label: "Реквизиты договора", Type: "text", MaxLength: 1000},
+		{Key: "payment_order_reference", Label: "Платёжное поручение", Type: "text", MaxLength: 1000},
+		{Key: "spending_act_reference", Label: "Акт / отчёт о расходовании", Type: "text", MaxLength: 1000},
+		{Key: "ano_letter_reference", Label: "Письмо-согласование АНО АЦ", Type: "text", MaxLength: 1000},
 	}
 }
 
@@ -101,6 +136,10 @@ func (schoolProgramsCalc) Fields() []FieldSpec {
 		{Key: "academic_hours", Label: "Количество академических часов", Type: "number", Required: true},
 		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true, Integer: true},
 		{Key: "students_count", Label: "Численность учащихся 5–11 классов", Type: "number", Required: true, Integer: true},
+		{Key: "class_range", Label: "Классы", Type: "text"},
+		{Key: "school_agreement_reference", Label: "Соглашение со школой / РОИВ", Type: "text", MaxLength: 1000},
+		{Key: "participant_groups_reference", Label: "Реестр групп участников", Type: "text", MaxLength: 1000},
+		{Key: "acceptance_act_reference", Label: "Акт приёмки", Type: "text", MaxLength: 1000},
 	}, schoolFundingFields()...)
 }
 
@@ -141,6 +180,9 @@ func (teacherTrainingCalc) Fields() []FieldSpec {
 		{Key: "developed_programs_count", Label: "Количество разработанных программ", Type: "number", Required: true, Integer: true},
 		{Key: "academic_hours_per_teacher", Label: "Количество академических часов на одного учителя", Type: "number", Required: true},
 		{Key: "trained_teachers_count", Label: "Количество обученных учителей информатики", Type: "number", Required: true, Integer: true},
+		{Key: "school_agreement_reference", Label: "Соглашение со школой / РОИВ", Type: "text", MaxLength: 1000},
+		{Key: "participant_groups_reference", Label: "Реестр обученных учителей", Type: "text", MaxLength: 1000},
+		{Key: "acceptance_act_reference", Label: "Акт приёмки", Type: "text", MaxLength: 1000},
 	}, schoolFundingFields()...)
 }
 
@@ -177,6 +219,8 @@ func (educationalContentCalc) Fields() []FieldSpec {
 		{Key: "student_platform_months", Label: "Суммарные месяцы доступа всех учащихся", Type: "number", Required: true, Integer: true},
 		{Key: "teacher_platform_months", Label: "Суммарные месяцы доступа всех учителей", Type: "number", Required: true, Integer: true},
 		{Key: "digital_trace_reference", Label: "Описание/ссылка на подтверждение цифрового следа", Type: "text", Required: true},
+		{Key: "school_agreement_reference", Label: "Соглашение со школой / РОИВ", Type: "text", MaxLength: 1000},
+		{Key: "acceptance_act_reference", Label: "Акт приёмки доступа", Type: "text", MaxLength: 1000},
 	}, schoolFundingFields()...)
 }
 

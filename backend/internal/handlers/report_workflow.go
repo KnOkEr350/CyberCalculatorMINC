@@ -3,13 +3,16 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"cybercalc/internal/compliance"
 	"cybercalc/internal/middleware"
+	"github.com/lib/pq"
 )
 
 type ReportWorkflowHandlers struct{ DB *sql.DB }
@@ -59,6 +62,9 @@ type reportWorkflowResponse struct {
 	ReadyAt                *time.Time             `json:"ready_at,omitempty"`
 	VerifiedAt             *time.Time             `json:"verified_at,omitempty"`
 	ApprovedAt             *time.Time             `json:"approved_at,omitempty"`
+	ReviewDueAt            *time.Time             `json:"review_due_at,omitempty"`
+	ReviewDays             int                    `json:"review_calendar_days"`
+	ReviewOverdue          bool                   `json:"review_overdue"`
 	History                []reportHistoryItem    `json:"history"`
 }
 
@@ -179,6 +185,13 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	}
 	if readyAt.Valid {
 		resp.ReadyAt = &readyAt.Time
+		resp.ReviewDays = 10
+		if period == "fact" {
+			resp.ReviewDays = 20
+		}
+		due := readyAt.Time.AddDate(0, 0, resp.ReviewDays)
+		resp.ReviewDueAt = &due
+		resp.ReviewOverdue = resp.Status == "ready" && time.Now().After(due)
 	}
 	if verifiedAt.Valid {
 		resp.VerifiedAt = &verifiedAt.Time
@@ -241,6 +254,42 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 		{Code: "responsible_people", Label: "Указаны ответственные обеих сторон", Complete: peopleValid},
 		{Code: "activity_scope", Label: "Перечень видов мероприятий задан в соглашении", Complete: len(required) > 0},
 		{Code: "activities", Label: "По каждому виду есть мероприятие с положительной расчётной суммой", Complete: activitiesComplete},
+	}
+	if period == "fact" {
+		entryRows, entryErr := q.QueryContext(ctx, `SELECT e.category_code,e.payload,
+			ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=e.id AND a.retention_expires_at>now())
+			FROM entries e WHERE e.agreement_id::text=$1 AND e.report_year=$2 AND e.period_type=$3`, agreementID, year, period)
+		if entryErr != nil {
+			return resp, entryErr
+		}
+		total, incomplete := 0, 0
+		for entryRows.Next() {
+			var category string
+			var payloadRaw []byte
+			var documents pq.StringArray
+			if entryErr = entryRows.Scan(&category, &payloadRaw, &documents); entryErr != nil {
+				entryRows.Close()
+				return resp, entryErr
+			}
+			payload := map[string]interface{}{}
+			if entryErr = json.Unmarshal(payloadRaw, &payload); entryErr != nil {
+				entryRows.Close()
+				return resp, entryErr
+			}
+			total++
+			if result := compliance.Evaluate(category, period, payload, []string(documents)); !result.Eligible {
+				incomplete++
+			}
+		}
+		if entryErr = entryRows.Err(); entryErr != nil {
+			entryRows.Close()
+			return resp, entryErr
+		}
+		entryRows.Close()
+		resp.AutomaticChecks = append(resp.AutomaticChecks, reportAutomaticCheck{
+			Code: "entry_readiness", Label: "Все мероприятия имеют зелёную документальную готовность",
+			Complete: total > 0 && incomplete == 0, Detail: fmt.Sprintf("не готовы: %d из %d", incomplete, total),
+		})
 	}
 	if period == "fact" {
 		resp.AutomaticChecks = append(resp.AutomaticChecks, reportAutomaticCheck{Code: "actual_costs", Label: "Для фактических затрат указано аудиторское заключение", Complete: auditorValid})

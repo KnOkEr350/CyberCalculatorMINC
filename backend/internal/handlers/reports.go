@@ -52,6 +52,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		middleware.WriteError(w, http.StatusBadRequest, "укажите report_year")
 		return
 	}
+	if q.Get("report_type") == "annex4" {
+		h.exportAnnex4(w, r, u, year)
+		return
+	}
 	periodType := q.Get("period_type")
 	if periodType != "plan" && periodType != "fact" {
 		middleware.WriteError(w, http.StatusBadRequest, "period_type должен быть plan или fact")

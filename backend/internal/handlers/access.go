@@ -31,14 +31,100 @@ func requireITCompanyForWrite(w http.ResponseWriter, u middleware.AuthUser) (str
 // An organization profile represents the obligated IT organization and works
 // across its educational partners. Admin and moderator are operator roles.
 func isStaff(u middleware.AuthUser) bool {
-	return u.Role == models.RoleAdmin || u.Role == models.RoleModerator || u.EntityType == models.EntityOrganization
+	if u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin {
+		return true
+	}
+	return u.EntityType == models.EntityOrganization && (u.Role == models.RoleOrgAdmin || u.Role == models.RoleCurator)
+}
+
+func canReadTenantData(u middleware.AuthUser) bool {
+	return isStaff(u) || (u.EntityType == models.EntityOrganization && models.ValidRole(u.Role))
 }
 
 // The Order assigns preparation of the plan and reports to the obligated IT
 // organization. An educational organization is a counterparty: it may read its
 // own materials and review a submitted fact report, but it must not author it.
 func canPrepareReports(u middleware.AuthUser) bool {
-	return u.EntityType != models.EntityEduInst && isStaff(u)
+	if u.EntityType == models.EntityEduInst {
+		return false
+	}
+	switch u.Role {
+	case models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator:
+		return true
+	default:
+		return false
+	}
+}
+
+func canEditEntryCategory(u middleware.AuthUser, category string) bool {
+	if canPrepareReports(u) {
+		return true
+	}
+	switch u.Role {
+	case models.RoleHRSpecialist:
+		return category == "internship" || category == "employment_practice"
+	case models.RoleFinancialSpecialist:
+		return category == "teachers"
+	default:
+		return false
+	}
+}
+
+func canEditAnyEntry(u middleware.AuthUser) bool {
+	if u.EntityType == models.EntityEduInst {
+		return false
+	}
+	switch u.Role {
+	case models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator,
+		models.RoleHRSpecialist, models.RoleFinancialSpecialist:
+		return true
+	default:
+		return false
+	}
+}
+
+func canCreateEntryCategory(u middleware.AuthUser, category string) bool {
+	if canPrepareReports(u) {
+		return true
+	}
+	return u.EntityType != models.EntityEduInst && u.Role == models.RoleHRSpecialist &&
+		(category == "internship" || category == "employment_practice")
+}
+
+func canCreateAnyEntry(u middleware.AuthUser) bool {
+	return canPrepareReports(u) || (u.EntityType != models.EntityEduInst && u.Role == models.RoleHRSpecialist)
+}
+
+func canUploadDocument(u middleware.AuthUser, category, documentType string) bool {
+	if u.EntityType == models.EntityEduInst {
+		return u.Role == models.RoleCurator && documentType == "outgoing_certificate"
+	}
+	if u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin || u.Role == models.RoleOrgAdmin {
+		return true
+	}
+	if (category == "internship" || category == "employment_practice") &&
+		(documentType == "labor_contract" || documentType == "incoming_certificate" || documentType == "mentor_order") {
+		return u.Role == models.RoleHRSpecialist
+	}
+	if documentType == "outgoing_certificate" {
+		return u.Role == models.RoleCurator
+	}
+	if category == "teachers" && documentType == "payment_order" {
+		return u.Role == models.RoleFinancialSpecialist
+	}
+	return u.Role == models.RoleCurator
+}
+
+func canUploadAnyDocument(u middleware.AuthUser) bool {
+	if u.EntityType == models.EntityEduInst {
+		return u.Role == models.RoleCurator
+	}
+	switch u.Role {
+	case models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator, models.RoleHRSpecialist, models.RoleFinancialSpecialist:
+		return true
+	default:
+		return false
+	}
 }
 
 func isEducationRepresentative(u middleware.AuthUser) bool {
@@ -53,22 +139,19 @@ func canReviewReport(u middleware.AuthUser, period string) bool {
 	// statutory response period. A regular IT-organization user cannot approve
 	// the counterparty's own review.
 	return isEducationRepresentative(u) ||
-		(u.EntityType != models.EntityEduInst && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator))
+		(u.EntityType != models.EntityEduInst && (u.Role == models.RoleSuperAdmin || u.Role == models.RoleOrgAdmin || u.Role == models.RoleLegalSpecialist))
 }
 
 func canApproveReports(u middleware.AuthUser) bool {
-	return u.EntityType != models.EntityEduInst && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)
+	return u.EntityType != models.EntityEduInst && (u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin || u.Role == models.RoleOrgAdmin)
 }
 
 func canManageITCompanies(u middleware.AuthUser) bool {
-	if u.Role == models.RoleAdmin || u.Role == models.RoleModerator {
-		return u.EntityType == models.EntityEduInst
-	}
-	return u.EntityType == models.EntityOrganization
+	return u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin
 }
 
 func canViewITCompanies(u middleware.AuthUser) bool {
-	return canManageITCompanies(u) || (u.Role == models.RoleUser && u.EntityType == models.EntityEduInst)
+	return models.ValidRole(u.Role)
 }
 
 // Administrators and moderators work with the counterparty directory:
@@ -76,24 +159,27 @@ func canViewITCompanies(u middleware.AuthUser) bool {
 // organization profiles review accredited IT companies. The user-role branches
 // preserve the existing non-administrative workspaces.
 func canReviewEducationDirectory(u middleware.AuthUser) bool {
-	if u.Role == models.RoleAdmin || u.Role == models.RoleModerator {
-		return u.EntityType == models.EntityOrganization
+	if u.EntityType == models.EntityOrganization {
+		return true
 	}
-	return u.EntityType == models.EntityEduInst
+	return u.Role == models.RoleCurator && u.EntityType == models.EntityEduInst
 }
 
 func canProposeEducationDirectory(u middleware.AuthUser) bool {
-	return u.Role == models.RoleModerator && u.EntityType == models.EntityOrganization
+	return u.Role == models.RoleOrgAdmin && u.EntityType == models.EntityOrganization
 }
 
 func canApproveEducationDirectory(u middleware.AuthUser) bool {
-	return u.Role == models.RoleAdmin && u.EntityType == models.EntityOrganization
+	return u.Role == models.RoleSuperAdmin && u.EntityType == models.EntityOrganization
 }
 func canAccessPartner(u middleware.AuthUser, id string) bool {
 	if u.EntityType == models.EntityEduInst {
 		return u.PartnerID != nil && *u.PartnerID == id && id != ""
 	}
-	return isStaff(u)
+	if u.EntityType == models.EntityOrganization && u.Role == models.RoleCurator {
+		return u.PartnerID != nil && *u.PartnerID == id && id != ""
+	}
+	return canReadTenantData(u)
 }
 func requirePartner(w http.ResponseWriter, u middleware.AuthUser, id string) bool {
 	if !canAccessPartner(u, id) {
@@ -110,7 +196,7 @@ func requirePartnerTenant(w http.ResponseWriter, r *http.Request, db *sql.DB, u 
 	if !requirePartner(w, u, id) {
 		return false
 	}
-	if u.EntityType == models.EntityEduInst || (u.EntityType == "" && u.ITCompanyID == nil && (u.Role == models.RoleAdmin || u.Role == models.RoleModerator)) {
+	if u.EntityType == models.EntityEduInst || (u.EntityType == "" && u.ITCompanyID == nil && (u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin)) {
 		return true
 	}
 	if u.ITCompanyID == nil {
@@ -147,7 +233,13 @@ func partnerScope(u middleware.AuthUser, requested string) string {
 	if u.EntityType == models.EntityEduInst {
 		return "unassigned"
 	}
-	if isStaff(u) {
+	if u.EntityType == models.EntityOrganization && u.Role == models.RoleCurator {
+		if u.PartnerID != nil && *u.PartnerID != "" {
+			return *u.PartnerID
+		}
+		return "unassigned"
+	}
+	if canReadTenantData(u) {
 		return requested
 	}
 	return "unassigned"

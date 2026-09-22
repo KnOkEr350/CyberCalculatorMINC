@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"cybercalc/internal/compliance"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/money"
+	"github.com/lib/pq"
 )
 
 type DashboardHandlers struct {
@@ -26,20 +30,29 @@ type categoryBreakdown struct {
 }
 
 type dashboardResponse struct {
-	EligiblePlanTotalRub money.Amount        `json:"eligible_plan_total_rub"`
-	EligibleFactTotalRub money.Amount        `json:"eligible_fact_total_rub"`
-	IncompleteEntries    int                 `json:"incomplete_entries"`
-	ReportYear           int                 `json:"report_year"`
-	GeneratedAt          time.Time           `json:"generated_at"`
-	TargetAmountRub      *money.Amount       `json:"target_amount_rub"` // "Общие затраты (3% от сэкономленных льгот)"
-	TargetConfirmedRub   *money.Amount       `json:"target_confirmed_fact_rub"`
-	PlanTotalRub         money.Amount        `json:"plan_total_rub"`
-	FactTotalRub         money.Amount        `json:"fact_total_rub"`
-	PlanCompletionPct    float64             `json:"plan_completion_pct"` // % реализации плана
-	PlanByCategory       []categoryBreakdown `json:"plan_by_category"`
-	FactByCategory       []categoryBreakdown `json:"fact_by_category"`
-	CategoryFilter       string              `json:"category_filter,omitempty"`
-	AudienceFilter       string              `json:"audience_filter,omitempty"`
+	EligiblePlanTotalRub money.Amount          `json:"eligible_plan_total_rub"`
+	EligibleFactTotalRub money.Amount          `json:"eligible_fact_total_rub"`
+	IncompleteEntries    int                   `json:"incomplete_entries"`
+	ReportYear           int                   `json:"report_year"`
+	GeneratedAt          time.Time             `json:"generated_at"`
+	TargetAmountRub      *money.Amount         `json:"target_amount_rub"` // "Общие затраты (3% от сэкономленных льгот)"
+	SavingsBaseRub       *money.Amount         `json:"savings_base_rub,omitempty"`
+	TargetSource         string                `json:"target_source_reference,omitempty"`
+	TargetNotifiedAt     string                `json:"target_notified_at,omitempty"`
+	TargetConfirmedRub   *money.Amount         `json:"target_confirmed_fact_rub"`
+	PlanTotalRub         money.Amount          `json:"plan_total_rub"`
+	FactTotalRub         money.Amount          `json:"fact_total_rub"`
+	PlanCompletionPct    float64               `json:"plan_completion_pct"` // % реализации плана
+	PlanByCategory       []categoryBreakdown   `json:"plan_by_category"`
+	FactByCategory       []categoryBreakdown   `json:"fact_by_category"`
+	CategoryFilter       string                `json:"category_filter,omitempty"`
+	AudienceFilter       string                `json:"audience_filter,omitempty"`
+	RiskBuckets          map[string]riskBucket `json:"risk_buckets"`
+}
+
+type riskBucket struct {
+	EntryCount int          `json:"entry_count"`
+	AmountRub  money.Amount `json:"amount_rub"`
 }
 
 func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -78,10 +91,11 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(it_company_id::text,'') FROM partners WHERE id::text=$1`, scope).Scan(&companyScope)
 	}
 
-	var target money.Amount
+	var target, savingsBase money.Amount
+	var savingsBaseRaw, source, notified sql.NullString
 	targetErr := sql.ErrNoRows
 	if companyScope != "" {
-		targetErr = h.DB.QueryRowContext(r.Context(), `SELECT target_amount_rub FROM organization_budget_targets WHERE report_year=$1 AND it_company_id::text=$2`, year, companyScope).Scan(&target)
+		targetErr = h.DB.QueryRowContext(r.Context(), `SELECT target_amount_rub,savings_base_rub::text,source_reference,notified_at::text FROM organization_budget_targets WHERE report_year=$1 AND it_company_id::text=$2`, year, companyScope).Scan(&target, &savingsBaseRaw, &source, &notified)
 	}
 	if targetErr != nil && targetErr != sql.ErrNoRows {
 		middleware.WriteError(w, 500, "ошибка чтения целевой суммы")
@@ -89,14 +103,24 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 	}
 	if targetErr == nil && isStaff(u) && scope == "" {
 		resp.TargetAmountRub = &target
-		var confirmed money.Amount
-		if err := h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(sum(e.amount_rub),0)
-			FROM entry_eligibility eligibility JOIN entries e ON e.id=eligibility.id
-			WHERE e.report_year=$1 AND e.it_company_id::text=$2
-			AND e.period_type='fact' AND eligibility.eligible`, year, companyScope).Scan(&confirmed); err != nil {
+		if savingsBaseRaw.Valid {
+			if parsed, parseErr := money.Parse(savingsBaseRaw.String); parseErr == nil {
+				savingsBase = parsed
+				resp.SavingsBaseRub = &savingsBase
+			}
+		}
+		if source.Valid {
+			resp.TargetSource = source.String
+		}
+		if notified.Valid {
+			resp.TargetNotifiedAt = notified.String
+		}
+		companyRisk, riskErr := h.riskBreakdown(r, year, "", companyScope, "", "")
+		if riskErr != nil {
 			middleware.WriteError(w, 500, "ошибка расчёта подтверждённых расходов")
 			return
 		}
+		confirmed := companyRisk["green"].AmountRub
 		resp.TargetConfirmedRub = &confirmed
 	}
 
@@ -124,8 +148,54 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		middleware.WriteError(w, 500, "ошибка аналитики факта")
 		return
 	}
+	resp.RiskBuckets, err = h.riskBreakdown(r, year, scope, companyScope, categoryFilter, audienceFilter)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка расчёта документальных рисков")
+		return
+	}
 
 	middleware.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, companyScope, categoryFilter, audienceFilter string) (map[string]riskBucket, error) {
+	result := map[string]riskBucket{"green": {}, "yellow": {}, "red": {}}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT e.category_code,e.payload,e.amount_rub,eligibility.eligible,
+		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=e.id AND a.retention_expires_at>now())
+		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id
+		WHERE e.period_type='fact' AND e.report_year=$1 AND ($2='' OR e.partner_id::text=$2)
+		AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var category string
+		var payloadRaw []byte
+		var amount money.Amount
+		var approved bool
+		var documents pq.StringArray
+		if err := rows.Scan(&category, &payloadRaw, &amount, &approved, &documents); err != nil {
+			return nil, err
+		}
+		payload := map[string]interface{}{}
+		if err := json.Unmarshal(payloadRaw, &payload); err != nil {
+			return nil, err
+		}
+		state := compliance.Evaluate(category, "fact", payload, []string(documents)).State
+		// A complete but not formally approved record is forecast, never guaranteed.
+		if state == "green" && !approved {
+			state = "yellow"
+		}
+		bucket := result[state]
+		bucket.EntryCount++
+		var addErr error
+		bucket.AmountRub, addErr = money.Add(bucket.AmountRub, amount)
+		if addErr != nil {
+			return nil, addErr
+		}
+		result[state] = bucket
+	}
+	return result, rows.Err()
 }
 
 func (h *DashboardHandlers) breakdown(r *http.Request, year int, period, scope, companyScope, categoryFilter, audienceFilter string) ([]categoryBreakdown, error) {
@@ -173,8 +243,11 @@ func round2(v float64) float64 {
 }
 
 type setBudgetTargetRequest struct {
-	ReportYear      int          `json:"report_year"`
-	TargetAmountRub money.Amount `json:"target_amount_rub"`
+	ReportYear      int           `json:"report_year"`
+	TargetAmountRub money.Amount  `json:"target_amount_rub"`
+	SavingsBaseRub  *money.Amount `json:"savings_base_rub,omitempty"`
+	SourceReference string        `json:"source_reference"`
+	NotifiedAt      string        `json:"notified_at"`
 }
 
 func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -199,6 +272,28 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 		middleware.WriteError(w, http.StatusBadRequest, "целевая сумма должна быть положительным числом в допустимом диапазоне")
 		return
 	}
+	req.SourceReference = strings.TrimSpace(req.SourceReference)
+	if req.SavingsBaseRub == nil || *req.SavingsBaseRub <= 0 || req.SourceReference == "" || req.NotifiedAt == "" {
+		middleware.WriteError(w, 400, "укажите положительную базу экономии N-2, источник и дату доведения Минцифры")
+		return
+	}
+	if len([]rune(req.SourceReference)) > 2000 {
+		middleware.WriteError(w, 400, "источник базы не должен превышать 2000 символов")
+		return
+	}
+	if _, err := time.Parse("2006-01-02", req.NotifiedAt); err != nil || req.NotifiedAt > time.Now().In(time.FixedZone("Europe/Moscow", 3*60*60)).Format("2006-01-02") {
+		middleware.WriteError(w, 400, "дата доведения Минцифры должна быть корректной и не из будущего")
+		return
+	}
+	if int64(*req.SavingsBaseRub) > (math.MaxInt64-50)/3 {
+		middleware.WriteError(w, 400, "база экономии превышает допустимый предел")
+		return
+	}
+	expected := money.Amount((int64(*req.SavingsBaseRub)*3 + 50) / 100)
+	if req.TargetAmountRub != expected {
+		middleware.WriteError(w, 400, "минимальный объём должен составлять ровно 3% от указанной базы экономии")
+		return
+	}
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка сервера")
@@ -206,10 +301,10 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 	}
 	defer tx.Rollback()
 	_, err = tx.ExecContext(r.Context(),
-		`INSERT INTO organization_budget_targets (report_year, it_company_id,target_amount_rub, updated_by)
-		 VALUES ($1,$2,$3,$4)
-		 ON CONFLICT (report_year,it_company_id) DO UPDATE SET target_amount_rub = $3, updated_by = $4, updated_at = now()`,
-		req.ReportYear, companyID, req.TargetAmountRub, u.ID,
+		`INSERT INTO organization_budget_targets (report_year,it_company_id,target_amount_rub,savings_base_rub,source_reference,notified_at,updated_by)
+		 VALUES ($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::date,$7)
+		 ON CONFLICT (report_year,it_company_id) DO UPDATE SET target_amount_rub=$3,savings_base_rub=$4,source_reference=NULLIF($5,''),notified_at=NULLIF($6,'')::date,updated_by=$7,updated_at=now()`,
+		req.ReportYear, companyID, req.TargetAmountRub, req.SavingsBaseRub, req.SourceReference, req.NotifiedAt, u.ID,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")

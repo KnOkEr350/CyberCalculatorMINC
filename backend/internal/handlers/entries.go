@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"cybercalc/internal/compliance"
 	"cybercalc/internal/money"
 	"database/sql"
 	"encoding/json"
@@ -129,13 +130,21 @@ func resolveEntryAmount(method string, actual *money.Amount, formula money.Amoun
 }
 
 func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	if !canPrepareReports(u) {
-		middleware.WriteError(w, http.StatusForbidden, "план и отчёт формирует ИТ-организация; образовательная организация рассматривает направленный перечень")
+	if !canCreateAnyEntry(u) {
+		middleware.WriteError(w, http.StatusForbidden, "роль не может создавать мероприятия")
 		return
 	}
 	var req createEntryRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
+		return
+	}
+	if !canCreateEntryCategory(u, req.CategoryCode) {
+		middleware.WriteError(w, http.StatusForbidden, "роль не может создавать выбранный вид мероприятия")
+		return
+	}
+	if !canEditEntryCategory(u, req.CategoryCode) {
+		middleware.WriteError(w, http.StatusForbidden, "роль не может изменять выбранный вид мероприятия")
 		return
 	}
 	if req.PeriodType != string(models.PeriodPlan) && req.PeriodType != string(models.PeriodFact) {
@@ -287,7 +296,9 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	// SQL structure comes only from fixed fragments; values remain positional parameters.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	query := `SELECT id,COALESCE(it_company_id::text,''), category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,
-		created_by, updated_by, created_at, updated_at FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
+		created_by, updated_by, created_at, updated_at,
+		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=entries.id AND a.retention_expires_at>now())
+		FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
@@ -301,8 +312,9 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 		var partnerID, updatedBy sql.NullString
 		var actualAmount sql.NullString
 		var payloadRaw []byte
+		var documentTypes pq.StringArray
 		if err := rows.Scan(&e.ID, &e.ITCompanyID, &e.CategoryCode, &partnerID, &e.AgreementID, &e.PeriodType, &e.ReportYear, &e.Audience,
-			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
+			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt, &documentTypes); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -323,6 +335,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 			e.ActualAmountRub = &parsed
 		}
 		json.Unmarshal(payloadRaw, &e.Payload)
+		e.Compliance = compliance.Evaluate(e.CategoryCode, string(e.PeriodType), e.Payload, []string(documentTypes))
 		out = append(out, e)
 	}
 	if rows.Err() != nil {
@@ -459,8 +472,8 @@ type updateEntryRequest struct {
 }
 
 func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
-	if !canPrepareReports(u) {
-		middleware.WriteError(w, http.StatusForbidden, "образовательная организация не может изменять план или отчёт ИТ-организации")
+	if !canEditAnyEntry(u) {
+		middleware.WriteError(w, http.StatusForbidden, "роль не может изменять мероприятия")
 		return
 	}
 	if !requireEntry(w, r, h.DB, u, entryID) {
@@ -499,7 +512,21 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка запроса")
 		return
 	}
+	if !canEditEntryCategory(u, categoryCode) {
+		middleware.WriteError(w, http.StatusForbidden, "роль не может изменять выбранный вид мероприятия")
+		return
+	}
 	oldAudience := audience
+	if u.Role == models.RoleFinancialSpecialist {
+		if categoryCode != "teachers" || !financialUpdateAllowed(oldPayloadRaw, req, oldAudience, oldAgreementID, oldCostMethod, oldActualAmount) {
+			middleware.WriteError(w, http.StatusForbidden, "финансовая роль может изменять только поля компенсационной выплаты")
+			return
+		}
+		req.Audience = oldAudience
+		req.AgreementID = oldAgreementID
+		req.CostMethod = oldCostMethod
+		req.ActualAmountRub = oldActualAmount
+	}
 	if req.Audience != "" {
 		audience = req.Audience
 	}
@@ -599,6 +626,40 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 
 	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"amount_rub": newAmount})
+}
+
+func financialUpdateAllowed(oldPayloadRaw []byte, req updateEntryRequest, oldAudience, oldAgreementID, oldCostMethod string, oldActualAmount *money.Amount) bool {
+	if req.Audience != "" && req.Audience != oldAudience || req.AgreementID != "" && req.AgreementID != oldAgreementID || req.CostMethod != "" && req.CostMethod != oldCostMethod {
+		return false
+	}
+	if req.ActualAmountRub != nil && (oldActualAmount == nil || *req.ActualAmountRub != *oldActualAmount) {
+		return false
+	}
+	oldPayload := map[string]interface{}{}
+	if json.Unmarshal(oldPayloadRaw, &oldPayload) != nil {
+		return false
+	}
+	allowed := map[string]bool{"compensation_quarter": true, "planned_compensation_rub": true, "payment_status": true, "payment_date": true, "payment_order_reference": true}
+	for key := range allowed {
+		delete(oldPayload, key)
+	}
+	newCore := map[string]interface{}{}
+	for key, value := range req.Payload {
+		if !allowed[key] {
+			newCore[key] = value
+		}
+	}
+	oldJSON, _ := json.Marshal(oldPayload)
+	newJSON, _ := json.Marshal(newCore)
+	if string(oldJSON) != string(newJSON) {
+		return false
+	}
+	if fmt.Sprint(req.Payload["payment_status"]) == "paid" {
+		paymentDate, dateOK := req.Payload["payment_date"].(string)
+		paymentReference, referenceOK := req.Payload["payment_order_reference"].(string)
+		return dateOK && referenceOK && strings.TrimSpace(paymentDate) != "" && strings.TrimSpace(paymentReference) != ""
+	}
+	return true
 }
 
 func (h *EntryHandlers) Comments(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {

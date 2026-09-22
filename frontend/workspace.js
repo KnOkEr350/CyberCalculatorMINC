@@ -1,6 +1,6 @@
 // Partner-first workflows. Formula fields come from the backend registry.
 function isStaffUser() {
-  return state.me?.role === "admin" || state.me?.role === "moderator" || state.me?.entity_type === "organization";
+  return state.me?.entity_type === "organization" && ["super_admin", "holding_admin", "org_admin", "curator"].includes(state.me?.role);
 }
 
 function isEducationReviewer() {
@@ -8,27 +8,40 @@ function isEducationReviewer() {
 }
 
 function canManageITCompanies() {
-  if (state.me?.role === "admin" || state.me?.role === "moderator")
-    return state.me?.entity_type === "edu_institution";
-  return state.me?.entity_type === "organization";
+  return ["super_admin", "holding_admin"].includes(state.me?.role);
 }
 
 function canViewITCompanies() {
-  return canManageITCompanies() ||
-    (state.me?.role === "user" && state.me?.entity_type === "edu_institution");
+  return Boolean(state.me?.role);
 }
 
 function canReviewEducationDirectory() {
   if (state.me?.entity_type === "organization") return true;
-  return state.me?.role === "user" && state.me?.entity_type === "edu_institution";
+  return state.me?.role === "curator" && state.me?.entity_type === "edu_institution";
 }
 
 function canProposeEducationDirectory() {
-  return state.me?.role === "moderator" && state.me?.entity_type === "organization";
+  return state.me?.role === "org_admin" && state.me?.entity_type === "organization";
 }
 
 function canApproveEducationDirectory() {
-  return state.me?.role === "admin" && state.me?.entity_type === "organization";
+  return state.me?.role === "super_admin" && state.me?.entity_type === "organization";
+}
+
+function canPrepareCategory(category) {
+  if (["super_admin", "holding_admin", "org_admin", "curator"].includes(state.me?.role)) return state.me?.entity_type !== "edu_institution";
+  if (state.me?.role === "hr_specialist") return ["internship", "employment_practice"].includes(category);
+  if (state.me?.role === "financial_specialist") return category === "teachers";
+  return false;
+}
+
+function canCreateCategory(category) {
+  if (["super_admin", "holding_admin", "org_admin", "curator"].includes(state.me?.role)) return state.me?.entity_type !== "edu_institution";
+  return state.me?.role === "hr_specialist" && ["internship", "employment_practice"].includes(category) && state.me?.entity_type !== "edu_institution";
+}
+
+function canManageReportWorkflow() {
+  return state.me?.entity_type !== "edu_institution" && ["super_admin", "holding_admin", "org_admin", "curator"].includes(state.me?.role);
 }
 
 function agreementIsUsable(agreement, year = state.year) {
@@ -182,7 +195,7 @@ function collectAgreement(root, prefix, partnerIDs) {
 
 function openUserProfile(user, refresh) {
   const modal = el(
-    `<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Доступ: ${escapeHTML(user.full_name)}</h2><div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор — всё, кроме системных разделов</option><option value="admin">Администратор — полный доступ</option></select></div><div class="field"><label>Тип пользователя</label><select name="entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div><div class="field" data-education-assignment><label data-education-label>Учебное заведение *</label><select name="partner"><option value="">Выберите учебное заведение</option>${state.partners.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("")}</select></div><div class="field" data-company-assignment><label data-company-label>ИТ-компания</label><select name="company"><option value="">Выберите ИТ-компанию</option>${(state.itCompanies || []).map((company) => `<option value="${company.id}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div><p class="error" role="alert"></p><button class="btn" type="submit">Сохранить доступ</button><button class="btn secondary" type="button">Закрыть</button></form></div>`,
+    `<div class="modal-backdrop"><form class="modal" role="dialog" aria-modal="true"><h2>Доступ: ${escapeHTML(user.full_name)}</h2><div class="field"><label>Роль</label><select name="role"><option value="super_admin">SUPER_ADMIN</option><option value="holding_admin">HOLDING_ADMIN</option><option value="org_admin">ORG_ADMIN</option><option value="curator">CURATOR</option><option value="hr_specialist">HRD / HR_SPECIALIST</option><option value="financial_specialist">FINANCIAL_SPECIALIST</option><option value="legal_specialist">LEGAL_SPECIALIST</option><option value="auditor_viewer">AUDITOR_VIEWER</option></select></div><div class="field"><label>Тип пользователя</label><select name="entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div><div class="field" data-education-assignment><label data-education-label>Учебное заведение *</label><select name="partner"><option value="">Выберите учебное заведение</option>${state.partners.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("")}</select></div><div class="field" data-company-assignment><label data-company-label>ИТ-компания</label><select name="company"><option value="">Выберите ИТ-компанию</option>${(state.itCompanies || []).map((company) => `<option value="${company.id}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div><p class="error" role="alert"></p><button class="btn" type="submit">Сохранить доступ</button><button class="btn secondary" type="button">Закрыть</button></form></div>`,
   );
   const form = modal.querySelector("form");
   form.elements.role.value = user.role;
@@ -191,12 +204,14 @@ function openUserProfile(user, refresh) {
   form.elements.company.value = user.it_company_id || "";
   const sync = () => {
     const education = form.elements.entity.value === "edu_institution";
-    form.querySelector("[data-education-assignment]").hidden = !education;
+    const curator = !education && form.elements.role.value === "curator";
+    form.querySelector("[data-education-assignment]").hidden = !education && !curator;
     form.querySelector("[data-company-assignment]").hidden = education;
-    form.elements.partner.disabled = !education;
+    form.elements.partner.disabled = !education && !curator;
     form.elements.company.disabled = education;
+    form.querySelector("[data-education-label]").textContent = education ? "Учебное заведение *" : "Закреплённая ОО куратора";
     form.querySelector("[data-company-label]").textContent =
-      `ИТ-компания${form.elements.role.value === "user" ? " *" : ""}`;
+      `ИТ-компания${form.elements.role.value !== "super_admin" ? " *" : ""}`;
   };
   form.elements.role.onchange = sync;
   form.elements.entity.onchange = sync;
@@ -214,7 +229,7 @@ function openUserProfile(user, refresh) {
     }
     if (
       !education &&
-      form.elements.role.value === "user" &&
+      form.elements.role.value !== "super_admin" &&
       !form.elements.company.value
     ) {
       error.textContent = "Выберите ИТ-компанию";
@@ -252,18 +267,34 @@ function openUserProfile(user, refresh) {
 function validateFileBatch(files) {
   if (
     files.length > 20 ||
-    [...files].reduce((sum, f) => sum + f.size, 0) > 64 * 1024 * 1024
+    [...files].reduce((sum, f) => sum + f.size, 0) > 20 * 1024 * 1024
   )
-    throw new Error("Выберите до 20 файлов общим размером до 64 МБ");
+    throw new Error("Выберите до 20 файлов общим размером до 20 МБ");
   if ([...files].some((f) => !f.size || [...f.name].length > 255))
     throw new Error("Пустые файлы и имена длиннее 255 символов не допускаются");
 }
-async function uploadFileBatch(id, files) {
+const DOCUMENT_TYPE_LABELS = Object.freeze({
+  other: "Прочий документ", employment_contract: "Трудовой договор / ГПХ",
+  organization_agreement: "Договор с образовательной организацией", individual_plan: "Индивидуальный план",
+  appointment_order: "Приказ о назначении / допуске", program_project: "Проект программы",
+  expert_conclusion: "Экспертное заключение", academic_council_protocol: "Решение учёного совета",
+  internship_agreement: "Договор о стажировке", practice_agreement: "Договор о практической подготовке",
+  labor_contract: "Трудовой договор со студентом", mentor_order: "Приказ о наставнике",
+  individual_program: "Индивидуальная программа / табель", incoming_certificate: "Входящая справка",
+  outgoing_certificate: "Итоговая справка", top_agreement: "Договор ТОП-ИТ / ТОП-ИИ",
+  payment_order: "Платёжное поручение", spending_act: "Акт фактического расходования",
+  ano_letter: "Письмо АНО АЦ", school_agreement: "Соглашение со школой / РОИВ",
+  participant_groups: "Реестр групп участников", acceptance_act: "Акт приёмки",
+  digital_trace: "Цифровой след ФГИС «Моя школа»", ministry_decision: "Решение Минцифры и поручение",
+  expense_evidence: "Первичные документы расходов", auditor_report: "Аудиторское заключение",
+});
+
+async function uploadFileBatch(id, files, documentType = "other") {
   validateFileBatch(files);
   if (!files.length) return;
   const body = new FormData();
   [...files].forEach((f) => body.append("files", f));
-  await api(`/entries/${encodeURIComponent(id)}/attachments`, {
+  await api(`/entries/${encodeURIComponent(id)}/attachments?${new URLSearchParams({ document_type: documentType })}`, {
     method: "POST",
     body,
   });
@@ -332,7 +363,9 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   const selectedAgreement = state.agreements.find(
     (agreement) => agreement.id === state.agreementID,
   );
-  const canPrepare = !isEducationReviewer();
+  const canPrepare = canPrepareCategory(state.categoryCode);
+  const canCreate = canCreateCategory(state.categoryCode);
+  const canManageWorkflow = canManageReportWorkflow();
   const writable = agreementIsUsable(selectedAgreement) && canPrepare;
   const screenCategories = screen?.categoryCodes || [];
   const available = state.categories.filter(
@@ -365,12 +398,12 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   <div class="card"><div class="grid cols-3">
     ${educationSelector}
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
-  </div><div class="flex workspace-actions">${canPrepare && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}${canPrepare && isStaffUser() ? '<button class="btn secondary" id="edit-budget-target">Целевая сумма (3%)</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
+  </div><div class="flex workspace-actions">${canManageWorkflow && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}${canManageWorkflow && isStaffUser() ? '<button class="btn secondary" id="edit-budget-target">Целевая сумма (3%)</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
-    <div class="field"><label>Режим</label>${canPrepare ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : '<input value="Просмотр и согласование" readonly>'}</div></div>
-    <div class="flex">${canPrepare ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="field"><label>Режим</label>${canCreate ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : `<input value="${canPrepare ? "Редактирование по роли" : "Просмотр и согласование"}" readonly>`}</div></div>
+    <div class="flex">${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const budgetTargetButton = root.querySelector("#edit-budget-target");
@@ -504,15 +537,15 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   const obligation = root.querySelector("#obligation-box");
   const workflowLabels = { draft: "Черновик ИТ-организации", ready: state.period === "fact" ? "Направлено на рассмотрение" : "Готово", verified: state.period === "fact" ? "Согласовано ОО / РОИВ" : "Проверено", approved: "Утверждено" };
   const automaticOK = workflow.automatic_checks.every((check) => check.complete || check.code === "actual_costs");
-  const confirmationsDisabled = workflow.status !== "draft" || !canPrepare;
-  const reviewHint = !canPrepare && state.period === "fact"
+  const confirmationsDisabled = workflow.status !== "draft" || !canManageWorkflow;
+  const reviewHint = !canManageWorkflow && state.period === "fact"
     ? (workflow.status === "ready"
       ? (workflow.can_verify || workflow.can_return_draft
         ? '<p class="notice">Проверьте перечень. При согласии нажмите «Согласовать перечень»; при наличии замечаний верните его ИТ-организации с комментарием.</p>'
         : '<p class="notice">Соглашение охватывает несколько ОО. Итог рассмотрения фиксирует оператор, чтобы один представитель не согласовал данные за остальных.</p>')
       : '<p class="muted">Согласование станет доступно после направления перечня ИТ-организацией.</p>')
     : "";
-  const workflowControls = canPrepare
+  const workflowControls = canManageWorkflow
     ? `<div class="field"><label>Комментарий к смене статуса</label><textarea id="wf-comment" maxlength="1000" rows="2" placeholder="Основание проверки или возврата"></textarea></div>
       <div class="flex"><button class="btn" id="wf-ready" ${workflow.can_mark_ready ? "" : "disabled"}>${state.period === "fact" ? "Направить на рассмотрение" : "Передать: Готово"}</button><button class="btn" id="wf-verify" ${workflow.can_verify ? "" : "disabled"}>${state.period === "fact" ? "Зафиксировать согласование" : "Проверено"}</button><button class="btn" id="wf-approve" ${workflow.can_approve ? "" : "disabled"}>Утверждено</button><button class="btn secondary" id="wf-draft" ${workflow.can_return_draft ? "" : "disabled"}>Вернуть в черновик</button></div>`
     : state.period === "fact" && workflow.status === "ready" && (workflow.can_verify || workflow.can_return_draft)
@@ -520,6 +553,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
         <div class="flex"><button class="btn" id="wf-verify" ${workflow.can_verify ? "" : "disabled"}>Согласовать перечень</button><button class="btn secondary" id="wf-draft" ${workflow.can_return_draft ? "" : "disabled"}>Вернуть с замечаниями</button></div>`
       : '<p class="muted">Действий со стороны образовательной организации на этом этапе нет.</p>';
   obligation.innerHTML = `<div class="card"><div class="flex between"><div><h2>Комплектность отчёта по соглашению</h2><p>Статус: <span class="status-badge ${workflow.status === "approved" ? "active" : workflow.status === "draft" ? "inactive" : ""}">${escapeHTML(workflowLabels[workflow.status] || workflow.status)}</span></p></div><small>Контроль ведётся отдельно для ${state.period === "plan" ? "плана" : "факта"} ${state.year} года</small></div>
+    ${workflow.review_due_at ? `<p class="${workflow.review_overdue ? "error" : "notice"}">${workflow.review_overdue ? "Просрочено рассмотрение" : "Срок рассмотрения"}: до ${new Date(workflow.review_due_at).toLocaleDateString("ru-RU")} · ${Number(workflow.review_calendar_days)} календарных дней по приказу № 270.</p>` : ""}
     <h3>Автоматические проверки</h3><ul>${workflow.automatic_checks.map((check) => `<li>${check.complete ? "✓" : "✕"} ${escapeHTML(check.label)}</li>`).join("")}</ul>
     <h3>Виды мероприятий соглашения</h3><div class="grid cols-2">${workflow.activities.map((activity) => `<button class="btn secondary" data-required="${activity.code}">${activity.complete ? "✓" : "＋"} ${escapeHTML(activity.name)}</button>`).join("")}</div>
     ${workflow.top_it_exception ? '<p class="notice">Применено исключение ТОП ИТ/ИИ: остальные виды подтверждены в другой утверждённой образовательной организации.</p>' : ""}
@@ -554,7 +588,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     if (!readyButton) return;
     const actualOK = !workflow.uses_actual_costs || state.period !== "fact" || (obligation.querySelector("#wf-actual-costs")?.checked && obligation.querySelector("#wf-auditor-reference")?.value.trim());
     const manualOK = obligation.querySelector("#wf-scope")?.checked && obligation.querySelector("#wf-conditions")?.checked && obligation.querySelector("#wf-evidence")?.checked && actualOK;
-    readyButton.disabled = !(canPrepare && workflow.status === "draft" && automaticOK && manualOK);
+    readyButton.disabled = !(canManageWorkflow && workflow.status === "draft" && automaticOK && manualOK);
   };
   obligation.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", syncReady));
   obligation.querySelector("#wf-auditor-reference")?.addEventListener("input", syncReady);
@@ -569,7 +603,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
         (f) => !["org_name", "mentor_id"].includes(f.key),
       ) || [];
     root.querySelector("#entries-table").innerHTML =
-      `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canPrepare ? "Записей нет. Добавьте вручную или импортируйте Excel." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+      `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td><span class="risk-label ${escapeHTML(e.compliance?.state || "red")}" title="${escapeHTML([...(e.compliance?.blocking_reasons || []), ...(e.compliance?.warnings || [])].join("; "))}"><i></i>${e.compliance?.state === "green" ? "Готово" : e.compliance?.state === "yellow" ? "Доработать" : "Риск"}</span></td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(

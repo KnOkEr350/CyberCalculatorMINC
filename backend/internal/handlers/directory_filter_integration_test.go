@@ -11,6 +11,7 @@ import (
 
 	"cybercalc/internal/dbx"
 	"cybercalc/internal/middleware"
+	"cybercalc/internal/models"
 )
 
 func TestDirectoryPaginationKeepsExactProgramFilter(t *testing.T) {
@@ -49,7 +50,7 @@ func TestDirectoryPaginationKeepsExactProgramFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := PartnerHandlers{DB: db}
-	u := middleware.AuthUser{Role: "admin", EntityType: "organization"}
+	u := middleware.AuthUser{Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization}
 	for _, page := range []struct {
 		offset, next string
 		size         int

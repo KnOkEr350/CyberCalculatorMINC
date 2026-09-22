@@ -63,8 +63,8 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 		return fmt.Errorf("пароль должен содержать строчную и заглавную буквы, цифру и специальный символ")
 	}
 
-	if req.Role != string(models.RoleAdmin) && req.Role != string(models.RoleModerator) && req.Role != string(models.RoleUser) {
-		return fmt.Errorf("роль должна быть admin, moderator или user")
+	if !models.ValidRole(models.Role(req.Role)) {
+		return fmt.Errorf("неизвестная роль RBAC")
 	}
 	if req.EntityType != "" && req.EntityType != string(models.EntityOrganization) && req.EntityType != string(models.EntityEduInst) {
 		return fmt.Errorf("тип пользователя должен быть organization или edu_institution")
@@ -75,8 +75,8 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 			req.PartnerID = nil
 		} else {
 			req.PartnerID = &trimmed
-			if req.EntityType != string(models.EntityEduInst) {
-				return fmt.Errorf("партнёра можно назначить только пользователю образовательной организации")
+			if req.EntityType != string(models.EntityEduInst) && !(req.EntityType == string(models.EntityOrganization) && req.Role == string(models.RoleCurator)) {
+				return fmt.Errorf("партнёра можно назначить представителю ОО или куратору ИТ-компании")
 			}
 		}
 	}
@@ -94,7 +94,7 @@ func validateAndNormalizeNewUser(req *createUserRequest) error {
 	if req.EntityType == string(models.EntityEduInst) && req.PartnerID == nil {
 		return fmt.Errorf("для образовательной организации необходимо выбрать учебное заведение")
 	}
-	if req.Role == string(models.RoleUser) && req.EntityType == string(models.EntityOrganization) && req.ITCompanyID == nil {
+	if req.Role != string(models.RoleSuperAdmin) && req.EntityType == string(models.EntityOrganization) && req.ITCompanyID == nil {
 		return fmt.Errorf("для представителя ИТ-компании необходимо выбрать ИТ-компанию")
 	}
 	return nil
