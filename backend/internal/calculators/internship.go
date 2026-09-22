@@ -2,6 +2,7 @@ package calculators
 
 import (
 	"fmt"
+	"math"
 
 	"cybercalc/internal/models"
 )
@@ -71,8 +72,11 @@ func (employmentPracticeCalc) Fields() []FieldSpec {
 	return append(internshipCalc{}.Fields(),
 		FieldSpec{Key: "labor_contract_type", Label: "Тип трудового договора", Type: "select", Required: true, Options: []string{"fixed_term", "other"}},
 		FieldSpec{Key: "practice_agreement_reference", Label: "Реквизиты договора о практической подготовке", Type: "text", MaxLength: 1000},
-		FieldSpec{Key: "student_age", Label: "Возраст практиканта", Type: "number", Integer: true, Minimum: 14, Maximum: 100},
-		FieldSpec{Key: "weekly_hours", Label: "Рабочих часов в неделю", Type: "number", Minimum: 0, Maximum: 40},
+		// Возраст и недельные часы обязательны: без них нечем подтвердить
+		// соблюдение статей 63 и 92 ТК РФ, а практика без такого
+		// подтверждения к зачёту не принимается (ТЗ, п. 7.3).
+		FieldSpec{Key: "student_age", Label: "Возраст практиканта", Type: "number", Required: true, Integer: true, Minimum: 14, Maximum: 100},
+		FieldSpec{Key: "weekly_hours", Label: "Рабочих часов в неделю", Type: "number", Required: true, Minimum: 0, Maximum: 40},
 	)
 }
 
@@ -90,26 +94,49 @@ func (employmentPracticeCalc) Validate(payload map[string]interface{}) error {
 	if _, err := str(payload, "labor_contract_date"); err != nil {
 		return err
 	}
-	_, ageOK := payload["student_age"]
-	_, hoursOK := payload["weekly_hours"]
-	if ageOK && hoursOK {
-		a, err := num(payload, "student_age")
-		if err != nil {
-			return err
-		}
-		h, err := num(payload, "weekly_hours")
-		if err != nil {
-			return err
-		}
-		limit := 40.0
-		if a < 16 {
-			limit = 24
-		} else if a < 18 {
-			limit = 35
-		}
-		if h > limit {
-			return fmt.Errorf("рабочее время %.1f ч/нед. превышает предел %.0f ч для указанного возраста", h, limit)
-		}
+	age, err := num(payload, "student_age")
+	if err != nil {
+		return fmt.Errorf("укажите возраст практиканта: без него не проверить нормы ТК РФ")
+	}
+	hours, err := num(payload, "weekly_hours")
+	if err != nil {
+		return fmt.Errorf("укажите рабочих часов в неделю: без них не проверить нормы ТК РФ")
+	}
+	return validateWorkingTimeLimit(age, hours)
+}
+
+// minimumEmploymentAge — трудовой договор с обучающимся заключается не
+// ранее 14 лет (статья 63 ТК РФ).
+const minimumEmploymentAge = 14
+
+// weeklyHoursLimit — предельная продолжительность рабочего времени в неделю
+// по статье 92 ТК РФ: до 16 лет — 24 часа, от 16 до 18 лет — 35 часов.
+// Для совершеннолетних действует общая норма статьи 91 — 40 часов.
+func weeklyHoursLimit(age float64) float64 {
+	switch {
+	case age < 16:
+		return 24
+	case age < 18:
+		return 35
+	default:
+		return 40
+	}
+}
+
+// validateWorkingTimeLimit — жёсткая комплаенс-блокировка ТК РФ для практики
+// с трудоустройством (PRA-04).
+func validateWorkingTimeLimit(age, hours float64) error {
+	if math.IsNaN(age) || math.IsInf(age, 0) || age != math.Trunc(age) {
+		return fmt.Errorf("возраст практиканта должен быть целым числом лет")
+	}
+	if age < minimumEmploymentAge {
+		return fmt.Errorf("трудовой договор с практикантом младше %d лет не допускается статьёй 63 ТК РФ", minimumEmploymentAge)
+	}
+	if math.IsNaN(hours) || math.IsInf(hours, 0) || hours <= 0 {
+		return fmt.Errorf("рабочее время практиканта должно быть больше нуля")
+	}
+	if limit := weeklyHoursLimit(age); hours > limit {
+		return fmt.Errorf("рабочее время %g ч/нед. превышает предел %g ч, установленный ТК РФ для возраста %g лет", hours, limit, age)
 	}
 	return nil
 }

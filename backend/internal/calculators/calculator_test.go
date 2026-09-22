@@ -300,6 +300,9 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 		"student_full_name": "Петров Пётр Петрович", "duration_months": 2.0,
 		"student_load_hours_per_month": 10.0, "mentor_load_hours_per_month": 3.0,
 		"labor_contract_type": "fixed_term", "labor_contract_number": "ТД-42", "labor_contract_date": "2026-09-01",
+		// PRA-04: практика подтверждается нормами ТК РФ, поэтому возраст и
+		// недельные часы обязательны.
+		"student_age": 19.0, "weekly_hours": 30.0,
 	}
 	if err := ValidatePayload(calc, valid); err != nil {
 		t.Fatalf("valid fixed-term contract rejected: %v", err)
@@ -335,9 +338,15 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	withoutContract := make(map[string]interface{}, len(valid)-3)
+	// У обычной стажировки нет ни реквизитов трудового договора, ни полей
+	// подтверждения норм ТК РФ: они относятся только к практике.
+	practiceOnly := map[string]bool{
+		"labor_contract_type": true, "labor_contract_number": true, "labor_contract_date": true,
+		"student_age": true, "weekly_hours": true,
+	}
+	withoutContract := make(map[string]interface{}, len(valid)-len(practiceOnly))
 	for key, value := range valid {
-		if key != "labor_contract_type" && key != "labor_contract_number" && key != "labor_contract_date" {
+		if !practiceOnly[key] {
 			withoutContract[key] = value
 		}
 	}
