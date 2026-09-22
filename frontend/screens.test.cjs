@@ -16,6 +16,10 @@ test("registers the eleven TZ screens in menu order", () => {
   assert.equal(screens.length, 11);
   assert.deepEqual(Array.from(screens, (screen) => screen.number), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   assert.equal(new Set(Array.from(screens, (screen) => screen.id)).size, 11);
+  assert.equal(new Set(Array.from(screens, (screen) => screen.module)).size, 11);
+  for (const screen of screens) {
+    assert.match(screen.module, /^\/screens\/[a-z0-9-]+\/index\.js$/);
+  }
 });
 
 test("routes every activity category to its own product screen", () => {
@@ -40,4 +44,14 @@ test("ships the screen registry in the browser and container", () => {
   const dockerfile = fs.readFileSync(require.resolve("./Dockerfile"), "utf8");
   assert.match(html, /<script src="\/screens\.js"><\/script>/);
   assert.match(dockerfile, /screens\.js/);
+  assert.match(dockerfile, /COPY screens \.\/screens/);
+  assert.match(dockerfile, /cp -R core shell screens \/dist\//);
+});
+
+test("every registered screen owns a lazy entrypoint", () => {
+  for (const screen of registry().all) {
+    const relativePath = `.${screen.module}`;
+    const source = fs.readFileSync(require.resolve(relativePath), "utf8");
+    assert.match(source, /export (async function render|const render = renderActivity)/);
+  }
 });

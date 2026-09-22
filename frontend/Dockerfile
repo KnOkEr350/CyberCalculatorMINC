@@ -3,8 +3,12 @@ FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6ee
 ARG APP_VERSION=dev
 WORKDIR /src
 COPY index.html app.js workspace.js mfa.js features.js screens.js okz.js style.css theme.css ./
+COPY core ./core
+COPY shell ./shell
+COPY screens ./screens
 RUN mkdir -p /dist \
     && cp index.html app.js workspace.js mfa.js features.js screens.js okz.js style.css theme.css /dist/ \
+    && cp -R core shell screens /dist/ \
     && printf '%s\n' "$APP_VERSION" > /dist/version.txt
 
 FROM nginx:1.30.4-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c AS runtime

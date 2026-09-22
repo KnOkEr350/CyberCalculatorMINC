@@ -453,7 +453,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   };
   const openDirectory = root.querySelector("#open-directory");
   if (openDirectory) openDirectory.onclick = () => {
-    activateScreen("partners");
+    CyberCalcRouter.activate("partners");
   };
   root.querySelectorAll("[data-p]").forEach(
     (b) =>
@@ -1286,7 +1286,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     root.querySelectorAll("[data-partner]").forEach((button) => {
       button.onclick = () => {
         state.partnerID = button.dataset.partner;
-        activateScreen("teachers");
+        CyberCalcRouter.activate("teachers");
       };
     });
     root.querySelectorAll("[data-mentors]").forEach((button) => {

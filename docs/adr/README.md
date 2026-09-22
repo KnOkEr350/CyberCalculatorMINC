@@ -29,7 +29,7 @@
 | [ADR-07](ADR-07-retention-policy.md) | Хранение вложений и аудита | PROPOSED | Security owner + юрист | Technical/Legal |
 | [ADR-08](ADR-08-report-templates.md) | Эталонные формы отчётности | ACCEPTED | Владелец продукта + юрист | Source verification |
 | [ADR-09](ADR-09-mvp-cryptography.md) | Криптография MVP | ACCEPTED | Security owner | Crypto provider profile |
-| [ADR-10](ADR-10-legacy-migration.md) | Миграция `entries` | PROPOSED | Data owner | Technical |
+| [ADR-10](ADR-10-legacy-migration.md) | Миграция `entries` | ACCEPTED | Data owner | — |
 | [ADR-11](ADR-11-mandatory-activity-scope.md) | Гранулярность Видов 1 и 3 | ACCEPTED | Владелец продукта + юрист | — |
 | [ADR-12](ADR-12-activity-seven-formula.md) | Формула Вида 7 | ACCEPTED | Владелец продукта + юрист | — |
 | [ADR-13](ADR-13-internship-agreement.md) | Стажировка «вне соглашения» | ACCEPTED | Владелец продукта + юрист | — |
@@ -55,9 +55,10 @@
 
 ### Technical/Security
 
-Открыты ADR-05, ADR-07 и ADR-10. ADR-07 дополнительно требует юридического
+Открыты ADR-05 и ADR-07. ADR-07 дополнительно требует юридического
 подтверждения сроков хранения. ADR-04, ADR-06, ADR-09 и ADR-23 приняты;
-security profile конкретного криптопровайдера ведётся как зависимость ADR-09.
+ADR-10 фиксирует dual-write/backfill/cutover; security profile конкретного
+криптопровайдера ведётся как зависимость ADR-09.
 
 Полная трассировка приказа и решений встречи приведена в
 [`ORDER_270_ADR_ANALYSIS.md`](../ORDER_270_ADR_ANALYSIS.md).

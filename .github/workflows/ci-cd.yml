@@ -73,9 +73,17 @@ jobs:
           node --check frontend/okz.js
           node --check frontend/features.js
           node --check frontend/screens.js
+          node --check frontend/core/store.js
+          node --check frontend/core/router.js
+          node --check frontend/core/screen-loader.js
+          node --check frontend/shell/app-shell.js
+          for module_file in frontend/screens/*/*.js; do
+            node --input-type=module --check < "$module_file"
+          done
           node --test frontend/features.test.cjs
           node --test frontend/okz.test.cjs
           node --test frontend/screens.test.cjs
+          node --test frontend/architecture.test.cjs
 
       - name: Lint GitHub Actions workflow and extracted scripts
         run: |
