@@ -6,8 +6,13 @@ request, вручную и по понедельникам для планово
 
 | Job | Что проверяет |
 |---|---|
-| `quality` | `gofmt`, `go vet`, `staticcheck`, синтаксис JavaScript и `actionlint` |
-| `tests` | unit-тесты с Go race detector и API-интеграцию из `tests/` с настоящим PostgreSQL |
+| `quality` | `gofmt`, `go vet`, `staticcheck`, `actionlint` и `shellcheck` |
+| `backend` | unit-тесты backend с Go race detector и отдельным покрытием |
+| `frontend` | синтаксис всех JavaScript-модулей и frontend-тесты, найденные автоматически |
+| `migrations` | checksum registry и обновление тестовой БД с legacy-схемы с повторным безопасным применением |
+| `contract` | соответствие OpenAPI зарегистрированным маршрутам и contract regression tests |
+| `golden` | точное сравнение генерируемого OOXML с версионированным эталоном |
+| `e2e` | внешние API-, authentication- и workspace-сценарии с настоящим PostgreSQL |
 | `dynamic` | fuzzing XLSX-парсера и воспроизводимые CPU/memory-профили benchmark |
 | `codeql` | data-flow/SAST анализ Go и JavaScript набором `security-extended` |
 | `semgrep` | блокирующие security-правила Semgrep для Go, JavaScript, конфигураций и OWASP Top 10 |
@@ -15,6 +20,12 @@ request, вручную и по понедельникам для планово
 | `dependency-track` | загрузка готового SBOM на отдельном self-hosted runner рядом с Dependency-Track |
 | `container-dast` | сборка изолированного Compose-стенда, сканирование всех образов Trivy и активный DAST через OWASP ZAP |
 | `deploy` | безопасное обновление Debian VM и проверка SHA реально запущенной версии |
+
+Шесть модульных gates независимы: ошибка frontend не отменяет backend,
+migrations, contract, golden или e2e. PostgreSQL поднимается только для
+`migrations` и `e2e`; остальные проверки не ждут сервисный контейнер. Frontend
+использует `frontend/check.mjs`, поэтому список модулей и тестов не дублируется
+в YAML при добавлении нового экрана.
 
 Основные сценарии входа, ролей, планов и фактов, workflow, импорта, вложений и
 отчётов выполняют типизированные Go-тесты. Compose-job дополнительно проверяет

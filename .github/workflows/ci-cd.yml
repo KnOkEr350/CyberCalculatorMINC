@@ -44,54 +44,162 @@ jobs:
             exit 1
           fi
 
+      - name: Vet backend
+        working-directory: backend
+        run: go vet ./...
+
+      - name: Vet external tests
+        working-directory: tests
+        run: go vet ./...
+
+      - name: Staticcheck backend
+        working-directory: backend
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+
+      - name: Staticcheck external tests
+        working-directory: tests
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+
+      - name: Lint GitHub Actions workflow
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Lint extracted shell scripts
+        run: shellcheck scripts/run-zap.sh scripts/verify-deployment.sh
+
+  backend:
+    name: Module / backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Run backend unit tests with race detector
+        working-directory: backend
+        run: go test -count=1 -race -covermode=atomic -coverprofile=backend-coverage.out ./...
+
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-coverage
+          path: backend/backend-coverage.out
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend:
+    name: Module / frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check syntax and run frontend tests
+        run: node frontend/check.mjs
+
+  migrations:
+    name: Module / migrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_USER: workspace_test
+          POSTGRES_PASSWORD: workspace_test
+          POSTGRES_DB: workspace_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workspace_test -d workspace_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: backend/go.sum
+
       - name: Verify immutable SQL migrations
         working-directory: backend
         run: go run ./cmd/migrationcheck ../migrations ../migrations/checksums.sha256
+
+      - name: Verify upgrade from the legacy schema
+        working-directory: backend
+        env:
+          TEST_MIGRATION_DATABASE_DSN: host=127.0.0.1 port=5432 user=workspace_test password=workspace_test dbname=workspace_migration_test sslmode=disable
+          TEST_MIGRATIONS_DIR: ${{ github.workspace }}/migrations
+        run: go test -count=1 -race -run '^TestWorkspaceMigrationPreservesLegacyData$' ./internal/dbx
+
+  contract:
+    name: Module / contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: backend/go.sum
 
       - name: Verify versioned API contract
         working-directory: backend
         run: go run ./cmd/apicontract ../api/openapi/v1.json ./internal/modules
 
-      - name: Run go vet
-        shell: bash
-        run: |
-          (cd backend && go vet ./...)
-          (cd tests && go vet ./...)
+      - name: Run API contract regression tests
+        working-directory: backend
+        run: go test -count=1 ./internal/apicontract
 
-      - name: Run staticcheck
-        shell: bash
-        run: |
-          (cd backend && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...)
-          (cd tests && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...)
+  golden:
+    name: Module / golden
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
-      - name: Check frontend JavaScript syntax
-        shell: bash
-        run: |
-          node --check frontend/app.js
-          node --check frontend/workspace.js
-          node --check frontend/mfa.js
-          node --check frontend/okz.js
-          node --check frontend/features.js
-          node --check frontend/screens.js
-          node --check frontend/core/store.js
-          node --check frontend/core/router.js
-          node --check frontend/core/screen-loader.js
-          node --check frontend/shell/app-shell.js
-          for module_file in frontend/screens/*/*.js; do
-            node --input-type=module --check < "$module_file"
-          done
-          node --test frontend/features.test.cjs
-          node --test frontend/okz.test.cjs
-          node --test frontend/screens.test.cjs
-          node --test frontend/architecture.test.cjs
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - name: Lint GitHub Actions workflow and extracted scripts
-        run: |
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          shellcheck scripts/run-zap.sh scripts/verify-deployment.sh
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: backend/go.sum
 
-  tests:
-    name: Unit, race and API integration tests
+      - name: Compare generated reports with golden files
+        working-directory: backend
+        run: go test -count=1 -run Golden ./internal/xlsx
+
+  e2e:
+    name: Module / e2e
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
@@ -123,25 +231,19 @@ jobs:
             backend/go.sum
             tests/go.sum
 
-      - name: Run backend unit tests with race detector
-        working-directory: backend
-        run: go test -count=1 -race -covermode=atomic -coverprofile=backend-coverage.out ./...
-
-      - name: Run API and authentication tests against PostgreSQL
+      - name: Run API scenarios against PostgreSQL
         working-directory: tests
         env:
           TEST_DATABASE_DSN: host=127.0.0.1 port=5432 user=workspace_test password=workspace_test dbname=workspace_test sslmode=disable
           TEST_MIGRATIONS_DIR: ${{ github.workspace }}/migrations
-        run: go test -count=1 -race -coverpkg=cybercalc/... -covermode=atomic -coverprofile=integration-coverage.out ./...
+        run: go test -count=1 -race -coverpkg=cybercalc/... -covermode=atomic -coverprofile=e2e-coverage.out ./...
 
-      - name: Upload coverage
+      - name: Upload e2e coverage
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: go-coverage
-          path: |
-            backend/backend-coverage.out
-            tests/integration-coverage.out
+          name: e2e-coverage
+          path: tests/e2e-coverage.out
           if-no-files-found: warn
           retention-days: 14
 
@@ -374,7 +476,7 @@ jobs:
     name: Isolated containers and OWASP ZAP
     runs-on: ubuntu-24.04
     timeout-minutes: 35
-    needs: tests
+    needs: e2e
     env:
       COMPOSE_PROJECT_NAME: cybercalc-ci-${{ github.run_id }}-${{ github.run_attempt }}
       CI_HTTP_PORT: "18080"
@@ -468,7 +570,12 @@ jobs:
     name: Deploy to Debian VM
     needs:
       - quality
-      - tests
+      - backend
+      - frontend
+      - migrations
+      - contract
+      - golden
+      - e2e
       - dynamic
       - codeql
       - semgrep

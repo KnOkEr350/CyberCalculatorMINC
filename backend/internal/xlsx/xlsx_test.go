@@ -5,9 +5,28 @@ import (
 	"bytes"
 	"encoding/xml"
 	"io"
+	"os"
 	"strings"
 	"testing"
+
+	"cybercalc/internal/money"
 )
+
+func TestWorkbookGolden(t *testing.T) {
+	wb := New()
+	wb.AddSheet("Сводный для МЦ", []string{"Организация", "Сумма, руб.", "Статус"}, [][]interface{}{
+		{"ОО & партнёр", money.Amount(123456), "Утверждено"},
+	})
+
+	want, err := os.ReadFile("testdata/workbook.golden.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := wb.Sheets[0].sheetXML() + "\n"
+	if got != string(want) {
+		t.Fatalf("workbook XML differs from testdata/workbook.golden.xml\n--- want\n%s\n--- got\n%s", want, got)
+	}
+}
 
 func TestRoundTripAndSheetNames(t *testing.T) {
 	wb := New()
