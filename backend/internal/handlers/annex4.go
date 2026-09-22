@@ -81,6 +81,16 @@ func activityMetrics(category string, payload map[string]interface{}) (volume, r
 
 func annex4Key(partnerID, category string) string { return partnerID + "\x00" + category }
 
+// annex4Headers — 13 граф годового плана мероприятий (Приложение № 4 к
+// Приказу № 270): план на 31 декабря и факт на 1 мая в одной форме.
+var annex4Headers = []string{
+	"№ п/п", "Наименование ОО / РОИВ", "Реквизиты соглашения", "Уровень образования",
+	"Вид мероприятия", "Наименование мероприятия", "Срок исполнения", "Единица измерения",
+	"Объём: план на 31 декабря", "Объём: факт на 1 мая",
+	"Охват: план на 31 декабря, чел.", "Охват: факт на 1 мая, чел.",
+	"Объём средств (план), тыс. руб.",
+}
+
 func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int) {
 	companyID := itCompanyScope(u)
 	if companyID == "" && (u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin) {
@@ -210,7 +220,7 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 		}
 		return left.PartnerName < right.PartnerName
 	})
-	headers := []string{"№ п/п", "Наименование ОО / РОИВ", "Реквизиты соглашения", "Уровень образования", "Вид мероприятия", "Наименование мероприятия", "Срок исполнения", "Единица измерения", "Объём: план на 31 декабря", "Объём: факт на 1 мая", "Охват: план на 31 декабря, чел.", "Охват: факт на 1 мая, чел.", "Объём средств (план), тыс. руб."}
+	headers := annex4Headers
 	data := make([][]interface{}, 0, len(keys)+1)
 	for index, key := range keys {
 		item := aggregates[key]
