@@ -11,7 +11,9 @@
 - `BASE-05 — Разбиение frontend по экранам` — **ВЫПОЛНЕНО** (единый store, независимый router и shell, lazy-loaded entrypoint для каждого из 11 экранов и topology tests, 22 сентября 2026 года);
 - `BASE-07 — Правила SQL-миграций` — **ВЫПОЛНЕНО** (checksum registry, исполняемый migration guard и CI, 21 сентября 2026 года);
 - `BASE-08 — Feature flags` — **ВЫПОЛНЕНО** (исполнитель: текущий поток разработки, 21 сентября 2026 года);
+- `BASE-09 — Общие тестовые фабрики` — **ВЫПОЛНЕНО** (типизированные фабрики ИТ-компаний, ВО, СПО, школ, РОИВ, соглашений и пользователей; атомарный tenant-сценарий доступен backend и внешним тестам, 22 сентября 2026 года);
 - `BASE-10 — Контракт событий аудита` — **ВЫПОЛНЕНО** (единый actor/action/entity/old/new/request-id, корреляция с HTTP и системными задачами, 22 сентября 2026 года);
+- `BASE-11 — Стратегия legacy migration` — **ВЫПОЛНЕНО** (зафиксированы состояния dual-write/backfill/shadow-read/cutover, reconciliation gates и rollback без удаления legacy-данных, 22 сентября 2026 года);
 - `BASE-12 — CI-матрица модулей` — **ВЫПОЛНЕНО** (backend, frontend, migrations, contract, golden и e2e выделены в независимые gates; PostgreSQL запускается только для DB-проверок, 22 сентября 2026 года);
 - `DATA-05 — Справочник ОКЗ` — **ВЫПОЛНЕНО** (версионированный CSV-импорт со строгой проверкой UTF-8, поиск API и экран администратора, 21 сентября 2026 года);
 - `TCH-02 — Матрица семестров` — **ВЫПОЛНЕНО** (строгие диапазоны бакалавриата, магистратуры, специалитета и СПО применяются в API, UI и XLSX-импорте, 21 сентября 2026 года);
@@ -119,9 +121,9 @@ BASE-13 и утверждение production security profile в CRYPTO-00.
 | BASE-06 | Общая UI-библиотека | M | BASE-05 | Таблица, фильтры, drawer, upload, risk badge, money/date input, toast и доступный drag-and-drop/reorder покрыты тестами |
 | BASE-07 | Правила SQL-миграций — **ВЫПОЛНЕНО** | S | — | [Диапазоны](MIGRATIONS.md), checksum registry, CLI/CI guard и runtime checksum запрещают дубли, неверные имена и правки применённых миграций |
 | BASE-08 | Feature flags — **ВЫПОЛНЕНО** | S | BASE-03 | Раздельные fail-closed флаги backend/frontend включают модули и экраны без пересборки образов; registry, `/api/features`, VM-конфигурация и тесты готовы |
-| BASE-09 | Общие тестовые фабрики | M | BASE-02, BASE-07 | Фикстуры компаний, ВО, СПО, школ, РОИВ, соглашений и пользователей доступны всем пакетам |
+| BASE-09 | Общие тестовые фабрики — **ВЫПОЛНЕНО** | M | BASE-02, BASE-07 | [Типизированные фабрики](TEST_FIXTURES.md) компаний, ВО, СПО, школ, РОИВ, соглашений и пользователей доступны backend и внешнему модулю тестов; связанный tenant-сценарий создаётся атомарно |
 | BASE-10 | Контракт событий аудита — **ВЫПОЛНЕНО** | S | BASE-02 | [Единая структура](AUDIT_EVENTS.md) actor/action/entity/old/new/request-id применяется handlers и модулями; HTTP и фоновые события коррелируются по request-id |
-| BASE-11 | Стратегия legacy migration | M | ADR-10, BASE-07 | Описаны dual-read/dual-write, backfill, cutover и rollback без потери текущих данных |
+| BASE-11 | Стратегия legacy migration — **ВЫПОЛНЕНО** | M | ADR-10, BASE-07 | [Описаны](LEGACY_MIGRATION.md) state machine, dual-write, идемпотентный backfill, reconciliation gates, tenant-wave cutover и rollback без потери текущих данных |
 | BASE-12 | CI-матрица модулей — **ВЫПОЛНЕНО** | M | BASE-03, BASE-05 | Backend, frontend, migrations, contract, golden и e2e проверки запускаются раздельно; deploy зависит от каждого gate |
 | BASE-13 | Реестр нормативных источников | M | ADR-08 | Акт/редакция/дата действия/source URL/SHA-256; импорт неофициального или противоречивого файла блокируется; diff редакций формирует протокол |
 
@@ -462,12 +464,12 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 Параллельно:
 
 - BASE-06;
-- BASE-09–BASE-13;
+- BASE-13;
 - закрытие ADR-05;
 - получение официальной редакции Приказа № 270 и форм АНО АЦ, регистрация source/SHA-256;
 - CRYPTO-00: подготовка security profile для CryptoPro/ЭП без реализации production-провайдера.
 
-BASE-01–BASE-04, BASE-07, BASE-08 и DATA-05 уже завершены.
+BASE-01–BASE-05, BASE-07–BASE-12 и DATA-05 уже завершены.
 
 Актуальный frontend critical path после `fe2f92a`:
 

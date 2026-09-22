@@ -14,6 +14,7 @@ import (
 	"cybercalc/internal/dbx"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	"cybercalc/internal/testfixtures"
 )
 
 func TestITCompanyBulkImportAndPagination(t *testing.T) {
@@ -32,11 +33,13 @@ func TestITCompanyBulkImportAndPagination(t *testing.T) {
 	if err = dbx.RunMigrations(db, os.Getenv("TEST_MIGRATIONS_DIR")); err != nil {
 		t.Fatal(err)
 	}
-	var userID string
-	err = db.QueryRow(`INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES('it-registry@workspace.test','test-only','Тест импорта ИТ','super_admin','edu_institution') ON CONFLICT(email) DO UPDATE SET full_name=EXCLUDED.full_name,role=EXCLUDED.role RETURNING id::text`).Scan(&userID)
+	fixtureUser, err := testfixtures.New(db, t.Name()).CreateUser(context.Background(), testfixtures.UserParams{
+		FullName: "Тест импорта ИТ", Role: models.RoleSuperAdmin, EntityType: models.EntityEduInst,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	userID := fixtureUser.ID
 	data := testITRegistry(t, 650, ',')
 	for attempt := 0; attempt < 2; attempt++ {
 		if count, err := ImportITCompanies(context.Background(), db, data, userID); err != nil || count != 650 {
