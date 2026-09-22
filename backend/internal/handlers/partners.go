@@ -149,7 +149,7 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		middleware.WriteError(w, 409, "не удалось сохранить первое соглашение")
 		return
 	}
-	if err := logAudit(tx, "partner", partnerID, "create", u.ID, "", nil, map[string]interface{}{
+	if err := logAudit(r.Context(), tx, "partner", partnerID, "create", u.ID, "", nil, map[string]interface{}{
 		"directory_id": req.DirectoryID, "agreement_id": agreementID,
 	}); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")

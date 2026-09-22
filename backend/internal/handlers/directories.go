@@ -110,7 +110,7 @@ func (h *EntryHandlers) CreateMentor(w http.ResponseWriter, r *http.Request, u m
 		middleware.WriteError(w, 409, "наставник уже есть в справочнике или партнёр не найден")
 		return
 	}
-	if logAudit(tx, "mentor", id, "create", u.ID, "", nil, req) != nil {
+	if logAudit(r.Context(), tx, "mentor", id, "create", u.ID, "", nil, req) != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}

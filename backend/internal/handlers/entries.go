@@ -232,7 +232,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		return
 	}
 
-	if err := logAudit(tx, "entry", id, "create", u.ID, "", nil, req); err != nil {
+	if err := logAudit(r.Context(), tx, "entry", id, "create", u.ID, "", nil, req); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
 		return
 	}
@@ -613,7 +613,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	if oldPartnerID.Valid {
 		oldPartner = oldPartnerID.String
 	}
-	if err := logAudit(tx, "entry", entryID, "update", u.ID, req.Comment,
+	if err := logAudit(r.Context(), tx, "entry", entryID, "update", u.ID, req.Comment,
 		map[string]interface{}{"partner_id": oldPartner, "agreement_id": oldAgreementID, "audience": oldAudience, "payload": oldPayload, "amount_rub": oldAmount, "formula_amount_rub": oldFormulaAmount, "actual_amount_rub": oldActualAmount, "cost_method": oldCostMethod},
 		map[string]interface{}{"partner_id": partnerID, "agreement_id": req.AgreementID, "audience": audience, "payload": req.Payload, "amount_rub": newAmount, "formula_amount_rub": formulaAmount, "actual_amount_rub": req.ActualAmountRub, "cost_method": req.CostMethod},
 	); err != nil {

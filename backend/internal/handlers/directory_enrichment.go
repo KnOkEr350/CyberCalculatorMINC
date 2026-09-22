@@ -324,7 +324,7 @@ func EnrichEducationDirectory(ctx context.Context, db *sql.DB, limit int, delay 
 				item.values[6], item.values[7], institutionStatus, item.values[9], egrulBaseURL+"/index.html",
 				time.Now().UTC().Format("2006-01-02"), "pending")
 			if txErr == nil {
-				txErr = logAudit(tx, "education_directory", id, "directory_enrich", "",
+				txErr = logAudit(ctx, tx, "education_directory", id, "directory_enrich", "",
 					fmt.Sprintf("Автоподбор ФНС: выбран лучший из %d результатов (%s, %s)", matchedResultCount, matched.Name, matched.Region), oldValue, newValue)
 			}
 			if txErr == nil {

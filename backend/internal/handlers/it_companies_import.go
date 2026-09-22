@@ -159,7 +159,7 @@ func ImportITCompanies(ctx context.Context, db *sql.DB, data []byte, userID stri
 			return 0, fmt.Errorf("импорт отменён: конфликт или более новые сведения для ИНН %s: %w", company.INN, err)
 		}
 	}
-	if err = logAudit(tx, "it_company", "", "import", userID, fmt.Sprintf("Загружено %d компаний из выгрузки реестра", len(companies)), nil, map[string]int{"rows": len(companies)}); err != nil {
+	if err = logAudit(ctx, tx, "it_company", "", "import", userID, fmt.Sprintf("Загружено %d компаний из выгрузки реестра", len(companies)), nil, map[string]int{"rows": len(companies)}); err != nil {
 		return 0, err
 	}
 	if err = tx.Commit(); err != nil {

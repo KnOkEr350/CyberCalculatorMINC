@@ -1,11 +1,14 @@
 package dbx
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	platformaudit "cybercalc/internal/platform/audit"
 )
 
 // Dedicated disposable database only: checks upgrade from the old schema,
@@ -40,7 +43,7 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := RunMigrations(db, old); e != nil {
 		t.Fatal(e)
 	}
-	var user, partner, entry string
+	var user, partner, entry, auditID string
 	if e := db.QueryRow(`INSERT INTO users(email,password_hash,full_name,role) VALUES('legacy@migration.test','test-only','Старый администратор','admin') RETURNING id`).Scan(&user); e != nil {
 		t.Fatal(e)
 	}
@@ -54,6 +57,9 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 		t.Fatal(e)
 	}
 	if _, e := db.Exec(`INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at) VALUES($1,'legacy.txt','/test-only/legacy.txt','text/plain',10,$2,now()+interval '1 year')`, entry, user); e != nil {
+		t.Fatal(e)
+	}
+	if e := db.QueryRow(`INSERT INTO audit_log(entity_type,entity_id,action,user_id,new_value) VALUES('entry',$1,'create',$2,'{"legacy":true}') RETURNING id`, entry, user).Scan(&auditID); e != nil {
 		t.Fatal(e)
 	}
 	if e := RunMigrations(db, dir); e != nil {
@@ -96,6 +102,29 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	}
 	if e := db.QueryRow(`SELECT target_amount_rub FROM budget_targets WHERE report_year=2026 AND owner_user_id=$1`, user).Scan(&amount); e != nil || amount != 12345 {
 		t.Fatal("legacy budget target lost", e)
+	}
+	var actorType, requestID string
+	if e := db.QueryRow(`SELECT actor_type,request_id FROM audit_log WHERE id=$1`, auditID).Scan(&actorType, &requestID); e != nil {
+		t.Fatal("legacy audit event lost:", e)
+	}
+	if actorType != "user" || requestID != "legacy:"+auditID {
+		t.Fatalf("legacy audit event contract not backfilled: actor=%q request_id=%q", actorType, requestID)
+	}
+	ctx := platformaudit.WithRequestID(context.Background(), "migration-test-request")
+	if e := platformaudit.Write(ctx, db, platformaudit.Event{
+		Actor:  platformaudit.UserActor(user),
+		Action: "update",
+		Entity: platformaudit.Entity{Type: "entry", ID: entry},
+		Before: map[string]any{"status": "old"},
+		After:  map[string]any{"status": "new"},
+	}); e != nil {
+		t.Fatal("write canonical audit event:", e)
+	}
+	if e := db.QueryRow(`SELECT actor_type,request_id FROM audit_log WHERE request_id='migration-test-request'`).Scan(&actorType, &requestID); e != nil {
+		t.Fatal("read canonical audit event:", e)
+	}
+	if actorType != "user" || requestID != "migration-test-request" {
+		t.Fatalf("canonical audit event was not persisted: actor=%q request_id=%q", actorType, requestID)
 	}
 	if e := db.QueryRow(`SELECT count(*) FROM education_directory WHERE listed_in_mincifry_order_27`).Scan(&count); e != nil || count != 642 {
 		t.Fatalf("expected 642 organizations from Minцифры Order 27, got %d: %v", count, e)

@@ -169,7 +169,7 @@ func (h *ITCompanyHandlers) Create(w http.ResponseWriter, r *http.Request, u mid
 		middleware.WriteError(w, http.StatusConflict, "компания с такими реквизитами или записью реестра уже существует")
 		return
 	}
-	if logAudit(tx, "it_company", id, "create", u.ID, "добавлена из официального реестра аккредитованных ИТ-компаний", nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "it_company", id, "create", u.ID, "добавлена из официального реестра аккредитованных ИТ-компаний", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "не удалось сохранить ИТ-компанию")
 		return
 	}

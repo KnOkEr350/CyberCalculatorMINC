@@ -220,7 +220,7 @@ func upsertDirectoryRows(ctx context.Context, tx *sql.Tx, rows [][]string, verif
 			} else {
 				newValue["program_codes"], newValue["programs_source_url"] = strings.Join(oldProgramCodes, ","), oldProgramsSource
 			}
-			if err := logAudit(tx, "education_directory", id, "directory_confirm", userID,
+			if err := logAudit(ctx, tx, "education_directory", id, "directory_confirm", userID,
 				"Подтверждено через Excel", oldValue, newValue); err != nil {
 				return err
 			}

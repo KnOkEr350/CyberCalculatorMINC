@@ -215,7 +215,7 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			return
 		}
 		item := map[string]interface{}{"id": id, "file_name": f.name, "size_bytes": f.size, "content_sha256": f.contentSHA256, "retention_expires_at": expires, "document_type": documentType, "review_status": "pending"}
-		if logAudit(tx, "attachment", id, "upload", u.ID, fmt.Sprintf("файл %s", f.name), nil, item) != nil {
+		if logAudit(r.Context(), tx, "attachment", id, "upload", u.ID, fmt.Sprintf("файл %s", f.name), nil, item) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита")
 			return
 		}
@@ -307,7 +307,7 @@ func (h *AttachmentHandlers) Review(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 500, "ошибка сохранения проверки")
 		return
 	}
-	if logAudit(tx, "attachment", attachmentID, "review", u.ID, req.Comment, nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "attachment", attachmentID, "review", u.ID, req.Comment, nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения проверки")
 		return
 	}

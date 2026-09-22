@@ -1792,8 +1792,8 @@ async function renderAdminLogs(box) {
     version: "Версия", records: "Количество записей", effective_on: "Дата начала действия",
   };
   const summarize = (log) => {
-    const before = log.old_value || {};
-    const after = log.new_value || {};
+	const before = log.old || log.old_value || {};
+	const after = log.new || log.new_value || {};
     const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])]
       .filter((key) => JSON.stringify(before[key] ?? "") !== JSON.stringify(after[key] ?? ""))
       .map((key) => `${fieldLabels[key] || key}: «${before[key] || "—"}» → «${after[key] || "—"}»`);
@@ -1808,8 +1808,8 @@ async function renderAdminLogs(box) {
     box.querySelector("#logs-list").innerHTML = visible.length
       ? `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Кто</th><th>Объект и действие</th><th>Что изменено</th></tr></thead><tbody>${visible.map((log) => `<tr>
         <td>${new Date(log.created_at).toLocaleString("ru-RU")}</td>
-        <td>${escapeHTML(log.user_name || (log.user_id ? "Пользователь" : "Автоматический скрипт"))}${log.user_email ? `<br><small>${escapeHTML(log.user_email)}</small>` : ""}</td>
-        <td>${escapeHTML(valueLabel(log.entity_type))}${log.entity_id ? " #" + escapeHTML(log.entity_id.slice(0, 8)) : ""}<br><b>${escapeHTML(valueLabel(log.action))}</b></td>
+		<td>${escapeHTML(log.actor?.name || log.user_name || ((log.actor?.id || log.user_id) ? "Пользователь" : "Автоматический скрипт"))}${(log.actor?.email || log.user_email) ? `<br><small>${escapeHTML(log.actor?.email || log.user_email)}</small>` : ""}</td>
+		<td title="Request ID: ${escapeHTML(log.request_id || "—")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(valueLabel(log.action))}</b></td>
         <td>${summarize(log)}</td>
       </tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Действий по выбранному фильтру пока нет.</p>';

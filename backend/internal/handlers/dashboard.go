@@ -310,7 +310,7 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
 	}
-	if logAudit(tx, "settings", "", "update", u.ID, "изменение целевой суммы (3%)", nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "settings", "", "update", u.ID, "изменение целевой суммы (3%)", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}

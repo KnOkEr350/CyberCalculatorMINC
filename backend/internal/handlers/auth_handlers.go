@@ -116,7 +116,7 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 	if ttl <= 0 {
 		ttl = 12 * time.Hour
 	}
-	if err := logAudit(tx, "user", id, "login", id, "", nil, nil); err != nil {
+	if err := logAudit(r.Context(), tx, "user", id, "login", id, "", nil, nil); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -187,7 +187,7 @@ func (h *AuthHandlers) ChangePassword(w http.ResponseWriter, r *http.Request, u 
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
-	if logAudit(tx, "user", u.ID, "password_change", u.ID, "все сессии отозваны", nil, nil) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "user", u.ID, "password_change", u.ID, "все сессии отозваны", nil, nil) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
@@ -266,7 +266,7 @@ func (h *AuthHandlers) SetEntityType(w http.ResponseWriter, r *http.Request, u m
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
 	}
-	if logAudit(tx, "user", u.ID, "update", u.ID, "выбор роли: организация/вуз", nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "user", u.ID, "update", u.ID, "выбор роли: организация/вуз", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}

@@ -201,7 +201,7 @@ func (h *SnapshotHandlers) Create(w http.ResponseWriter, r *http.Request, u midd
 		middleware.WriteError(w, http.StatusConflict, "неизменяемый снимок за этот год уже сформирован")
 		return
 	}
-	if err := logAudit(tx, "report_snapshot", id, "seal", u.ID, "неизменяемый снимок факта на 1 мая", nil, map[string]interface{}{"report_year": year, "sha256": hash}); err != nil {
+	if err := logAudit(r.Context(), tx, "report_snapshot", id, "seal", u.ID, "неизменяемый снимок факта на 1 мая", nil, map[string]interface{}{"report_year": year, "sha256": hash}); err != nil {
 		middleware.WriteError(w, 500, "не удалось записать аудит снимка")
 		return
 	}

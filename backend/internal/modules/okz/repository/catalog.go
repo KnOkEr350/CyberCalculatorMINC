@@ -12,6 +12,7 @@ import (
 	"github.com/lib/pq"
 
 	"cybercalc/internal/modules/okz/domain"
+	platformaudit "cybercalc/internal/platform/audit"
 )
 
 var (
@@ -141,9 +142,14 @@ func (c *SQLCatalog) Import(ctx context.Context, input domain.Import) (domain.Ve
 			return domain.Version{}, fmt.Errorf("insert OKZ %s: %w", record.Code, err)
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_log(entity_type,entity_id,action,user_id,new_value)
-		VALUES('okz_catalog_version',$1,'okz_import',$2,jsonb_build_object('version',$3,'records',$4,'effective_on',$5))`,
-		id, input.ImportedBy, input.Version, len(input.Records), input.EffectiveOn); err != nil {
+	if err := platformaudit.Write(ctx, tx, platformaudit.Event{
+		Actor:  platformaudit.UserActor(input.ImportedBy),
+		Action: "okz_import",
+		Entity: platformaudit.Entity{Type: "okz_catalog_version", ID: id},
+		After: map[string]any{
+			"version": input.Version, "records": len(input.Records), "effective_on": input.EffectiveOn,
+		},
+	}); err != nil {
 		return domain.Version{}, err
 	}
 	if err := tx.Commit(); err != nil {

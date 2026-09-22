@@ -195,7 +195,7 @@ func (h *LegalEntityGroupHandlers) write(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-	if err = logAudit(tx, "legal_entity_group", id, action, u.ID, "", nil, req); err != nil || tx.Commit() != nil {
+	if err = logAudit(r.Context(), tx, "legal_entity_group", id, action, u.ID, "", nil, req); err != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения группы")
 		return
 	}

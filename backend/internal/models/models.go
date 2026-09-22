@@ -275,6 +275,11 @@ type EntryComment struct {
 
 type AuditLogItem struct {
 	ID          string                 `json:"id"`
+	Actor       AuditActor             `json:"actor"`
+	Entity      AuditEntity            `json:"entity"`
+	Old         map[string]interface{} `json:"old,omitempty"`
+	New         map[string]interface{} `json:"new,omitempty"`
+	RequestID   string                 `json:"request_id"`
 	EntityType  string                 `json:"entity_type"`
 	EntityID    *string                `json:"entity_id,omitempty"`
 	Action      string                 `json:"action"`
@@ -285,4 +290,16 @@ type AuditLogItem struct {
 	OldValue    map[string]interface{} `json:"old_value,omitempty"`
 	NewValue    map[string]interface{} `json:"new_value,omitempty"`
 	CreatedAt   time.Time              `json:"created_at"`
+}
+
+type AuditActor struct {
+	Type  string  `json:"type"`
+	ID    *string `json:"id,omitempty"`
+	Email *string `json:"email,omitempty"`
+	Name  *string `json:"name,omitempty"`
+}
+
+type AuditEntity struct {
+	Type string  `json:"type"`
+	ID   *string `json:"id,omitempty"`
 }

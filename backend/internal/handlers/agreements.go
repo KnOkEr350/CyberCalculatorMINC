@@ -442,7 +442,7 @@ func (h *AgreementHandlers) Create(w http.ResponseWriter, r *http.Request, u mid
 		middleware.WriteError(w, 409, "не удалось сохранить соглашение")
 		return
 	}
-	if logAudit(tx, "agreement", id, "create", u.ID, "", nil, agreement.Request) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "agreement", id, "create", u.ID, "", nil, agreement.Request) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения соглашения")
 		return
 	}
@@ -546,7 +546,7 @@ func (h *AgreementHandlers) Update(w http.ResponseWriter, r *http.Request, u mid
 			return
 		}
 	}
-	if logAudit(tx, "agreement", agreementID, "update", u.ID, "", nil, rq) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "agreement", agreementID, "update", u.ID, "", nil, rq) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения соглашения")
 		return
 	}

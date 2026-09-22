@@ -114,7 +114,7 @@ func (h *AuthHandlers) MFAConfirm(w http.ResponseWriter, r *http.Request, u midd
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
-	if logAudit(tx, "user", u.ID, "mfa_enabled", u.ID, "все сессии отозваны", nil, nil) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "user", u.ID, "mfa_enabled", u.ID, "все сессии отозваны", nil, nil) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}

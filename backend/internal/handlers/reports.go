@@ -319,7 +319,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%s_%d.xlsx"; filename*=UTF-8''%s`, periodType, year, url.PathEscape(filename)))
 	w.Write(body)
 
-	logAudit(h.DB, "report", "", "export", u.ID, fmt.Sprintf("выгрузка %s", filename), nil, nil)
+	logAudit(r.Context(), h.DB, "report", "", "export", u.ID, fmt.Sprintf("выгрузка %s", filename), nil, nil)
 }
 
 func payloadSummary(raw []byte) string {

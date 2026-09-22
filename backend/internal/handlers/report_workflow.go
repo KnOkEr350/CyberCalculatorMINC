@@ -521,7 +521,7 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 		middleware.WriteError(w, 500, "ошибка истории статусов")
 		return
 	}
-	if err = logAudit(tx, "report", id, "status", u.ID, req.Comment, map[string]string{"status": current}, map[string]string{"status": req.Status}); err != nil {
+	if err = logAudit(r.Context(), tx, "report", id, "status", u.ID, req.Comment, map[string]string{"status": current}, map[string]string{"status": req.Status}); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}

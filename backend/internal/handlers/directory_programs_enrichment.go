@@ -269,7 +269,7 @@ func EnrichDirectoryProgramsForQuery(ctx context.Context, db *sql.DB, limit int,
 							_, saveErr = tx.ExecContext(ctx, `UPDATE education_directory SET program_codes=$2,programs_source_url=$3,programs_checked_at=now(),updated_at=now() WHERE id::text=$1`, item.id, pq.Array(codes), pageURL)
 						}
 						if saveErr == nil {
-							saveErr = logAudit(tx, "education_directory", item.id, "directory_programs", "", "Программы с сайта учебного заведения", map[string]interface{}{"program_codes": oldCodes, "programs_source_url": oldURL}, map[string]interface{}{"program_codes": codes, "programs_source_url": pageURL})
+							saveErr = logAudit(ctx, tx, "education_directory", item.id, "directory_programs", "", "Программы с сайта учебного заведения", map[string]interface{}{"program_codes": oldCodes, "programs_source_url": oldURL}, map[string]interface{}{"program_codes": codes, "programs_source_url": pageURL})
 						}
 						if saveErr == nil {
 							saveErr = tx.Commit()

@@ -248,7 +248,7 @@ func (h *PartnerHandlers) UpdateDirectory(w http.ResponseWriter, r *http.Request
 	if req.ConfirmationComment != "" {
 		comment += ": " + req.ConfirmationComment
 	}
-	if err = logAudit(tx, "education_directory", id, action, u.ID, comment, oldValue, newValue); err != nil {
+	if err = logAudit(r.Context(), tx, "education_directory", id, action, u.ID, comment, oldValue, newValue); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -350,7 +350,7 @@ func (h *PartnerHandlers) CreateDirectory(w http.ResponseWriter, r *http.Request
 	if proposedBy != nil {
 		action, comment = "directory_propose", "Модератор предложил добавить учебное заведение: "+req.ProposalComment
 	}
-	if err = logAudit(tx, "education_directory", id, action, u.ID, comment, nil, map[string]interface{}{
+	if err = logAudit(r.Context(), tx, "education_directory", id, action, u.ID, comment, nil, map[string]interface{}{
 		"name": req.Name, "source_url": req.SourceURL, "verification_status": status,
 	}); err != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "не удалось сохранить учебное заведение")
@@ -491,7 +491,7 @@ func (h *PartnerHandlers) DecideDirectoryProposal(w http.ResponseWriter, r *http
 		middleware.WriteError(w, 500, "не удалось сохранить решение")
 		return
 	}
-	if err = logAudit(tx, "education_directory", id, "directory_proposal_"+req.Decision, u.ID, req.Comment,
+	if err = logAudit(r.Context(), tx, "education_directory", id, "directory_proposal_"+req.Decision, u.ID, req.Comment,
 		map[string]interface{}{"verification_status": "pending"}, map[string]interface{}{"verification_status": map[string]string{"approve": "verified", "reject": "rejected"}[req.Decision]}); err != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "не удалось сохранить решение")
 		return

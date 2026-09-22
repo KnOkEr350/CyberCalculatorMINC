@@ -142,7 +142,7 @@
       "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
       "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/admin/logs": { "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } } }
+    "/api/admin/logs": { "get": { "tags": ["administration"], "parameters": [{ "name": "request_id", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 128 } }], "responses": { "200": { "description": "События единого audit-контракта", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEvent" } } } } }, "default": { "$ref": "#/components/responses/Error" } } } }
   },
   "components": {
     "securitySchemes": {
@@ -244,6 +244,49 @@
           "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
           "offset": { "type": "integer", "minimum": 0 },
           "version": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "AuditActor": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["user", "system"] },
+          "id": { "$ref": "#/components/schemas/UUID" },
+          "email": { "type": "string", "format": "email" },
+          "name": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "AuditEntity": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "id": { "$ref": "#/components/schemas/UUID" }
+        },
+        "additionalProperties": false
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": ["id", "actor", "action", "entity", "request_id", "created_at"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/UUID" },
+          "actor": { "$ref": "#/components/schemas/AuditActor" },
+          "action": { "type": "string", "minLength": 1 },
+          "entity": { "$ref": "#/components/schemas/AuditEntity" },
+          "old": { "type": "object", "additionalProperties": true },
+          "new": { "type": "object", "additionalProperties": true },
+          "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "comment_text": { "type": "string" },
+          "created_at": { "$ref": "#/components/schemas/DateTime" },
+          "entity_type": { "type": "string", "deprecated": true },
+          "entity_id": { "$ref": "#/components/schemas/UUID", "deprecated": true },
+          "user_id": { "$ref": "#/components/schemas/UUID", "deprecated": true },
+          "user_email": { "type": "string", "format": "email", "deprecated": true },
+          "user_name": { "type": "string", "deprecated": true },
+          "old_value": { "type": "object", "additionalProperties": true, "deprecated": true },
+          "new_value": { "type": "object", "additionalProperties": true, "deprecated": true }
         },
         "additionalProperties": false
       }

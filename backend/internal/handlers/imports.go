@@ -339,7 +339,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}
-		if logAudit(tx, "entry", id, "create", u.ID, "импорт Excel", nil, row) != nil {
+		if logAudit(r.Context(), tx, "entry", id, "create", u.ID, "импорт Excel", nil, row) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита; импорт отменён")
 			return
 		}
@@ -446,7 +446,7 @@ func (h *PartnerHandlers) ImportDirectory(w http.ResponseWriter, r *http.Request
 			middleware.WriteError(w, 500, "импорт отменён: конфликт записи реестра")
 			return
 		}
-		if logAudit(tx, "directory", "", "import", u.ID, fmt.Sprintf("%d организаций", len(valid)), nil, nil) != nil {
+		if logAudit(r.Context(), tx, "directory", "", "import", u.ID, fmt.Sprintf("%d организаций", len(valid)), nil, nil) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита")
 			return
 		}

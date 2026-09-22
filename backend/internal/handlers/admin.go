@@ -102,7 +102,7 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 			return
 		}
 	}
-	if logAudit(tx, "user", id, "create", admin.ID, "", nil, map[string]string{"email": req.Email, "role": req.Role}) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "user", id, "create", admin.ID, "", nil, map[string]string{"email": req.Email, "role": req.Role}) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
@@ -301,7 +301,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 			return
 		}
 	}
-	if logAudit(tx, "user", userID, "update", admin.ID, "", old, req) != nil {
+	if logAudit(r.Context(), tx, "user", userID, "update", admin.ID, "", old, req) != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -392,7 +392,7 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 	}
 	// audit_log.entity_id имеет тип UUID, а ключ настройки — строка; сам ключ
 	// сохраняется в new_value, поэтому UUID для этого типа события не задаём.
-	if logAudit(tx, "settings", "", "settings_change", admin.ID, "", nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "settings", "", "settings_change", admin.ID, "", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
@@ -415,6 +415,9 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 	if v := q.Get("user_id"); v != "" {
 		conds = append(conds, "a.user_id = "+arg(v))
 	}
+	if v := q.Get("request_id"); v != "" {
+		conds = append(conds, "a.request_id = "+arg(v))
+	}
 	limit := 200
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
@@ -424,8 +427,8 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 
 	// SQL structure comes only from fixed fragments; values remain positional parameters.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	query := `SELECT a.id, a.entity_type, a.entity_id, a.action, a.user_id,
-		COALESCE(u.email,''),COALESCE(u.full_name,''),a.comment_text,a.old_value,a.new_value,a.created_at
+	query := `SELECT a.id, a.actor_type, a.entity_type, a.entity_id, a.action, a.user_id,
+		COALESCE(u.email,''),COALESCE(u.full_name,''),a.comment_text,a.old_value,a.new_value,a.request_id,a.created_at
 		FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE ` + joinAnd(conds) +
 		` ORDER BY a.created_at DESC LIMIT ` + strconv.Itoa(limit)
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
@@ -441,8 +444,8 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 		var entityID, userID, comment sql.NullString
 		var userEmail, userName string
 		var oldRaw, newRaw []byte
-		if err := rows.Scan(&item.ID, &item.EntityType, &entityID, &item.Action, &userID,
-			&userEmail, &userName, &comment, &oldRaw, &newRaw, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Actor.Type, &item.EntityType, &entityID, &item.Action, &userID,
+			&userEmail, &userName, &comment, &oldRaw, &newRaw, &item.RequestID, &item.CreatedAt); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -450,15 +453,19 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 			v := entityID.String
 			item.EntityID = &v
 		}
+		item.Entity = models.AuditEntity{Type: item.EntityType, ID: item.EntityID}
 		if userID.Valid {
 			v := userID.String
 			item.UserID = &v
+			item.Actor.ID = &v
 		}
 		if userEmail != "" {
 			item.UserEmail = &userEmail
+			item.Actor.Email = &userEmail
 		}
 		if userName != "" {
 			item.UserName = &userName
+			item.Actor.Name = &userName
 		}
 		if comment.Valid {
 			v := comment.String
@@ -466,9 +473,11 @@ func (h *AdminHandlers) AuditLog(w http.ResponseWriter, r *http.Request, admin m
 		}
 		if len(oldRaw) > 0 {
 			json.Unmarshal(oldRaw, &item.OldValue)
+			item.Old = item.OldValue
 		}
 		if len(newRaw) > 0 {
 			json.Unmarshal(newRaw, &item.NewValue)
+			item.New = item.NewValue
 		}
 		out = append(out, item)
 	}

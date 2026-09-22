@@ -2,13 +2,13 @@ package middleware
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"cybercalc/internal/platform/audit"
 )
 
 type responseRecorder struct {
@@ -46,12 +46,11 @@ func Security(next http.Handler, publicURL string, requireMFA ...bool) http.Hand
 	heavy := make(chan struct{}, 2)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
-		var id [16]byte
-		if _, err := rand.Read(id[:]); err != nil {
+		requestID, err := audit.NewRequestID()
+		if err != nil {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		requestID := hex.EncodeToString(id[:])
 		recorded := &responseRecorder{ResponseWriter: w}
 		w = recorded
 		w.Header().Set("X-Request-ID", requestID)
@@ -123,6 +122,7 @@ func Security(next http.Handler, publicURL string, requireMFA ...bool) http.Hand
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 		defer cancel()
+		ctx = audit.WithRequestID(ctx, requestID)
 		ctx = context.WithValue(ctx, ctxKey("require_mfa"), len(requireMFA) > 0 && requireMFA[0])
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

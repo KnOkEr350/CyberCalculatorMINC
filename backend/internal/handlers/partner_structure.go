@@ -231,7 +231,7 @@ func (h *PartnerStructureHandlers) CreateOrgUnit(w http.ResponseWriter, r *http.
 		writeStructureDBError(w, err)
 		return
 	}
-	if err := logAudit(tx, "org_unit", id, "create", u.ID, "", nil, req); err != nil {
+	if err := logAudit(r.Context(), tx, "org_unit", id, "create", u.ID, "", nil, req); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -292,7 +292,7 @@ func (h *PartnerStructureHandlers) UpdateOrgUnit(w http.ResponseWriter, r *http.
 		middleware.WriteError(w, 404, "подразделение не найдено")
 		return
 	}
-	if err := logAudit(tx, "org_unit", id, "update", u.ID, "", old, req); err != nil {
+	if err := logAudit(r.Context(), tx, "org_unit", id, "update", u.ID, "", old, req); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -326,7 +326,7 @@ func (h *PartnerStructureHandlers) DeleteOrgUnit(w http.ResponseWriter, r *http.
 		writeStructureDBError(w, err)
 		return
 	}
-	if err := logAudit(tx, "org_unit", id, "delete", u.ID, "", old, nil); err != nil {
+	if err := logAudit(r.Context(), tx, "org_unit", id, "delete", u.ID, "", old, nil); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -452,7 +452,7 @@ func (h *PartnerStructureHandlers) CreateAcademicGroup(w http.ResponseWriter, r 
 		writeStructureDBError(w, err)
 		return
 	}
-	if err := logAudit(tx, "academic_group", id, "create", u.ID, "", nil, req); err != nil {
+	if err := logAudit(r.Context(), tx, "academic_group", id, "create", u.ID, "", nil, req); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -512,7 +512,7 @@ func (h *PartnerStructureHandlers) UpdateAcademicGroup(w http.ResponseWriter, r 
 		writeStructureDBError(w, err)
 		return
 	}
-	if err := logAudit(tx, "academic_group", id, "update", u.ID, "", old, req); err != nil {
+	if err := logAudit(r.Context(), tx, "academic_group", id, "update", u.ID, "", old, req); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
@@ -546,7 +546,7 @@ func (h *PartnerStructureHandlers) DeleteAcademicGroup(w http.ResponseWriter, r 
 		writeStructureDBError(w, err)
 		return
 	}
-	if err := logAudit(tx, "academic_group", id, "delete", u.ID, "", old, nil); err != nil {
+	if err := logAudit(r.Context(), tx, "academic_group", id, "delete", u.ID, "", old, nil); err != nil {
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}

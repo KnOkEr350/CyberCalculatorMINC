@@ -113,7 +113,7 @@ func (h *RegionalAuthorityHandlers) Create(w http.ResponseWriter, r *http.Reques
 		middleware.WriteError(w, 409, "такой РОИВ уже есть в справочнике")
 		return
 	}
-	if logAudit(tx, "regional_authority", id, "create", u.ID, "", nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "regional_authority", id, "create", u.ID, "", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения РОИВ")
 		return
 	}
@@ -152,7 +152,7 @@ func (h *RegionalAuthorityHandlers) Update(w http.ResponseWriter, r *http.Reques
 		middleware.WriteError(w, 404, "РОИВ не найден")
 		return
 	}
-	if logAudit(tx, "regional_authority", id, "update", u.ID, "", nil, req) != nil || tx.Commit() != nil {
+	if logAudit(r.Context(), tx, "regional_authority", id, "update", u.ID, "", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения РОИВ")
 		return
 	}
