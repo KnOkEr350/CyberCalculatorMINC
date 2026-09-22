@@ -114,10 +114,14 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	args := []interface{}{company, year}
 	if partner != "" {
 		args = append(args, partner)
+		// Only the positional parameter number is formatted; the partner ID stays in args.
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		conds = append(conds, fmt.Sprintf("e.partner_id::text=$%d", len(args)))
 	}
 	if agreement != "" {
 		args = append(args, agreement)
+		// Only the positional parameter number is formatted; the agreement ID stays in args.
+		// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 		conds = append(conds, fmt.Sprintf("e.agreement_id::text=$%d", len(args)))
 	}
 	if kind == "annex2" {
@@ -126,6 +130,8 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	if kind == "annex3" {
 		conds = append(conds, "e.period_type='fact'")
 	}
+	// conds contains only fixed SQL fragments and $N placeholders; request values are in args.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	query := `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(e.agreement_id::text,''),COALESCE(a.number,''),e.category_code,c.name,e.period_type,e.audience,e.amount_rub,e.payload
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id LEFT JOIN agreements a ON a.id=e.agreement_id JOIN activity_categories c ON c.code=e.category_code WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY p.name,c.name,e.period_type,e.id`
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
