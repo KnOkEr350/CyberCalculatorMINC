@@ -35,7 +35,10 @@ func (teachersCalc) Calculate(audience models.Audience, payload map[string]inter
 func (teachersCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование ОО", Type: "select", Required: true},
-		{Key: "staff_member_id", Label: "Сотрудник ИТ-компании", Type: "select", Required: true},
+		// Optional at the shared calculator boundary until TCH-08 backfills
+		// legacy teaching rows. The interactive UI requires this field for new
+		// records, while existing imports and API clients remain compatible.
+		{Key: "staff_member_id", Label: "Сотрудник ИТ-компании", Type: "select"},
 		{Key: "course_name", Label: "Наименование курса", Type: "text", Required: true},
 		{Key: "education_level", Label: "Уровень образовательной программы", Type: "select", Required: true, Options: []string{"bachelor", "master", "specialist", "spo"}},
 		{Key: "semester", Label: "Семестр", Type: "number", Required: true, Integer: true, Minimum: 1, Maximum: 13},

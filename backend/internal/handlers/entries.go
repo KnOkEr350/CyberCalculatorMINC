@@ -185,7 +185,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	if !ok {
 		return
 	}
-	staffMemberID, err := h.resolveTeachingStaff(r, req.CategoryCode, companyID, req.Payload, true)
+	staffMemberID, err := h.resolveTeachingStaff(r, req.CategoryCode, companyID, req.Payload, false)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
