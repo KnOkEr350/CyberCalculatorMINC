@@ -165,6 +165,16 @@ func canReviewEducationDirectory(u middleware.AuthUser) bool {
 	return u.Role == models.RoleCurator && u.EntityType == models.EntityEduInst
 }
 
+func canManagePartnerStructure(u middleware.AuthUser) bool {
+	if u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin {
+		return true
+	}
+	if u.EntityType == models.EntityOrganization {
+		return u.Role == models.RoleOrgAdmin || u.Role == models.RoleCurator
+	}
+	return u.EntityType == models.EntityEduInst && u.Role == models.RoleCurator
+}
+
 func canProposeEducationDirectory(u middleware.AuthUser) bool {
 	return u.Role == models.RoleOrgAdmin && u.EntityType == models.EntityOrganization
 }

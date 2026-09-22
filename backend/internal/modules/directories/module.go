@@ -17,6 +17,7 @@ type Module struct {
 	legalEntityGroups   *handlers.LegalEntityGroupHandlers
 	regionalAuthorities *handlers.RegionalAuthorityHandlers
 	entryReferences     *handlers.EntryHandlers
+	partnerStructure    *handlers.PartnerStructureHandlers
 }
 
 func New(db *sql.DB) *Module {
@@ -24,12 +25,40 @@ func New(db *sql.DB) *Module {
 		db: db, partners: &handlers.PartnerHandlers{DB: db}, itCompanies: &handlers.ITCompanyHandlers{DB: db},
 		agreements: &handlers.AgreementHandlers{DB: db}, legalEntityGroups: &handlers.LegalEntityGroupHandlers{DB: db},
 		regionalAuthorities: &handlers.RegionalAuthorityHandlers{DB: db}, entryReferences: &handlers.EntryHandlers{DB: db},
+		partnerStructure: &handlers.PartnerStructureHandlers{DB: db},
 	}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/partners", middleware.RequireAuth(m.db, m.partners.List))
 	mux.HandleFunc("POST /api/partners", middleware.RequireAuth(m.db, m.partners.Create))
+	mux.HandleFunc("GET /api/partners/{partner_id}/org-units", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.ListOrgUnits(w, r, u, r.PathValue("partner_id"))
+	}))
+	mux.HandleFunc("POST /api/partners/{partner_id}/org-units", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.CreateOrgUnit(w, r, u, r.PathValue("partner_id"))
+	}))
+	mux.HandleFunc("PUT /api/org-units/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.UpdateOrgUnit(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("DELETE /api/org-units/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.DeleteOrgUnit(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/partners/{partner_id}/academic-groups", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.ListAcademicGroups(w, r, u, r.PathValue("partner_id"))
+	}))
+	mux.HandleFunc("POST /api/partners/{partner_id}/academic-groups", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.CreateAcademicGroup(w, r, u, r.PathValue("partner_id"))
+	}))
+	mux.HandleFunc("PUT /api/academic-groups/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.UpdateAcademicGroup(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("DELETE /api/academic-groups/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.DeleteAcademicGroup(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/partners/{partner_id}/specialty-codes", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.SpecialtyCodes(w, r, u, r.PathValue("partner_id"))
+	}))
 	mux.HandleFunc("GET /api/it-companies", middleware.RequireAuth(m.db, m.itCompanies.List))
 	mux.HandleFunc("GET /api/it-companies/registry-search", middleware.RequireAuth(m.db, m.itCompanies.RegistrySearch))
 	mux.HandleFunc("POST /api/it-companies", middleware.RequireAuth(m.db, m.itCompanies.Create))
