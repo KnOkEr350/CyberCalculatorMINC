@@ -15,10 +15,11 @@ type Module struct {
 	reports   *handlers.ReportHandlers
 	workflow  *handlers.ReportWorkflowHandlers
 	snapshots *handlers.SnapshotHandlers
+	calendar  handlers.ReportCalendarHandlers
 }
 
 func New(db *sql.DB) *Module {
-	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db}, reports: &handlers.ReportHandlers{DB: db}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}}
+	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db}, reports: &handlers.ReportHandlers{DB: db}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -29,6 +30,7 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/reports/generated/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.reports.DownloadGenerated(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("GET /api/report-calendar", middleware.RequireAuth(m.db, m.calendar.Get))
 	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(m.db, m.workflow.Get))
 	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(m.db, m.workflow.Transition))
 	mux.HandleFunc("GET /api/report-snapshots", middleware.RequireAuth(m.db, m.snapshots.List))

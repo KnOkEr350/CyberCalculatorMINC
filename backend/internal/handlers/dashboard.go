@@ -157,6 +157,25 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 	middleware.WriteJSON(w, http.StatusOK, resp)
 }
 
+// riskBucketState раскладывает запись ровно по одной корзине дашборда
+// (DASH-02): гарантированный факт, прогноз и объём риска не пересекаются и в
+// сумме дают весь факт. Полный комплект без формального утверждения — это
+// прогноз, а не гарантия. Незнакомое состояние движка считается риском: в
+// гарантированный объём попадает только то, что доказано.
+func riskBucketState(state string, approved bool) string {
+	switch state {
+	case "green":
+		if !approved {
+			return "yellow"
+		}
+		return "green"
+	case "yellow", "red":
+		return state
+	default:
+		return "red"
+	}
+}
+
 func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, companyScope, categoryFilter, audienceFilter string) (map[string]riskBucket, error) {
 	result := map[string]riskBucket{"green": {}, "yellow": {}, "red": {}}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT e.category_code,e.payload,e.amount_rub,eligibility.eligible,
@@ -181,11 +200,7 @@ func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, comp
 		if err := json.Unmarshal(payloadRaw, &payload); err != nil {
 			return nil, err
 		}
-		state := compliance.Evaluate(category, "fact", payload, []string(documents)).State
-		// A complete but not formally approved record is forecast, never guaranteed.
-		if state == "green" && !approved {
-			state = "yellow"
-		}
+		state := riskBucketState(compliance.Evaluate(category, "fact", payload, []string(documents)).State, approved)
 		bucket := result[state]
 		bucket.EntryCount++
 		var addErr error

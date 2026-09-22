@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"cybercalc/internal/money"
@@ -143,27 +144,109 @@ func TestPayloadValueMissingKeyIsEmptyNotNilString(t *testing.T) {
 	}
 }
 
-func TestBuildAnnex2RowsNoNilLiteral(t *testing.T) {
-	payload, _ := json.Marshal(map[string]interface{}{"student_full_name": "Сидоров П.В.", "duration_months": 3})
-	data := []regulatoryRow{{Partner: "МГУ", Amount: money.Amount(100000), Payload: payload}}
+// REPORT-06: Приложение № 2 сводит стажёров в программы стажировок, как
+// того требует форма, и закрывается строкой «ИТОГО».
+func TestBuildAnnex2RowsGroupsByProgram(t *testing.T) {
+	intern := func(student string, hours float64) []byte {
+		payload, _ := json.Marshal(map[string]interface{}{
+			"internship_agreement_reference": "Договор о стажировке № 7",
+			"student_full_name":              student, "mentor_full_name": "Васильев М.А.",
+			"total_student_hours": hours, "total_mentor_hours": 20,
+		})
+		return payload
+	}
+	data := []regulatoryRow{
+		{PartnerID: "p1", Partner: "МГУ", Category: "internship", CategoryName: "Стажировки", Period: "fact", Amount: money.Amount(33540000), Payload: intern("Архипов Д.С.", 240)},
+		{PartnerID: "p1", Partner: "МГУ", Category: "internship", CategoryName: "Стажировки", Period: "fact", Amount: money.Amount(33540000), Payload: intern("Белов Е.В.", 240)},
+	}
 	rows := buildAnnex2Rows(data)
-	if len(rows) != 1 {
-		t.Fatalf("ожидали 1 строку, получили %d", len(rows))
+	if len(rows) != 2 { // одна программа плюс ИТОГО
+		t.Fatalf("две стажировки одной программы должны дать одну строку: %+v", rows)
 	}
 	row := rows[0]
-	if row[2] != "Сидоров П.В." {
-		t.Fatalf("студент = %v, want Сидоров П.В.", row[2])
+	if row[1] != "Договор о стажировке № 7" {
+		t.Fatalf("наименование программы = %v", row[1])
 	}
-	// mentor_full_name и labor_contract_number отсутствуют в payload — не
-	// должны стать строкой "<nil>".
-	for _, idx := range []int{3, 7} {
-		if v := fmt.Sprint(row[idx]); v == "<nil>" {
-			t.Fatalf("row[%d] = %q, отсутствующее поле не должно печататься как \"<nil>\"", idx, v)
-		}
-		if row[idx] != "" {
-			t.Fatalf("row[%d] = %v, want \"\"", idx, row[idx])
+	if row[2] != "астрономический час" || row[4].(float64) != 480 {
+		t.Fatalf("метрика и часы неверны: %v / %v", row[2], row[4])
+	}
+	if amount := row[6].(float64); amount != 670.8 {
+		t.Fatalf("сумма по программе = %v тыс. руб., ожидалось 670.8", amount)
+	}
+	if info := row[7].(string); !strings.Contains(info, "стажёров: 2") {
+		t.Fatalf("в дополнительной информации нет числа стажёров: %q", info)
+	}
+	if rows[1][1] != "ИТОГО" {
+		t.Fatalf("нет итоговой строки: %+v", rows[1])
+	}
+}
+
+// ТЗ, п. 9.2: специализированный «Отчёт по наставникам».
+func TestBuildMentorRowsAggregatesByMentor(t *testing.T) {
+	payload := func(mentor, student string) []byte {
+		body, _ := json.Marshal(map[string]interface{}{"mentor_full_name": mentor, "student_full_name": student, "total_mentor_hours": 20})
+		return body
+	}
+	noMentor, _ := json.Marshal(map[string]interface{}{"student_full_name": "Кириллов В.О."})
+	data := []regulatoryRow{
+		{PartnerID: "p1", Partner: "МГУ", Category: "internship", Period: "fact", Amount: money.Amount(33540000), Payload: payload("Васильев М.А.", "Архипов Д.С.")},
+		{PartnerID: "p1", Partner: "МГУ", Category: "internship", Period: "fact", Amount: money.Amount(33540000), Payload: payload("Васильев М.А.", "Белов Е.В.")},
+		{PartnerID: "p1", Partner: "МГУ", Category: "internship", Period: "fact", Amount: money.Amount(24000000), Payload: noMentor},
+	}
+	rows := buildMentorRows(data)
+	if len(rows) != 1 {
+		t.Fatalf("ожидали одну строку наставника, получили %+v", rows)
+	}
+	row := rows[0]
+	if row[1] != "Васильев М.А." || row[3] != 2 {
+		t.Fatalf("наставник и число стажёров неверны: %+v", row)
+	}
+	// Ставка наставника начисляется за каждого стажёра персонально: 20 ч × 2.
+	if hours := row[4].(float64); hours != 40 {
+		t.Fatalf("часы сопровождения = %v, ожидалось 40", hours)
+	}
+}
+
+// INT-06: часы наставника не должны удваиваться, если заполнены и итог, и
+// помесячная нагрузка.
+func TestMentorHoursDoesNotDoubleCount(t *testing.T) {
+	both := map[string]interface{}{"total_mentor_hours": json.Number("60"), "mentor_load_hours_per_month": json.Number("20"), "duration_months": json.Number("3")}
+	if got := mentorHours(both); got != 60 {
+		t.Fatalf("mentorHours() = %v, ожидалось 60 (готовый итог)", got)
+	}
+	monthly := map[string]interface{}{"mentor_load_hours_per_month": json.Number("20"), "duration_months": json.Number("3")}
+	if got := mentorHours(monthly); got != 60 {
+		t.Fatalf("mentorHours() = %v, ожидалось 60 (20 ч × 3 мес.)", got)
+	}
+}
+
+// Регрессия: неполный payload не должен давать в ячейках литерал "<nil>"
+// ни в одной из форм, построенных из мероприятий.
+func TestRegulatoryRowsNeverPrintNilLiteral(t *testing.T) {
+	sparse, _ := json.Marshal(map[string]interface{}{"student_full_name": "Сидоров П.В."})
+	data := []regulatoryRow{{PartnerID: "p1", Partner: "МГУ", Category: "internship", CategoryName: "Стажировки",
+		Period: "fact", Amount: money.Amount(100000), Payload: sparse}}
+	for name, rows := range map[string][][]interface{}{
+		"Приложение № 1":       flattenSheets(buildAnnex1Sheets(data)),
+		"Приложение № 2":       buildAnnex2Rows(data),
+		"Отчёт по наставникам": buildMentorRows(data),
+	} {
+		for _, row := range rows {
+			for index, cell := range row {
+				if fmt.Sprint(cell) == "<nil>" {
+					t.Fatalf("%s: ячейка %d напечатана как \"<nil>\": %+v", name, index, row)
+				}
+			}
 		}
 	}
+}
+
+func flattenSheets(sheets []annex1Sheet) [][]interface{} {
+	rows := [][]interface{}{}
+	for _, sheet := range sheets {
+		rows = append(rows, sheet.Rows...)
+	}
+	return rows
 }
 
 // REPORT-05: Приложение № 1 к Отчёту заполняется отдельно по каждой ОО или

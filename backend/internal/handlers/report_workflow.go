@@ -55,6 +55,7 @@ type reportWorkflowResponse struct {
 	Activities             []reportActivityCheck  `json:"activities"`
 	AutomaticChecks        []reportAutomaticCheck `json:"automatic_checks"`
 	Missing                []string               `json:"missing"`
+	HigherEducation        bool                   `json:"higher_education"` // ADR-11: обязательный минимум Видов 1 и 3 применяется только к ВО
 	TopITException         bool                   `json:"top_it_exception"`
 	TopITBasis             *clause22Basis         `json:"top_it_exception_basis,omitempty"` // ADR-03: чем именно подтверждено освобождение
 	CanMarkReady           bool                   `json:"can_mark_ready"`
@@ -212,6 +213,11 @@ func clause22Records(ctx context.Context, q workflowQuerier, agreementID string,
 	return records, teachers, programs, nil
 }
 
+// mandatoryHigherEducationActivities — обязательные виды мероприятий для
+// соглашения с ОО высшего образования по ADR-11: Вид 1 (преподаватели) и
+// Вид 3 (ООП/РПД). Для СПО и школ обязательных видов нет.
+var mandatoryHigherEducationActivities = []string{"teachers", "ood_rpd"}
+
 // clause22AlternativeSatisfied — условие п. 22 Порядка в трактовке ADR-03:
 // ТОП-ИТ/ТОП-ИИ освобождает ОО «A» от прочих видов, если в иной ОО «B» в том
 // же году одновременно реализованы обязательные Вид 1 (преподаватели) и Вид 3
@@ -266,10 +272,22 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 		resp.ApprovedAt = &approvedAt.Time
 	}
 
-	rows, err := q.QueryContext(ctx, `SELECT req.category_code,c.name,EXISTS(SELECT 1 FROM entries e WHERE e.agreement_id=req.agreement_id
-		AND e.report_year=$2 AND e.period_type=$3 AND e.category_code=req.category_code AND e.amount_rub>0)
-		FROM agreement_activity_requirements req JOIN activity_categories c ON c.code=req.category_code
-		WHERE req.agreement_id::text=$1 ORDER BY c.name`, agreementID, year, period)
+	// ADR-11 (OOP-04): для соглашения с ОО высшего образования Виды 1 и 3
+	// обязательны сами по себе, даже если их забыли перечислить в составе
+	// соглашения; для СПО и школ обязательности нет.
+	if err = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agreement_partners ap JOIN partners p ON p.id=ap.partner_id
+		WHERE ap.agreement_id::text=$1 AND p.partner_kind='vuz')`, agreementID).Scan(&resp.HigherEducation); err != nil {
+		return resp, err
+	}
+	mandatory := []string{}
+	if resp.HigherEducation {
+		mandatory = mandatoryHigherEducationActivities
+	}
+	rows, err := q.QueryContext(ctx, `SELECT c.code,c.name,EXISTS(SELECT 1 FROM entries e WHERE e.agreement_id::text=$1
+		AND e.report_year=$2 AND e.period_type=$3 AND e.category_code=c.code AND e.amount_rub>0)
+		FROM activity_categories c
+		WHERE c.code IN (SELECT category_code FROM agreement_activity_requirements WHERE agreement_id::text=$1)
+		OR c.code = ANY($4) ORDER BY c.name`, agreementID, year, period, pq.Array(mandatory))
 	if err != nil {
 		return resp, err
 	}

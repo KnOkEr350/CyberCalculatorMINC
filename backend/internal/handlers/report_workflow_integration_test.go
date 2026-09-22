@@ -15,11 +15,10 @@ import (
 	"cybercalc/internal/testfixtures"
 )
 
-// TOP-10 / ADR-03 на реальной БД: ВУЗ A реализует ТОП-ИТ, а прочие
-// обязательные виды закрыты в иной ОО B с утверждённым отчётом. Раньше SQL
-// дополнительно требовал в B стажировку/практику и решение Минцифры и потому
-// отказывал в законном освобождении по п. 22.
-func TestClause22ExemptionOnDatabase(t *testing.T) {
+// integrationDB открывает изолированную тестовую БД и накатывает миграции;
+// без TEST_DATABASE_DSN тест пропускается, как и остальные интеграционные.
+func integrationDB(t *testing.T) (*sql.DB, int) {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_DSN")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_DSN not set")
@@ -31,11 +30,92 @@ func TestClause22ExemptionOnDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
 	if err = dbx.RunMigrations(db, os.Getenv("TEST_MIGRATIONS_DIR")); err != nil {
 		t.Fatal(err)
 	}
-	year := time.Now().Year() // срок действия соглашений-фикстур покрывает текущий год
+	// Срок действия соглашений-фикстур покрывает текущий год.
+	return db, time.Now().Year()
+}
+
+// OOP-04 / ADR-11 на реальной БД: для соглашения с вузом Виды 1 и 3
+// обязательны сами по себе. Раньше проверялись только виды, перечисленные в
+// соглашении, поэтому забытый в перечне Вид 3 молча не контролировался.
+func TestMandatoryHigherEducationActivitiesOnDatabase(t *testing.T) {
+	db, year := integrationDB(t)
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name         string
+		college      bool
+		wantRequired []string
+	}{
+		{"вуз: Виды 1 и 3 обязательны даже вне перечня соглашения", false, []string{"ood_rpd", "teachers"}},
+		{"СПО: обязательных видов нет", true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := testfixtures.New(db, t.Name())
+			admin, err := f.CreateUser(ctx, testfixtures.UserParams{Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization})
+			if err != nil {
+				t.Fatal(err)
+			}
+			company, err := f.CreateITCompany(ctx, testfixtures.ITCompanyParams{CreatedBy: admin.ID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = f.AssignUserToCompany(ctx, admin.ID, company.ID); err != nil {
+				t.Fatal(err)
+			}
+			institution, err := f.CreateUniversity(ctx, testfixtures.EducationParams{})
+			if tc.college {
+				institution, err = f.CreateCollege(ctx, testfixtures.EducationParams{})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			partner, err := f.CreatePartner(ctx, company, institution)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// В соглашении указан только Вид 1: Вид 3 «забыт».
+			agreement, err := f.CreateAgreement(ctx, testfixtures.AgreementParams{CompanyID: company.ID,
+				PartnerIDs: []string{partner.ID}, CreatedBy: admin.ID, ActivityCodes: []string{"teachers"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			user := middleware.AuthUser{ID: admin.ID, Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization, ITCompanyID: &company.ID}
+			workflow, err := buildWorkflow(ctx, db, user, agreement.ID, year, "fact")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if workflow.HigherEducation == tc.college {
+				t.Fatalf("higher_education = %v для %s", workflow.HigherEducation, institution.Kind)
+			}
+			checked := map[string]bool{}
+			for _, activity := range workflow.Activities {
+				checked[activity.Code] = true
+			}
+			if tc.college {
+				if checked["ood_rpd"] {
+					t.Fatalf("для СПО Вид 3 не должен становиться обязательным: %+v", workflow.Activities)
+				}
+				return
+			}
+			for _, code := range tc.wantRequired {
+				if !checked[code] {
+					t.Fatalf("для вуза вид %s должен проверяться даже вне перечня соглашения: %+v", code, workflow.Activities)
+				}
+			}
+		})
+	}
+}
+
+// TOP-10 / ADR-03 на реальной БД: ВУЗ A реализует ТОП-ИТ, а прочие
+// обязательные виды закрыты в иной ОО B с утверждённым отчётом. Раньше SQL
+// дополнительно требовал в B стажировку/практику и решение Минцифры и потому
+// отказывал в законном освобождении по п. 22.
+func TestClause22ExemptionOnDatabase(t *testing.T) {
+	db, year := integrationDB(t)
 
 	for _, tc := range []struct {
 		name          string

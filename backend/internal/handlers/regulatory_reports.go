@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,7 +29,11 @@ var regulatoryHeaders = map[string][]string{
 	// Графы Приложения № 1 к Отчёту: форма заполняется отдельно по каждой
 	// ОО или РОИВ и только по реализованным мероприятиям.
 	"annex1": {"№ п/п", "Вид мероприятия", "Мероприятие", "Метрика (основная)", "Наименование показателя", "Значение показателя", "Стоимость, тыс. руб.", "Сумма затрат по мероприятию, тыс. руб.", "Дополнительная информация"},
-	"annex2": {"№", "ОО", "Студент", "Наставник", "Месяцев", "Часы студента", "Часы наставника", "Срочный ТД", "Сумма, руб."},
+	// Графы Приложения № 2 к Отчёту: форма строится по программам
+	// стажировок, а не по отдельным стажёрам.
+	"annex2": {"№ п/п", "Наименование программы стажировок", "Метрика (основная)", "Наименование показателя", "Значение показателя", "Стоимость, тыс. руб.", "Сумма затрат по программе стажировок, тыс. руб.", "Дополнительная информация"},
+	// Специализированный срез «Отчёт по наставникам» из ТЗ (п. 9.2).
+	"annex2_mentors": {"№ п/п", "Наставник", "ОО", "Закреплённых стажёров", "Часы сопровождения", "Сумма затрат, тыс. руб."},
 	// Состав Таблицы 1 Приложения № 5 к Приказу № 270: контрагент, его
 	// соглашения, единый для компании норматив 3% сэкономленных льгот и доля
 	// контрагента в нём. Официальная форма не содержит колонки плана.
@@ -222,6 +225,13 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		}
 		filename = fmt.Sprintf("приложение_1_%d.xlsx", year)
 	case "annex2":
+		// Режим «Отчёт по наставникам» — тот же набор данных в разрезе
+		// наставников (ТЗ, п. 9.2).
+		if strings.TrimSpace(r.URL.Query().Get("mode")) == "mentors" {
+			wb.AddSheet("Отчёт по наставникам", regulatoryHeaders["annex2_mentors"], buildMentorRows(data))
+			filename = fmt.Sprintf("отчет_по_наставникам_%d.xlsx", year)
+			break
+		}
 		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], buildAnnex2Rows(data))
 		filename = fmt.Sprintf("приложение_2_%d.xlsx", year)
 	case "annex5":
@@ -245,7 +255,8 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, 500, "не удалось сформировать Excel")
 		return
 	}
-	h.writeGenerated(w, r, u, kind, "xlsx", filename, company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
+	h.writeGenerated(w, r, u, kind, "xlsx", filename, company,
+		reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode"))), year, body)
 }
 
 func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, kind, company, partner, agreement string) {
@@ -259,13 +270,75 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 		middleware.WriteError(w, 404, "соглашение не найдено")
 		return
 	}
-	title := map[string]string{"agreement2": "Типовое соглашение — Приложение № 2", "agreement3": "Типовое соглашение — Приложение № 3"}[kind]
-	body, err := docx.Table(title, []string{"Реквизит", "Значение"}, [][]string{{"Номер и дата", number + " от " + signed}, {"ИТ-организация", companyName}, {"ИНН / ОГРН", companyINN + " / " + companyOGRN}, {"Адрес", address}, {"Подписант", director}, {"Контрагент", partnerName}, {"ИНН контрагента", partnerINN}, {"Отчётный год", strconv.Itoa(year)}})
+	party := agreementParty{
+		Kind: kind, Number: number, SignedOn: signed, Year: year,
+		PartnerName: partnerName, PartnerINN: partnerINN,
+		CompanyName: companyName, CompanyINN: companyINN, CompanyOGRN: companyOGRN,
+		CompanyAddress: address, CompanyDirector: director,
+	}
+	body, err := docx.Document(agreementTemplateTitle(kind), agreementTemplateBlocks(party))
 	if err != nil {
 		middleware.WriteError(w, 500, "не удалось сформировать типовое соглашение")
 		return
 	}
 	h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("типовое_соглашение_%s_%d.docx", strings.TrimPrefix(kind, "agreement"), year), company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
+}
+
+// agreementParty — реквизиты сторон для примерной формы соглашения
+// (Приложения № 2 и № 3 к Порядку, утверждённому Приказом № 270).
+type agreementParty struct {
+	Kind, Number, SignedOn               string
+	Year                                 int
+	PartnerName, PartnerINN              string
+	CompanyName, CompanyINN, CompanyOGRN string
+	CompanyAddress, CompanyDirector      string
+}
+
+func agreementTemplateTitle(kind string) string {
+	if kind == "agreement3" {
+		return "СОГЛАШЕНИЕ об оказании содействия в организации внеурочной деятельности (Приложение № 3 к Порядку)"
+	}
+	return "СОГЛАШЕНИЕ об оказании содействия в реализации образовательных программ (Приложение № 2 к Порядку)"
+}
+
+// agreementTemplateBlocks заполняет примерную форму соглашения: стороны, их
+// реквизиты и подписанты. Форма Приказа — это связный текст «в лице …,
+// действующего на основании …», а не таблица реквизитов.
+func agreementTemplateBlocks(party agreementParty) []docx.Block {
+	counterparty := "Образовательная организация"
+	if party.Kind == "agreement3" {
+		counterparty = "Исполнительный орган субъекта Российской Федерации"
+	}
+	value := func(s, placeholder string) string {
+		if strings.TrimSpace(s) == "" {
+			return placeholder
+		}
+		return s
+	}
+	return []docx.Block{
+		docx.Paragraph(fmt.Sprintf("№ %s от %s", value(party.Number, "____"), formatRuDate(party.SignedOn))),
+		docx.Paragraph(""),
+		docx.Paragraph(fmt.Sprintf(
+			"%s, именуемое в дальнейшем «%s», в лице ____________________, действующего на основании ____________________, с одной стороны, и %s, именуемое в дальнейшем «Организация», в лице %s, действующего на основании ____________________, с другой стороны, совместно именуемые «Стороны», заключили настоящее Соглашение о нижеследующем.",
+			value(party.PartnerName, "____________________"), counterparty,
+			value(party.CompanyName, "____________________"), value(party.CompanyDirector, "____________________"))),
+		docx.Paragraph(""),
+		docx.Heading("1. Предмет Соглашения"),
+		docx.Paragraph(fmt.Sprintf(
+			"Организация оказывает содействие в реализации образовательных программ и организации внеурочной деятельности в %d году в порядке, установленном приказом Минцифры России от 31 марта 2026 г. № 270. Перечень, объём, сроки и условия реализации мероприятий определяются приложениями к настоящему Соглашению.",
+			party.Year)),
+		docx.Paragraph(""),
+		docx.Heading("2. Реквизиты и подписи Сторон"),
+		docx.Paragraph(fmt.Sprintf("%s: %s", counterparty, value(party.PartnerName, "____________________"))),
+		docx.Paragraph(fmt.Sprintf("ИНН: %s", value(party.PartnerINN, "__________"))),
+		docx.Paragraph("Адрес в пределах места нахождения: ____________________"),
+		docx.Paragraph("Руководитель ____________________ / ____________________"),
+		docx.Paragraph(""),
+		docx.Paragraph(fmt.Sprintf("Организация: %s", value(party.CompanyName, "____________________"))),
+		docx.Paragraph(fmt.Sprintf("ИНН: %s, ОГРН: %s", value(party.CompanyINN, "__________"), value(party.CompanyOGRN, "_____________"))),
+		docx.Paragraph(fmt.Sprintf("Адрес в пределах места нахождения: %s", value(party.CompanyAddress, "____________________"))),
+		docx.Paragraph(fmt.Sprintf("Руководитель ____________________ / %s", value(party.CompanyDirector, "____________________"))),
+	}
 }
 
 // formatRuDate переводит ISO-дату (YYYY-MM-DD, как её отдаёт Postgres) в
@@ -449,20 +522,123 @@ func payloadValue(p map[string]interface{}, key string) string {
 	return fmt.Sprint(v)
 }
 
-// buildAnnex2Rows строит реестр стажировок для Приложения № 2 к Отчёту:
-// студент, наставник, срок и реквизиты срочного ТД по каждой строке
-// подтверждённых мероприятий вида «Стажировка/Практика».
+// internshipProgramName — графа «Наименование программы стажировок»: форма
+// сводит стажёров в программу, поэтому именем служат реквизиты договора о
+// стажировке или практической подготовке, а при их отсутствии —
+// специальность по Приказу № 27.
+func internshipProgramName(row regulatoryRow, payload map[string]interface{}) string {
+	for _, key := range []string{"internship_agreement_reference", "practice_agreement_reference", "individual_program_reference", "specialty_code"} {
+		if value := payloadValue(payload, key); value != "" {
+			return value
+		}
+	}
+	return row.CategoryName
+}
+
+// buildAnnex2Rows строит Приложение № 2 к Отчёту: строка на программу
+// стажировок с суммарными часами и затратами в тыс. руб., как в форме
+// Приказа, а не построчный список стажёров.
 func buildAnnex2Rows(data []regulatoryRow) [][]interface{} {
+	type program struct {
+		partner, name string
+		students      map[string]bool
+		hours         float64
+		amount        money.Amount
+	}
+	order := []string{}
+	programs := map[string]*program{}
+	for _, row := range data {
+		if row.Amount == 0 {
+			continue
+		}
+		payload := map[string]interface{}{}
+		_ = json.Unmarshal(row.Payload, &payload)
+		name := internshipProgramName(row, payload)
+		key := row.PartnerID + "\x00" + name
+		item := programs[key]
+		if item == nil {
+			item = &program{partner: row.Partner, name: name, students: map[string]bool{}}
+			programs[key] = item
+			order = append(order, key)
+		}
+		if student := payloadValue(payload, "student_full_name"); student != "" {
+			item.students[student] = true
+		}
+		hours, _, _ := activityMetrics(row.Category, numericPayload(row.Payload))
+		item.hours += hours
+		item.amount, _ = money.Add(item.amount, row.Amount)
+	}
+	sort.Strings(order)
 	out := [][]interface{}{}
-	for i, row := range data {
-		var p map[string]interface{}
-		_ = json.Unmarshal(row.Payload, &p)
+	var total money.Amount
+	for index, key := range order {
+		item := programs[key]
+		var unitCost interface{} = "—"
+		if item.hours > 0 {
+			unitCost = math.Round(float64(item.amount)/item.hours/1000) / 100
+		}
+		total, _ = money.Add(total, item.amount)
 		out = append(out, []interface{}{
-			i + 1, row.Partner,
-			payloadValue(p, "student_full_name"), payloadValue(p, "mentor_full_name"),
-			payloadValue(p, "duration_months"), payloadValue(p, "total_student_hours"), payloadValue(p, "total_mentor_hours"),
-			payloadValue(p, "labor_contract_number"), row.Amount,
+			index + 1, item.name, "астрономический час", "Часы стажировки", item.hours,
+			unitCost, thousandRub(item.amount),
+			fmt.Sprintf("%s; стажёров: %d", item.partner, len(item.students)),
 		})
+	}
+	if len(out) > 0 {
+		out = append(out, []interface{}{"", "ИТОГО", "", "", "", "", thousandRub(total), ""})
+	}
+	return out
+}
+
+// mentorHours — часы сопровождения наставника: готовый итог, а при его
+// отсутствии — помесячная нагрузка, умноженная на срок. Складывать оба
+// значения нельзя, иначе часы удвоятся (INT-06).
+func mentorHours(payload map[string]interface{}) float64 {
+	if total := firstNumber(payload, "total_mentor_hours"); total > 0 {
+		return total
+	}
+	return firstNumber(payload, "mentor_load_hours_per_month") * firstNumber(payload, "duration_months")
+}
+
+// buildMentorRows строит специализированный «Отчёт по наставникам»: сколько
+// стажёров закреплено за наставником, сколько часов сопровождения
+// подтверждено и на какую сумму. Ставка наставника по Приказу начисляется
+// за каждого закреплённого стажёра персонально, поэтому строки суммируются
+// по наставнику, а не по стажёру.
+func buildMentorRows(data []regulatoryRow) [][]interface{} {
+	type mentor struct {
+		name, partner string
+		students      map[string]bool
+		hours         float64
+		amount        money.Amount
+	}
+	order := []string{}
+	mentors := map[string]*mentor{}
+	for _, row := range data {
+		payload := map[string]interface{}{}
+		_ = json.Unmarshal(row.Payload, &payload)
+		name := payloadValue(payload, "mentor_full_name")
+		if name == "" {
+			continue // без наставника строка в отчёт по наставникам не попадает
+		}
+		key := row.PartnerID + "\x00" + name
+		item := mentors[key]
+		if item == nil {
+			item = &mentor{name: name, partner: row.Partner, students: map[string]bool{}}
+			mentors[key] = item
+			order = append(order, key)
+		}
+		if student := payloadValue(payload, "student_full_name"); student != "" {
+			item.students[student] = true
+		}
+		item.hours += mentorHours(numericPayload(row.Payload))
+		item.amount, _ = money.Add(item.amount, row.Amount)
+	}
+	sort.Strings(order)
+	out := [][]interface{}{}
+	for index, key := range order {
+		item := mentors[key]
+		out = append(out, []interface{}{index + 1, item.name, item.partner, len(item.students), item.hours, thousandRub(item.amount)})
 	}
 	return out
 }
