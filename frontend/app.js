@@ -63,9 +63,9 @@ const VALUE_LABELS = {
   holding_admin: "Администратор холдинга",
   org_admin: "Администратор организации",
   curator: "Куратор",
-  hr_specialist: "HR-специалист",
-  financial_specialist: "Финансовый специалист",
-  legal_specialist: "Юрист",
+  hr_specialist: "Кадровая служба (HR)",
+  financial_specialist: "Финансовая служба",
+  legal_specialist: "Юридическое управление",
   auditor_viewer: "Аудитор (только чтение)",
   organization: "ИТ-организация",
   edu_institution: "Образовательная организация",
@@ -89,10 +89,63 @@ const VALUE_LABELS = {
   directory_proposal_reject: "Отклонение предложения",
   okz_catalog_version: "Версия ОКЗ",
   okz_import: "Импорт ОКЗ",
+  academic_group: "Академическая группа",
+  agreement: "Соглашение",
+  curator_assignment: "Закрепление куратора",
+  directory: "Справочник",
+  it_company: "ИТ-компания",
+  legal_dispute: "Юридическое сомнение",
+  legal_entity_group: "Группа юридических лиц",
+  mentor: "Наставник",
+  normative_source: "Нормативный источник",
+  org_unit: "Структурное подразделение",
+  regional_authority: "РОИВ",
+  regulatory_process: "Регламентный процесс",
+  report: "Отчёт",
+  report_snapshot: "Снимок отчёта",
+  specialty_catalog: "Справочник специальностей",
+  staff_member: "Сотрудник",
+  tariff: "Тариф",
+  teaching_payout: "Выплата преподавателю",
+  workflow_task: "Задача",
 };
 
 function valueLabel(value) {
   return VALUE_LABELS[value] || value;
+}
+
+const AUDIT_ACTION_LABELS = {
+  update: "Изменение",
+  metadata: "Изменение реквизитов документа",
+  review: "Проверка",
+  assign: "Закрепление",
+  end: "Завершение периода",
+  revoke: "Отзыв",
+  reassign: "Переназначение",
+  complete: "Выполнение",
+  import: "Импорт",
+  export: "Выгрузка",
+  status: "Смена статуса",
+  seal: "Формирование снимка",
+  tariff_publish: "Публикация тарифа",
+  mfa_enabled: "Включение двухфакторной защиты",
+  mfa_reset: "Сброс двухфакторной защиты",
+  password_change: "Смена пароля",
+  legal_dispute_raise: "Постановка под сомнение",
+  legal_dispute_lift: "Снятие сомнения",
+  normative_source_import: "Импорт нормативного источника",
+  process_send: "Отправка",
+  process_start_review: "Принятие к рассмотрению",
+  process_approve: "Согласование",
+  process_request_rework: "Возврат на доработку",
+  process_resubmit: "Повторная отправка",
+  process_dispute: "Оспаривание",
+  process_default_approve: "Согласование по молчанию",
+  process_rework_lapsed: "Пропуск срока доработки",
+};
+
+function actionLabel(value) {
+  return AUDIT_ACTION_LABELS[value] || valueLabel(value);
 }
 
 async function api(path, opts = {}, pageCount = 0) {
@@ -172,7 +225,7 @@ function validYear(value) {
 
 function brandMarkup(inverse = false) {
   return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
-    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
+    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-shine" d="M20 2 5 8v10.4c0 9.1 6.1 16.5 15 19.6V2Z"/><path class="brand-rim" d="M20 4.2 33.2 9.3v9.1c0 8-5.3 14.6-13.2 17.5C12.1 33 6.8 26.4 6.8 18.4V9.3L20 4.2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
     <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong></span>
   </div>`;
 }
@@ -269,7 +322,7 @@ function renderLogin() {
       <form class="login-box" id="login-form">
         <span class="eyebrow">Личный кабинет</span>
         <h1>Вход</h1>
-        <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
+        <div class="field"><label for="login-email">Электронная почта</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
         <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Пароль"></div>
         <div class="field"><label for="login-code">Код подтверждения <span class="label-optional">необязательно</span></label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"></div>
         <div class="error form-message" id="login-error" style="display:none" role="alert"></div>
@@ -458,7 +511,7 @@ async function renderSettingsOverview(box) {
   }
   const canSealSnapshot = ["super_admin", "holding_admin", "org_admin"].includes(state.me.role) && state.me.entity_type === "organization" && state.me.it_company_id;
   const canDownloadSnapshot = ["super_admin", "holding_admin", "org_admin", "auditor_viewer"].includes(state.me.role);
-  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить CryptoEngine</button></div></div></div>`;
+  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "ИТ-организация" : "Образовательная организация"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить криптомодуль</button></div></div></div>`;
   box.querySelector("#settings-target")?.addEventListener("click", (event) => openBudgetTargetDialog(event.currentTarget));
   box.querySelector("#settings-password").onclick = openPasswordDialog;
   box.querySelector("#settings-mfa")?.addEventListener("click", () => app.replaceChildren(renderMFASetup()));
@@ -1677,10 +1730,10 @@ async function renderAdminUsers(box) {
   box.innerHTML = `<div class="section-intro"><h2>Пользователи</h2></div><div class="card"><h2>Новый пользователь</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
-      <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
+      <div class="field"><label>Электронная почта *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="super_admin">SUPER_ADMIN</option><option value="holding_admin">HOLDING_ADMIN</option><option value="org_admin">ORG_ADMIN</option><option value="curator" selected>CURATOR</option><option value="hr_specialist">HRD / HR_SPECIALIST</option><option value="financial_specialist">FINANCIAL_SPECIALIST</option><option value="legal_specialist">LEGAL_SPECIALIST</option><option value="auditor_viewer">AUDITOR_VIEWER</option></select><div class="field-hint">Права назначаются по матрице RBAC; аудитор работает только в режиме чтения.</div></div>
+      <div class="field"><label>Роль</label><select id="u-role"><option value="super_admin">Главный администратор</option><option value="holding_admin">Администратор холдинга</option><option value="org_admin">Администратор организации</option><option value="curator" selected>Куратор</option><option value="hr_specialist">Кадровая служба (HR)</option><option value="financial_specialist">Финансовая служба</option><option value="legal_specialist">Юридическое управление</option><option value="auditor_viewer">Аудитор (только чтение)</option></select><div class="field-hint">Права назначаются по матрице ролей; аудитор работает только в режиме чтения.</div></div>
       <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div>
       <div class="field" id="u-partner-field" hidden><label id="u-partner-label">Учебное заведение *</label><select id="u-partner"><option value="">Выберите учебное заведение</option>${(Array.isArray(
         state.partners,
@@ -1836,7 +1889,7 @@ async function renderAdminUsers(box) {
         ? `Найдено пользователей: ${users.length}`
         : `Всего пользователей: ${users.length}`;
       listBox.innerHTML = users.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Организация</th><th>Закреплённая ОО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+        ? `<div class="table-wrap"><table><thead><tr><th>Электронная почта</th><th>ФИО</th><th>Организация</th><th>Закреплённая ОО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
           <tbody>${users
             .map(
               (u) => `<tr>
@@ -1905,7 +1958,7 @@ async function renderAdminSettings(box) {
     <button class="btn" id="s-save">Сохранить</button>
     <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
   </div>
-  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2></div><span class="status-badge">Europe/Moscow</span></div>
+  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2></div><span class="status-badge">Москва (UTC+3)</span></div>
     <div class="grid cols-3">
       <div class="field"><label>ИТ-компания</label><select id="snapshot-company"><option value="">Выберите компанию</option>${companies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
       <div class="field"><label>Отчётный год</label><input id="snapshot-year" type="number" min="2000" max="2100" value="${state.year}"></div>
@@ -2035,7 +2088,7 @@ async function renderAdminLogs(box) {
       ? `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Кто</th><th>Объект и действие</th><th>Что изменено</th></tr></thead><tbody>${visible.map((log) => `<tr>
         <td>${new Date(log.created_at).toLocaleString("ru-RU")}</td>
 		<td>${escapeHTML(log.actor?.name || log.user_name || ((log.actor?.id || log.user_id) ? "Пользователь" : "Автоматический скрипт"))}${(log.actor?.email || log.user_email) ? `<br><small>${escapeHTML(log.actor?.email || log.user_email)}</small>` : ""}</td>
-		<td title="Request ID: ${escapeHTML(log.request_id || "—")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(valueLabel(log.action))}</b></td>
+		<td title="ID запроса: ${escapeHTML(log.request_id || "—")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(actionLabel(log.action))}</b></td>
         <td>${summarize(log)}</td>
       </tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Действий по выбранному фильтру пока нет.</p>';
