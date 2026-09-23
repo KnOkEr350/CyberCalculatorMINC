@@ -2,6 +2,9 @@
 # Verify HTTP responses and revision after deployment; does not change application data.
 set -Eeuo pipefail
 
+: "${HTTP_PORT:?HTTP_PORT is required}"
+: "${APP_VERSION:?APP_VERSION is required}"
+
 base_url="http://127.0.0.1:${HTTP_PORT}"
 for _ in {1..30}; do
   frontend_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "${base_url}/" || true)"

@@ -2,6 +2,8 @@
 # Run from the repository root against the disposable CI Compose project.
 set -Eeuo pipefail
 
+: "${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}"
+
 mkdir -p security-artifacts
 sudo chown -R 1000:1000 security-artifacts
 set +e
@@ -14,7 +16,9 @@ docker run --rm \
   -J zap-report.json -r zap-report.html
 zap_status=$?
 set -e
-sudo chown -R "$(id -u):$(id -g)" security-artifacts
+host_uid="$(id -u)"
+host_gid="$(id -g)"
+sudo chown -R "${host_uid}:${host_gid}" security-artifacts
 [[ "$zap_status" == "0" ]]
 jq --exit-status '[.site[]?.alerts[]? | select((.riskcode | tonumber) >= 3)] | length == 0' \
   security-artifacts/zap-report.json > /dev/null
