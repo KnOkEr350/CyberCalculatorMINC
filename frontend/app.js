@@ -540,8 +540,9 @@ async function renderSettingsOverview(box) {
   }
   const canSealSnapshot = ["super_admin", "holding_admin", "org_admin"].includes(state.me.role) && state.me.entity_type === "organization" && state.me.it_company_id;
   const canDownloadSnapshot = ["super_admin", "holding_admin", "org_admin", "auditor_viewer"].includes(state.me.role);
-  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "ИТ-организация" : "Образовательная организация"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить криптомодуль</button></div></div></div>`;
+  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "ИТ-организация" : "Образовательная организация"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn secondary" id="settings-groups">Договоры, доли и лимиты</button>' : ""}</div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить криптомодуль</button></div></div></div>`;
   box.querySelector("#settings-target")?.addEventListener("click", (event) => openBudgetTargetDialog(event.currentTarget));
+  box.querySelector("#settings-groups")?.addEventListener("click", () => openLegalEntityGroups(() => renderSettingsOverview(box)));
   box.querySelector("#settings-password").onclick = openPasswordDialog;
   box.querySelector("#settings-mfa")?.addEventListener("click", () => app.replaceChildren(renderMFASetup()));
   box.querySelector("#settings-snapshot")?.addEventListener("click", async (event) => {
@@ -560,7 +561,7 @@ async function renderSettingsOverview(box) {
 async function renderSettingsScreen(root) {
   const screen = CyberCalcScreens.get("settings");
   const isAdmin = state.me.role === "super_admin";
-  const tabs = [{ id: "context", label: "Контекст и безопасность" }, ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
+  const tabs = [{ id: "context", label: "Контекст и безопасность" }, { id: "tasks", label: "Задачи и эскалации" }, ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
   if (!tabs.some((tab) => tab.id === state.settingsTab)) state.settingsTab = "context";
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
   const content = root.querySelector("#settings-content");
@@ -568,10 +569,74 @@ async function renderSettingsScreen(root) {
     state.settingsTab = tab;
     root.querySelectorAll("[data-settings-tab]").forEach((button) => button.classList.toggle("active", button.dataset.settingsTab === tab));
     if (tab === "context") return renderSettingsOverview(content);
+    if (tab === "tasks") return renderSettingsTasks(content);
     await renderAdminTab(content, tab);
   };
   root.querySelectorAll("[data-settings-tab]").forEach((button) => { button.onclick = () => show(button.dataset.settingsTab).catch((error) => showToast(error.message)); });
   await show(state.settingsTab);
+}
+
+// SEC-10: диспетчер задач — маршрут, причина fallback и история переназначений
+// видны в интерфейсе; попытку переназначения и закрытие выполняет сервер.
+const TASK_ROUTE_LABELS = { specialist: "Профильный специалист", curator: "Куратор", org_admin: "Администратор организации", super_admin: "Системный администратор", unassigned: "Без исполнителя" };
+const TASK_STATUS_LABELS = { open: "Открыта", done: "Выполнена", cancelled: "Отменена" };
+const TASK_ACTION_LABELS = { created: "Поставлена", reassigned: "Переназначена", completed: "Выполнена", cancelled: "Отменена" };
+
+async function renderSettingsTasks(box) {
+  const filter = box.dataset.taskStatus || "open";
+  box.innerHTML = '<div class="card"><h2>Задачи и эскалации</h2><p class="muted">Загрузка…</p></div>';
+  let list;
+  try {
+    list = await api(`/workflow-tasks?status=${encodeURIComponent(filter)}`);
+  } catch (error) {
+    box.innerHTML = `<div class="card"><h2>Задачи и эскалации</h2><p class="error">${escapeHTML(error.message)}</p></div>`;
+    return;
+  }
+  const tasks = Array.isArray(list) ? list : list?.items || [];
+  const rows = tasks.map((task) => `<tr>
+    <td><b>${escapeHTML(task.title)}</b><div class="muted">${escapeHTML(task.kind)}</div></td>
+    <td>${escapeHTML(TASK_STATUS_LABELS[task.status] || task.status)}</td>
+    <td>${escapeHTML(TASK_ROUTE_LABELS[task.route] || task.route)}${task.unassigned_escalated ? ' <span class="status-badge inactive">эскалация</span>' : ""}</td>
+    <td>${escapeHTML(String(task.created_at || "").slice(0, 10).split("-").reverse().join("."))}</td>
+    <td><button type="button" class="btn secondary" data-task-open="${escapeHTML(task.id)}">История</button></td></tr>`).join("");
+  box.innerHTML = `<div class="card"><h2>Задачи и эскалации</h2>
+    <p class="muted">Задача уходит профильному специалисту, затем куратору, администратору организации и системному администратору. Причина обхода и попытки переназначения сохраняются в истории.</p>
+    <div class="flex" role="group" aria-label="Статус задач">${Object.entries(TASK_STATUS_LABELS).map(([code, label]) => `<button type="button" class="btn ${code === filter ? "" : "secondary"}" data-task-status="${code}">${label}</button>`).join("")}</div>
+    ${tasks.length ? `<div class="table-wrap"><table><thead><tr><th>Задача</th><th>Статус</th><th>Маршрут</th><th>Создана</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">Задач с таким статусом нет.</p>'}
+    <div id="task-detail"></div></div>`;
+  box.querySelectorAll("[data-task-status]").forEach((button) => {
+    button.onclick = () => { box.dataset.taskStatus = button.dataset.taskStatus; renderSettingsTasks(box); };
+  });
+  box.querySelectorAll("[data-task-open]").forEach((button) => {
+    button.onclick = async () => {
+      const detail = box.querySelector("#task-detail");
+      try {
+        const data = await api(`/workflow-tasks/${encodeURIComponent(button.dataset.taskOpen)}`);
+        const task = data.task;
+        const canAct = task.status === "open";
+        detail.innerHTML = `<h3>${escapeHTML(task.title)}</h3>
+          ${task.fallback_reason ? `<p><b>Причина обхода:</b> ${escapeHTML(task.fallback_reason)}</p>` : ""}
+          <ol class="task-history">${(data.history || []).map((event) => `<li>${escapeHTML(TASK_ACTION_LABELS[event.action] || event.action)} · ${escapeHTML(TASK_ROUTE_LABELS[event.route] || event.route)}${event.system ? " · автоматически" : ""}${event.reason ? ` — ${escapeHTML(event.reason)}` : ""} <span class="muted">${escapeHTML(String(event.occurred_at || "").replace("T", " ").slice(0, 16))}</span></li>`).join("")}</ol>
+          ${canAct ? `<div class="flex"><button type="button" class="btn secondary" id="task-reassign">Переназначить</button><button type="button" class="btn" id="task-complete">Отметить выполненной</button></div>` : ""}`;
+        detail.querySelector("#task-reassign")?.addEventListener("click", async () => {
+          const reason = prompt("Причина переназначения");
+          if (!reason || !reason.trim()) return;
+          try {
+            await api(`/workflow-tasks/${encodeURIComponent(task.id)}/reassign`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) });
+            showToast("Маршрут пересчитан", "success");
+            renderSettingsTasks(box);
+          } catch (error) { showToast(error.message); }
+        });
+        detail.querySelector("#task-complete")?.addEventListener("click", async () => {
+          try {
+            await api(`/workflow-tasks/${encodeURIComponent(task.id)}/complete`, { method: "POST" });
+            showToast("Задача выполнена", "success");
+            renderSettingsTasks(box);
+          } catch (error) { showToast(error.message); }
+        });
+      } catch (error) { showToast(error.message); }
+    };
+  });
 }
 
 // ------------------------------------------------------------- DASHBOARD --

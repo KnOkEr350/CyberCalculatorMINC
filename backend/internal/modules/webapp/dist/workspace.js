@@ -437,6 +437,90 @@ function oopRegistryTable(entries, writable, canCreate) {
   }).join("");
   return `<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт</th><th>Охват</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
 }
+
+// Общая обвязка профильных реестров: риск, проверки комплектности и кнопка карточки.
+function registryRow(entry, writable, cells) {
+  const checks = entry.compliance?.checks || [];
+  const complete = checks.filter((check) => check.complete).length;
+  return `<tr><td>${entryRisk(entry)}</td>${cells.map((cell) => `<td>${cell}</td>`).join("")}<td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
+}
+
+function registryTable(className, headers, rows, count, emptyText) {
+  return `<p>На странице: ${count}.</p><div class="table-wrap"><table class="${className}"><thead><tr><th scope="col">Риск</th>${headers.map((header) => `<th scope="col">${header}</th>`).join("")}<th scope="col">Документы</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead><tbody>${rows}</tbody></table></div>${!count ? `<p class="muted">${emptyText}</p>` : ""}`;
+}
+
+const ruDate = (value) => (value ? escapeHTML(String(value).split("-").reverse().join(".")) : "—");
+const dash = (value) => (value === undefined || value === null || value === "" ? "—" : escapeHTML(String(value)));
+
+// UI-06: практика — трудоустройство, практический договор и ограничения ТК РФ.
+function practiceTable(entries, writable, canCreate) {
+  const rows = entries.map((entry) => {
+    const p = entry.payload || {};
+    return registryRow(entry, writable, [
+      `<b>${dash(p.student_full_name)}</b><br><small>${dash(p.course)} курс · ${dash(p.specialty_code)}</small>`,
+      `${ruDate(p.period_start)} — ${ruDate(p.period_end)}`,
+      `${dash(p.labor_contract_number)} от ${ruDate(p.labor_contract_date)}<br><small>${p.labor_contract_type === "fixed_term" ? "срочный" : dash(p.labor_contract_type)}</small>`,
+      `${dash(p.practice_agreement_number)} от ${ruDate(p.practice_agreement_date)}`,
+      `${dash(p.student_age)} лет · ${dash(p.weekly_hours)} ч/нед`,
+    ]);
+  }).join("");
+  return registryTable("practice-registry-grid", ["Практикант", "Период", "Трудовой договор", "Договор о практической подготовке", "Возраст и нагрузка"], rows, entries.length, canCreate ? "Практики ещё не добавлены." : "ИТ-организация ещё не добавила практику.");
+}
+
+// UI-05: стажировки — наставник, договор и справки.
+function internshipTable(entries, writable, canCreate) {
+  const rows = entries.map((entry) => {
+    const p = entry.payload || {};
+    const certificates = [p.incoming_certificate_reference, p.outgoing_certificate_reference].filter(Boolean).length;
+    return registryRow(entry, writable, [
+      `<b>${dash(p.student_full_name)}</b><br><small>${dash(p.course)} курс</small>`,
+      `${dash(p.mentor_full_name)}<br><small>приказ ${dash(p.mentor_order_number)} от ${ruDate(p.mentor_order_date)}</small>`,
+      `${ruDate(p.period_start)} — ${ruDate(p.period_end)}<br><small>${dash(p.duration_months)} мес.</small>`,
+      dash(p.internship_agreement_reference),
+      `${certificates}/2`,
+    ]);
+  }).join("");
+  return registryTable("internship-registry-grid", ["Студент", "Наставник", "Период", "Договор о стажировке", "Справки"], rows, entries.length, canCreate ? "Стажировки ещё не добавлены." : "ИТ-организация ещё не добавила стажировки.");
+}
+
+// UI-08: школы — виды 6/7/8, источник средств, акт и цифровой след.
+const SCHOOL_KIND_LABELS = { it_clubs: "ИТ-кружки", teacher_training: "Подготовка учителей", edu_content: "Образовательный контент" };
+function schoolTable(entries, writable, canCreate) {
+  const funding = { absent: "нет", full_or_partial: "есть" };
+  const rows = entries.map((entry) => {
+    const p = entry.payload || {};
+    const kind = entry.category_code || state.categoryCode;
+    const scope = kind === "edu_content"
+      ? `${dash(p.platform_name)}<br><small>цифровой след: ${p.digital_trace_sha256 ? "выгрузка подтверждена" : "нет"}</small>`
+      : `${dash(p.program_name)}<br><small>${kind === "teacher_training" ? `учителей: ${dash(p.trained_teachers_count)}` : `учащихся: ${dash(p.students_count)}`}</small>`;
+    return registryRow(entry, writable, [
+      dash((state.partners || []).find((partner) => partner.id === p.org_name)?.name || ""),
+      scope,
+      dash(p.funding_source),
+      `бюджет: ${funding[p.budget_funding] || dash(p.budget_funding)}<br><small>граждане: ${funding[p.citizen_funding] || dash(p.citizen_funding)}</small>`,
+      dash(p.acceptance_act_reference),
+    ]);
+  }).join("");
+  return registryTable("school-registry-grid", ["Школа", "Программа или платформа", "Источник средств", "Финансирование", "Акт приёмки"], rows, entries.length, canCreate ? "Мероприятия ещё не добавлены." : "ИТ-организация ещё не добавила мероприятия.");
+}
+// UI-07: реестр ТОП-ИТ/ИИ. Денежные поля из обзора скрыты, как и в остальных
+// реестрах; составляющие программы открываются в карточке записи.
+function topItTable(entries, writable, canCreate) {
+  const roles = { anchor: "якорная", partner: "партнёрская" };
+  const kinds = { assistance: "содействие", cofinancing: "софинансирование" };
+  const rows = entries.map((entry) => {
+    const p = entry.payload || {};
+    return registryRow(entry, writable, [
+      `<b>${dash(p.program_name)}</b><br><small>${dash(p.project_name)}</small>`,
+      dash((state.partners || []).find((partner) => partner.id === p.org_name)?.name || ""),
+      `${dash(p.program_wave)}<br><small>${roles[p.partner_role] || dash(p.partner_role)}</small>`,
+      kinds[p.top_activity_type] || dash(p.top_activity_type),
+      `${dash(p.top_agreement_reference)}<br><small>письмо АНО АЦ: ${p.ano_letter_reference ? "есть" : "нет"}</small>`,
+    ]);
+  }).join("");
+  return registryTable("top-it-registry-grid", ["Программа и проект", "Образовательная организация", "Волна и роль", "Тип активности", "Договор"], rows, entries.length, canCreate ? "Программы ещё не добавлены." : "ИТ-организация ещё не добавила программы ТОП-ИТ.");
+}
+
 async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(state.view)) {
   const generation = (root.workspaceGeneration || 0) + 1;
   root.workspaceGeneration = generation;
@@ -730,7 +814,15 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
         ? teachingWorkloadTable(list, payoutItems, writable, canCreate)
         : state.categoryCode === "ood_rpd"
           ? oopRegistryTable(list, writable, canCreate)
-          : `<p>На странице: ${list.length}.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${entryRisk(e)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+          : state.categoryCode === "employment_practice"
+            ? practiceTable(list, writable, canCreate)
+            : state.categoryCode === "internship"
+              ? internshipTable(list, writable, canCreate)
+              : state.categoryCode === "top_it"
+                ? topItTable(list, writable, canCreate)
+                : SCHOOL_KIND_LABELS[state.categoryCode]
+                ? schoolTable(list, writable, canCreate)
+                : `<p>На странице: ${list.length}.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${entryRisk(e)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(
@@ -1103,6 +1195,18 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
   };
 }
 
+// DATA-10: доля участия, лимиты по участникам и сверка с целевой суммой года.
+function groupLimitsMarkup(data) {
+  const money = (value) => (value == null ? "—" : `${Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`);
+  const members = (data.members || []).map((member) => `<tr><td>${escapeHTML(member.name)}</td><td>${escapeHTML(member.inn)}</td><td>${member.share_percent == null ? "—" : `${Number(member.share_percent).toLocaleString("ru-RU")} %`}</td><td>${money(member.limit_rub)}</td></tr>`).join("");
+  const verdict = data.target_amount_rub == null
+    ? '<p class="muted">Целевая сумма на год не задана — сверить лимиты не с чем.</p>'
+    : data.over_allocated
+      ? `<p class="error">Лимиты превышают целевую сумму на ${money(data.over_allocated_rub)}.</p>`
+      : `<p class="notice">Распределено ${money(data.allocated_rub)} из ${money(data.target_amount_rub)}; не распределено ${money(data.remaining_rub)}.</p>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Участник</th><th>ИНН</th><th>Доля</th><th>Лимит на ${escapeHTML(String(data.report_year))} год</th></tr></thead><tbody>${members}</tbody></table></div>${verdict}`;
+}
+
 async function openLegalEntityGroups(onSaved) {
   const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Группа юридических лиц</h2><button class="btn secondary" id="group-close">Закрыть</button></div><div id="group-list"></div><form id="group-form"><h3 id="group-title">Договор о взаимодействии</h3><div class="grid cols-2"><div class="field"><label>Название группы *</label><input name="name" required maxlength="500"></div><div class="field"><label>Номер договора о взаимодействии *</label><input name="agreement_number" required maxlength="100"></div><div class="field"><label>Дата договора *</label><input name="agreement_date" type="date" required></div><div class="field"><label>Уполномоченное юридическое лицо *</label><input name="authorized_name" required maxlength="1000"></div><div class="field"><label>ИНН уполномоченного лица *</label><input name="authorized_inn" required inputmode="numeric" pattern="[0-9]{10}|[0-9]{12}" maxlength="12"></div><div class="field"><label>ОГРН / ОГРНИП *</label><input name="authorized_ogrn" required inputmode="numeric" pattern="[0-9]{13}|[0-9]{15}" maxlength="15"></div></div><div class="field"><label>Участники группы *</label><textarea name="members" rows="6" required placeholder="Название | ИНН | ОГРН | ИТ или иное | целевой объём, руб."></textarea><div class="field-hint">Один участник на строку. Уполномоченное лицо тоже добавьте в список. Пример: ООО Компания | 7700000000 | 1027700000000 | ИТ | 1500000</div></div><div class="flex"><button class="btn" type="submit">Сохранить</button></div><p class="error" role="alert"></p></form></div></div>`);
   const form = modal.querySelector("#group-form");
@@ -1121,7 +1225,15 @@ async function openLegalEntityGroups(onSaved) {
   };
   const load = async () => {
     state.legalEntityGroups = ((await api("/legal-entity-groups")) || []).filter((group) => group.status !== "terminated");
-    modal.querySelector("#group-list").innerHTML = state.legalEntityGroups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа и договор</th><th>Уполномоченное лицо</th><th>Участники</th><th></th></tr></thead><tbody>${state.legalEntityGroups.map((group) => `<tr><td><b>${escapeHTML(group.name)}</b><br>№ ${escapeHTML(group.interaction_agreement_number)} от ${escapeHTML(group.interaction_agreement_date)}</td><td>${escapeHTML(group.authorized_entity_name)}<br>ИНН ${escapeHTML(group.authorized_entity_inn)}</td><td>${group.members.length}</td><td><button class="btn secondary" data-group-edit="${group.id}">Изменить</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Договор о взаимодействии ещё не добавлен.</p>';
+    modal.querySelector("#group-list").innerHTML = state.legalEntityGroups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа и договор</th><th>Уполномоченное лицо</th><th>Участники</th><th></th></tr></thead><tbody>${state.legalEntityGroups.map((group) => `<tr><td><b>${escapeHTML(group.name)}</b><br>№ ${escapeHTML(group.interaction_agreement_number)} от ${escapeHTML(group.interaction_agreement_date)}</td><td>${escapeHTML(group.authorized_entity_name)}<br>ИНН ${escapeHTML(group.authorized_entity_inn)}</td><td>${group.members.length}<br><small>${escapeHTML(group.status === "active" ? "действует" : group.status || "")}</small></td><td><button class="btn secondary" data-group-edit="${group.id}">Изменить</button> <button class="btn secondary" data-group-limits="${group.id}">Лимиты</button></td></tr><tr hidden id="limits-${group.id}"><td colspan="4"></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Договор о взаимодействии ещё не добавлен.</p>';
+    modal.querySelectorAll("[data-group-limits]").forEach((button) => button.onclick = async () => {
+      const row = modal.querySelector(`#limits-${button.dataset.groupLimits}`);
+      if (!row.hidden) { row.hidden = true; return; }
+      try {
+        row.firstElementChild.innerHTML = groupLimitsMarkup(await api(`/legal-entity-groups/${encodeURIComponent(button.dataset.groupLimits)}/limits?report_year=${encodeURIComponent(state.year)}`));
+        row.hidden = false;
+      } catch (error) { showToast(error.message); }
+    });
     modal.querySelectorAll("[data-group-edit]").forEach((button) => button.onclick = () => fill(state.legalEntityGroups.find((group) => group.id === button.dataset.groupEdit)));
     if (state.legalEntityGroups.length === 1 && !editingID) fill(state.legalEntityGroups[0]);
   };
@@ -1644,6 +1756,24 @@ async function openPartnerStructure(partnerID, onSaved = async () => {}) {
   try { await load(); } catch (error) { modal.querySelector("#structure-units").innerHTML = `<div class="card error">${escapeHTML(error.message)}</div>`; }
 }
 
+// DATA-02: история редакций соглашения — что изменилось между соседними редакциями.
+const AGREEMENT_HISTORY_FIELDS = { number: "Номер", valid_from: "Действует с", valid_until: "Действует по", status: "Статус", curator_id: "Куратор", signature_method: "Способ подписания", signed_by: "Подписант", signed_on: "Дата подписания", document_reference: "Реквизиты документа", roiv_name: "РОИВ", partner_ids: "Организации", activity_codes: "Виды мероприятий" };
+function agreementHistoryMarkup(revisions) {
+  if (!Array.isArray(revisions) || !revisions.length) return '<p class="muted">Редакций пока нет.</p>';
+  return `<ol class="task-history">${revisions.map((revision, index) => {
+    const before = index ? revisionSnapshot(revisions[index - 1]) : {};
+    const after = revisionSnapshot(revision);
+    const changes = Object.entries(AGREEMENT_HISTORY_FIELDS)
+      .filter(([key]) => index && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null))
+      .map(([key, label]) => `${escapeHTML(label)}: ${escapeHTML(String(before[key] ?? "—"))} → ${escapeHTML(String(after[key] ?? "—"))}`);
+    const when = escapeHTML(String(revision.changed_at || "").replace("T", " ").slice(0, 16));
+    return `<li>Редакция ${Number(revision.revision)} <span class="muted">${when}</span>${index ? (changes.length ? `<br>${changes.join("<br>")}` : "<br><small>реквизиты без изменений</small>") : " — первоначальная"}</li>`;
+  }).join("")}</ol>`;
+}
+function revisionSnapshot(revision) {
+  return revision && typeof revision.snapshot === "object" && revision.snapshot ? revision.snapshot : {};
+}
+
 async function openAgreements(partnerID, onSaved = async () => {}) {
   state.regionalAuthorities = await api("/regional-authorities");
   const modal = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true"><div class="flex between"><h2>Соглашения: ${escapeHTML(partnerName(partnerID))}</h2><button class="btn secondary" id="agreement-close">Закрыть</button></div><div id="agreement-list">Загрузка…</div>${isStaffUser() ? `<form id="agreement-form"><h2 id="agreement-form-title">Добавить соглашение</h2>${agreementFieldsMarkup("agreement", {partner_ids: [partnerID]}, true)}<div class="flex"><button class="btn" type="submit">Сохранить соглашение</button><button class="btn secondary" type="button" id="agreement-reset">Новое</button></div><p class="error" role="alert"></p></form>` : ""}</div></div>`);
@@ -1654,10 +1784,20 @@ async function openAgreements(partnerID, onSaved = async () => {}) {
   let editingID = "";
   const renderList = () => {
     modal.querySelector("#agreement-list").innerHTML = agreements.length
-      ? agreements.map((agreement) => `<div class="agreement-card"><div><b>${escapeHTML(agreementLabel(agreement))}</b><br>${escapeHTML(AGREEMENT_KIND_LABELS[agreement.agreement_kind])}${agreement.roiv_name ? `: ${escapeHTML(agreement.roiv_name)}` : ""}<br><small>Подписание: ${escapeHTML(agreement.signature_method)}${agreement.signed_by ? ` · ${escapeHTML(agreement.signed_by)}` : ""}. Организаций: ${agreement.partner_ids.length}. Ответственных: ${agreement.responsible_people.length}. Виды мероприятий: ${(agreement.activity_codes || []).length}.</small></div>${isStaffUser() ? `<button class="btn secondary" data-edit-agreement="${agreement.id}">Изменить</button>` : ""}</div>`).join("")
+      ? agreements.map((agreement) => `<div class="agreement-card"><div><b>${escapeHTML(agreementLabel(agreement))}</b><br>${escapeHTML(AGREEMENT_KIND_LABELS[agreement.agreement_kind])}${agreement.roiv_name ? `: ${escapeHTML(agreement.roiv_name)}` : ""}<br><small>Подписание: ${escapeHTML(agreement.signature_method)}${agreement.signed_by ? ` · ${escapeHTML(agreement.signed_by)}` : ""}. Организаций: ${agreement.partner_ids.length}. Ответственных: ${agreement.responsible_people.length}. Виды мероприятий: ${(agreement.activity_codes || []).length}.</small></div><div class="flex">${state.me?.entity_type === "organization" ? `<button class="btn secondary" data-history-agreement="${agreement.id}">История</button>` : ""}${isStaffUser() ? `<button class="btn secondary" data-edit-agreement="${agreement.id}">Изменить</button>` : ""}</div><div class="agreement-history" id="history-${agreement.id}" hidden></div></div>`).join("")
       : "<p>Соглашений нет.</p>";
     modal.querySelectorAll("[data-edit-agreement]").forEach((button) => {
       button.onclick = () => fillForm(agreements.find((item) => item.id === button.dataset.editAgreement));
+    });
+    modal.querySelectorAll("[data-history-agreement]").forEach((button) => {
+      button.onclick = async () => {
+        const box = modal.querySelector(`#history-${button.dataset.historyAgreement}`);
+        if (!box.hidden) { box.hidden = true; return; }
+        try {
+          box.innerHTML = agreementHistoryMarkup(await api(`/agreements/${encodeURIComponent(button.dataset.historyAgreement)}/history`));
+          box.hidden = false;
+        } catch (error) { showToast(error.message); }
+      };
     });
   };
   const load = async () => {

@@ -169,3 +169,47 @@ test("OOP and RPD screen exposes permanent 2 by 3 matrix and document registry",
   }
   assert.match(workspace, /\[\["rpd", "РПД"\], \["oop", "ООП"\]\]/);
 });
+
+test("UI-07: TOP-IT entry card exposes the three sub-registers and no threshold gauge", () => {
+  const app = source("./app.js");
+  assert.match(app, /function renderTopItemsSection/);
+  assert.match(app, /\/entries\/\$\{encodeURIComponent\(entryId\)\}\/top-items/);
+  for (const label of ["Неденежная поддержка", "Стипендиаты", "Производственные кейсы"]) assert.match(app, new RegExp(label));
+  assert.doesNotMatch(app, /gauge/i);
+});
+
+test("UI-11 SEC-10: settings expose the task dispatcher with route, fallback reason and history", () => {
+  const app = source("./app.js");
+  assert.match(app, /id: "tasks", label: "Задачи и эскалации"/);
+  assert.match(app, /function renderSettingsTasks/);
+  for (const path of ["/workflow-tasks?status=", "/reassign", "/complete"]) assert.ok(app.includes(path), path);
+  assert.match(app, /Причина обхода/);
+});
+
+test("UI-05 UI-06 UI-08: practice, internship and school screens use dedicated registries", () => {
+  const workspace = source("./workspace.js");
+  for (const name of ["practiceTable", "internshipTable", "schoolTable"]) assert.match(workspace, new RegExp(`function ${name}`));
+  for (const label of ["Договор о практической подготовке", "Возраст и нагрузка", "Договор о стажировке", "Справки", "Источник средств", "Акт приёмки"]) assert.match(workspace, new RegExp(label));
+  assert.match(workspace, /it_clubs: "ИТ-кружки", teacher_training: "Подготовка учителей", edu_content: "Образовательный контент"/);
+  assert.match(workspace, /categoryCode === "employment_practice"/);
+});
+
+test("DATA-02 DATA-10: agreement history and group limits are visible in the partner dialogs", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function agreementHistoryMarkup/);
+  assert.match(workspace, /\/agreements\/\$\{encodeURIComponent\(button\.dataset\.historyAgreement\)\}\/history/);
+  assert.match(workspace, /function groupLimitsMarkup/);
+  assert.match(workspace, /over_allocated_rub/);
+  assert.match(workspace, /\/limits\?report_year=/);
+});
+
+test("UI-07 UI-11 UI-12: TOP-IT registry and settings group dialog are wired, registry headers carry scope", () => {
+  const workspace = source("./workspace.js");
+  const app = source("./app.js");
+  assert.match(workspace, /function topItTable/);
+  assert.match(workspace, /categoryCode === "top_it"/);
+  assert.match(workspace, /<th scope="col">Риск<\/th>/);
+  assert.match(source("./theme.css"), /\.sr-only/);
+  assert.match(app, /id="settings-groups"/);
+  assert.match(app, /openLegalEntityGroups\(\(\) => renderSettingsOverview\(box\)\)/);
+});
