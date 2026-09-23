@@ -62,9 +62,10 @@ func (r *ActivityProjection) List(ctx context.Context, filter activityprojection
 		FROM entries e LEFT JOIN entry_eligibility eligibility ON eligibility.id=e.id
 		WHERE ($1=0 OR e.report_year=$1) AND ($2='' OR e.period_type=$2)
 		AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.partner_id::text=$4)
-		AND ($5='' OR e.category_code=$5) AND ($6='' OR e.audience=$6)
+		AND ($5='' OR e.agreement_id::text=$5) AND ($6='' OR e.category_code=$6)
+		AND ($7='' OR e.audience=$7)
 		ORDER BY e.report_year,e.period_type,e.category_code,e.id`,
-		filter.ReportYear, filter.Period, filter.TenantID, filter.PartnerID, filter.CategoryCode, filter.Audience)
+		filter.ReportYear, filter.Period, filter.TenantID, filter.PartnerID, filter.AgreementID, filter.CategoryCode, filter.Audience)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +105,10 @@ func projectLegacyActivity(row legacyActivityRow, evaluatedAt time.Time) (activi
 	}
 	readiness := compliance.Evaluate(row.categoryCode, row.period, payload, row.documents)
 	approved := row.reportStatus == "approved"
-	eligible := readiness.Eligible
+	// entry_eligibility is the current accounting boundary used by legacy
+	// dashboards and exports. Keep that axis distinct from document readiness
+	// and from the explicit workflow approval state exposed below.
+	eligible := row.accountEligible
 	riskState := readiness.State
 	if riskState == "green" && !row.accountEligible {
 		riskState = "yellow"

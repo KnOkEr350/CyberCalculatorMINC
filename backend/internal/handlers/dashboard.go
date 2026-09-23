@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -114,6 +115,19 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(it_company_id::text,'') FROM partners WHERE id::text=$1`, scope).Scan(&companyScope)
 	}
 
+	var projected []activityprojection.Contribution
+	if h.Projection != nil {
+		var projectionErr error
+		projected, projectionErr = h.Projection.List(r.Context(), activityprojection.Filter{
+			ReportYear: year, TenantID: companyScope, PartnerID: scope,
+			CategoryCode: categoryFilter, Audience: audienceFilter,
+		})
+		if projectionErr != nil {
+			middleware.WriteError(w, 500, "ошибка чтения аналитической проекции")
+			return
+		}
+	}
+
 	var target, savingsBase money.Amount
 	var savingsBaseRaw, source, notified sql.NullString
 	targetErr := sql.ErrNoRows
@@ -138,40 +152,86 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		if notified.Valid {
 			resp.TargetNotifiedAt = notified.String
 		}
-		companyRisk, riskErr := h.riskBreakdown(r, year, "", companyScope, "", "")
-		if riskErr != nil {
-			middleware.WriteError(w, 500, "ошибка расчёта подтверждённых расходов")
-			return
+		var confirmed money.Amount
+		if h.Projection != nil {
+			companyItems := projected
+			if categoryFilter != "" || audienceFilter != "" {
+				var projectionErr error
+				companyItems, projectionErr = h.Projection.List(r.Context(), activityprojection.Filter{ReportYear: year, TenantID: companyScope})
+				if projectionErr != nil {
+					middleware.WriteError(w, 500, "ошибка расчёта подтверждённых расходов")
+					return
+				}
+			}
+			companySummary, projectionErr := activityprojection.Summarize(companyItems)
+			if projectionErr != nil {
+				middleware.WriteError(w, 500, "ошибка расчёта подтверждённых расходов")
+				return
+			}
+			confirmed = companySummary.CountedFactAmount
+		} else {
+			companyRisk, riskErr := h.riskBreakdown(r, year, "", companyScope, "", "")
+			if riskErr != nil {
+				middleware.WriteError(w, 500, "ошибка расчёта подтверждённых расходов")
+				return
+			}
+			confirmed = companyRisk["green"].AmountRub
 		}
-		confirmed := companyRisk["green"].AmountRub
 		resp.TargetConfirmedRub = &confirmed
 		deficit, surplus, completion := targetProgress(target, confirmed)
 		resp.TargetDeficitRub, resp.TargetSurplusRub, resp.TargetCompletionPct = &deficit, &surplus, &completion
 	}
 
-	if err := h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2) AND ($3='' OR it_company_id::text=$3) AND ($4='' OR category_code=$4) AND ($5='' OR audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {
-		middleware.WriteError(w, 500, "ошибка расчёта дашборда")
+	var err error
+	if h.Projection != nil {
+		summary, summaryErr := activityprojection.Summarize(projected)
+		if summaryErr != nil {
+			middleware.WriteError(w, 500, "ошибка расчёта дашборда")
+			return
+		}
+		resp.PlanTotalRub = summary.PlanAmount
+		resp.FactTotalRub = summary.FactAmount
+		resp.EligiblePlanTotalRub = summary.EligiblePlanAmount
+		resp.EligibleFactTotalRub = summary.EligibleFactAmount
+		resp.IncompleteEntries = summary.IncompleteEntries
+
+		obligations, obligationErr := h.categoryObligations(r)
+		if obligationErr != nil {
+			middleware.WriteError(w, 500, "ошибка справочника видов активности")
+			return
+		}
+		resp.PlanByCategory, err = breakdownFromProjection(projected, "plan", obligations)
+		if err == nil {
+			resp.FactByCategory, err = breakdownFromProjection(projected, "fact", obligations)
+		}
+		if err != nil {
+			middleware.WriteError(w, 500, "ошибка аналитической проекции")
+			return
+		}
+		resp.RiskBuckets, err = riskBreakdownFromProjection(projected)
+	} else {
+		if err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2) AND ($3='' OR it_company_id::text=$3) AND ($4='' OR category_code=$4) AND ($5='' OR audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {
+			middleware.WriteError(w, 500, "ошибка расчёта дашборда")
+			return
+		}
+		if err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='plan' AND eligibility.eligible),0),COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='fact' AND eligibility.eligible),0),count(*) FILTER(WHERE NOT eligibility.eligible) FROM entry_eligibility eligibility JOIN entries e ON e.id=eligibility.id WHERE e.report_year=$1 AND ($2='' OR e.partner_id::text=$2) AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.EligiblePlanTotalRub, &resp.EligibleFactTotalRub, &resp.IncompleteEntries); err != nil {
+			middleware.WriteError(w, 500, "ошибка проверки обязательностей")
+			return
+		}
+		resp.PlanByCategory, err = h.breakdown(r, year, "plan", scope, companyScope, categoryFilter, audienceFilter)
+		if err == nil {
+			resp.FactByCategory, err = h.breakdown(r, year, "fact", scope, companyScope, categoryFilter, audienceFilter)
+		}
+		if err == nil {
+			resp.RiskBuckets, err = h.riskBreakdown(r, year, scope, companyScope, categoryFilter, audienceFilter)
+		}
+	}
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка расчёта аналитики")
 		return
 	}
-
 	if resp.PlanTotalRub > 0 {
 		resp.PlanCompletionPct = round2(resp.FactTotalRub.Rubles() / resp.PlanTotalRub.Rubles() * 100)
-	}
-	if err := h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='plan' AND eligibility.eligible),0),COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='fact' AND eligibility.eligible),0),count(*) FILTER(WHERE NOT eligibility.eligible) FROM entry_eligibility eligibility JOIN entries e ON e.id=eligibility.id WHERE e.report_year=$1 AND ($2='' OR e.partner_id::text=$2) AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.EligiblePlanTotalRub, &resp.EligibleFactTotalRub, &resp.IncompleteEntries); err != nil {
-		middleware.WriteError(w, 500, "ошибка проверки обязательностей")
-		return
-	}
-
-	var err error
-	resp.PlanByCategory, err = h.breakdown(r, year, "plan", scope, companyScope, categoryFilter, audienceFilter)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка аналитики плана")
-		return
-	}
-	resp.FactByCategory, err = h.breakdown(r, year, "fact", scope, companyScope, categoryFilter, audienceFilter)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка аналитики факта")
-		return
 	}
 	// DASH-03: минимум ВО считается до скрытия нулевых позиций, иначе
 	// невыполненный обязательный вид просто исчез бы из чипов.
@@ -182,12 +242,6 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		resp.PlanByCategory = withoutZeroPositions(resp.PlanByCategory)
 		resp.FactByCategory = withoutZeroPositions(resp.FactByCategory)
 	}
-	resp.RiskBuckets, err = h.riskBreakdown(r, year, scope, companyScope, categoryFilter, audienceFilter)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка расчёта документальных рисков")
-		return
-	}
-
 	middleware.WriteJSON(w, http.StatusOK, resp)
 }
 
@@ -211,7 +265,6 @@ func riskBucketState(state string, approved bool) string {
 }
 
 func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, companyScope, categoryFilter, audienceFilter string) (map[string]riskBucket, error) {
-	result := map[string]riskBucket{"green": {}, "yellow": {}, "red": {}}
 	if h.Projection != nil {
 		items, err := h.Projection.List(r.Context(), activityprojection.Filter{
 			ReportYear: year, Period: "fact", TenantID: companyScope, PartnerID: scope,
@@ -220,21 +273,9 @@ func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, comp
 		if err != nil {
 			return nil, err
 		}
-		for _, item := range items {
-			state := item.Risk.State
-			if state != "green" && state != "yellow" && state != "red" {
-				state = "red"
-			}
-			bucket := result[state]
-			bucket.EntryCount++
-			bucket.AmountRub, err = money.Add(bucket.AmountRub, item.FactAmount)
-			if err != nil {
-				return nil, err
-			}
-			result[state] = bucket
-		}
-		return result, nil
+		return riskBreakdownFromProjection(items)
 	}
+	result := map[string]riskBucket{"green": {}, "yellow": {}, "red": {}}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT e.category_code,e.payload,e.amount_rub,eligibility.eligible,
 		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=e.id AND a.retention_expires_at>now())
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id
@@ -268,6 +309,28 @@ func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, comp
 		result[state] = bucket
 	}
 	return result, rows.Err()
+}
+
+func riskBreakdownFromProjection(items []activityprojection.Contribution) (map[string]riskBucket, error) {
+	result := map[string]riskBucket{"green": {}, "yellow": {}, "red": {}}
+	for _, item := range items {
+		if item.Period != "fact" {
+			continue
+		}
+		state := item.Risk.State
+		if state != "green" && state != "yellow" && state != "red" {
+			state = "red"
+		}
+		bucket := result[state]
+		bucket.EntryCount++
+		var err error
+		bucket.AmountRub, err = money.Add(bucket.AmountRub, item.FactAmount)
+		if err != nil {
+			return nil, err
+		}
+		result[state] = bucket
+	}
+	return result, nil
 }
 
 // targetProgress считает выполнение норматива 3% (DASH-01) подтверждённым
@@ -354,6 +417,61 @@ func effectiveObligation(dictionary, audience string) string {
 		return "variable"
 	}
 	return dictionary
+}
+
+func (h *DashboardHandlers) categoryObligations(r *http.Request) (map[string]string, error) {
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT code,obligation FROM activity_categories`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]string)
+	for rows.Next() {
+		var code, obligation string
+		if err := rows.Scan(&code, &obligation); err != nil {
+			return nil, err
+		}
+		result[code] = obligation
+	}
+	return result, rows.Err()
+}
+
+func breakdownFromProjection(items []activityprojection.Contribution, period string, obligations map[string]string) ([]categoryBreakdown, error) {
+	groups, err := activityprojection.AggregateContributions(items, activityprojection.Grouping{Category: true, Audience: true})
+	if err != nil {
+		return nil, err
+	}
+	raw := make([]categoryBreakdown, 0, len(groups))
+	var total money.Amount
+	for _, group := range groups {
+		row := categoryBreakdown{
+			CategoryCode: group.CategoryCode,
+			Audience:     group.Audience,
+			Obligation:   effectiveObligation(obligations[group.CategoryCode], group.Audience),
+		}
+		switch period {
+		case "plan":
+			row.EntryCount, row.UnitCount, row.AmountRub = group.PlanEntries, group.PlanUnits, group.PlanAmount
+		case "fact":
+			row.EntryCount, row.UnitCount, row.AmountRub = group.FactEntries, group.FactUnits, group.FactAmount
+		default:
+			return nil, fmt.Errorf("unsupported dashboard period %q", period)
+		}
+		if row.EntryCount == 0 {
+			continue
+		}
+		total, err = money.Add(total, row.AmountRub)
+		if err != nil {
+			return nil, err
+		}
+		raw = append(raw, row)
+	}
+	if total > 0 {
+		for i := range raw {
+			raw[i].SharePercent = round2(raw[i].AmountRub.Rubles() / total.Rubles() * 100)
+		}
+	}
+	return raw, nil
 }
 
 func (h *DashboardHandlers) breakdown(r *http.Request, year int, period, scope, companyScope, categoryFilter, audienceFilter string) ([]categoryBreakdown, error) {

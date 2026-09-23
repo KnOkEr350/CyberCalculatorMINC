@@ -71,4 +71,7 @@ func TestProjectLegacyActivityKeepsUnapprovedFactOutOfCountedAmount(t *testing.T
 	if projection.Risk.State != "yellow" || projection.LegalDispute.State != "clear" {
 		t.Fatalf("unexpected risk/dispute projection: %#v", projection)
 	}
+	if projection.Eligibility.Passed {
+		t.Fatalf("an entry outside the accounting boundary must stay ineligible: %#v", projection)
+	}
 }

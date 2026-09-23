@@ -21,9 +21,9 @@ func (s *projectionReaderStub) List(_ context.Context, filter activityprojection
 
 func TestDashboardRiskBreakdownUsesActivityProjection(t *testing.T) {
 	reader := &projectionReaderStub{items: []activityprojection.Contribution{
-		{FactAmount: money.Amount(10_000), Risk: activityprojection.Assessment{State: "green"}},
-		{FactAmount: money.Amount(20_000), Risk: activityprojection.Assessment{State: "yellow"}},
-		{FactAmount: money.Amount(30_000), Risk: activityprojection.Assessment{State: "unknown"}},
+		{Period: "fact", FactAmount: money.Amount(10_000), Risk: activityprojection.Assessment{State: "green"}},
+		{Period: "fact", FactAmount: money.Amount(20_000), Risk: activityprojection.Assessment{State: "yellow"}},
+		{Period: "fact", FactAmount: money.Amount(30_000), Risk: activityprojection.Assessment{State: "unknown"}},
 	}}
 	handler := DashboardHandlers{Projection: reader}
 	request := httptest.NewRequest("GET", "/api/dashboard", nil)
@@ -47,5 +47,44 @@ func TestDashboardRiskBreakdownUsesActivityProjection(t *testing.T) {
 	}
 	if buckets["red"].EntryCount != 1 || buckets["red"].AmountRub != money.Amount(30_000) {
 		t.Fatalf("red bucket = %#v", buckets["red"])
+	}
+}
+
+func TestDashboardBreakdownUsesProjectionAmountsUnitsAndObligations(t *testing.T) {
+	items := []activityprojection.Contribution{
+		{CategoryCode: "teachers", Audience: "vuz", Period: "plan", Units: 2, PlanAmount: money.Amount(30_000)},
+		{CategoryCode: "teachers", Audience: "vuz", Period: "fact", Units: 3, FactAmount: money.Amount(20_000)},
+		{CategoryCode: "teachers", Audience: "kolledj", Period: "fact", Units: 1, FactAmount: money.Amount(10_000)},
+	}
+	rows, err := breakdownFromProjection(items, "fact", map[string]string{"teachers": "mandatory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %#v", rows)
+	}
+	byAudience := map[string]categoryBreakdown{}
+	for _, row := range rows {
+		byAudience[row.Audience] = row
+	}
+	if row := byAudience["vuz"]; row.EntryCount != 1 || row.UnitCount != 3 || row.AmountRub != 20_000 || row.Obligation != "mandatory" || row.SharePercent != 66.67 {
+		t.Fatalf("unexpected university breakdown: %#v", row)
+	}
+	if row := byAudience["kolledj"]; row.EntryCount != 1 || row.AmountRub != 10_000 || row.Obligation != "variable" || row.SharePercent != 33.33 {
+		t.Fatalf("unexpected college breakdown: %#v", row)
+	}
+}
+
+func TestRiskBreakdownFromProjectionIgnoresPlanRows(t *testing.T) {
+	items := []activityprojection.Contribution{
+		{Period: "plan", PlanAmount: 90_000, Risk: activityprojection.Assessment{State: "green"}},
+		{Period: "fact", FactAmount: 40_000, Risk: activityprojection.Assessment{State: "green"}},
+	}
+	buckets, err := riskBreakdownFromProjection(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buckets["green"].EntryCount != 1 || buckets["green"].AmountRub != 40_000 {
+		t.Fatalf("plan row leaked into risk buckets: %#v", buckets)
 	}
 }

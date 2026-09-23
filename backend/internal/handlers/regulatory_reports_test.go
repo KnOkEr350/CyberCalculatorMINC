@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"cybercalc/internal/money"
+	"cybercalc/internal/platform/activityprojection"
 )
 
 func TestRegulatoryHeadersGolden(t *testing.T) {
@@ -178,6 +179,21 @@ func TestBuildPlanFactRowsShowsDashPercentWithoutPlan(t *testing.T) {
 	}
 	if percent := rows[0][5]; percent != "—" {
 		t.Fatalf("при плане=0 и факте>0 процент дельты должен быть прочерком, получили %v", percent)
+	}
+}
+
+func TestBuildPlanFactProjectionRows(t *testing.T) {
+	groups := []activityprojection.Aggregate{
+		{PartnerID: "p1", CategoryCode: "teachers", PlanAmount: money.Amount(100_00), FactAmount: money.Amount(125_50)},
+		{PartnerID: "p2", CategoryCode: "ood_rpd"},
+	}
+	rows := buildPlanFactProjectionRows(groups, map[string]string{"p1": "МГУ"}, map[string]string{"teachers": "Преподаватели"})
+	if len(rows) != 1 {
+		t.Fatalf("zero rows must be removed: %#v", rows)
+	}
+	row := rows[0]
+	if row[0] != "МГУ" || row[1] != "Преподаватели" || row[2] != money.Amount(100_00) || row[3] != money.Amount(125_50) || row[4] != 25.5 || row[5] != 25.5 {
+		t.Fatalf("unexpected projection row: %#v", row)
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"cybercalc/internal/docx"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/money"
+	"cybercalc/internal/platform/activityprojection"
 	"cybercalc/internal/xlsx"
 	"github.com/lib/pq"
 )
@@ -179,6 +180,10 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		h.exportAbsenceStatements(w, r, u, year, company, partner, agreement)
 		return
 	}
+	if kind == "plan_fact" && h.Projection != nil {
+		h.exportPlanFactProjection(w, r, u, year, company, partner, agreement, riskFilter)
+		return
+	}
 	conds := []string{"e.it_company_id::text=$1", "e.report_year=$2", "eligibility.eligible"}
 	args := []interface{}{company, year}
 	if partner != "" {
@@ -294,6 +299,109 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	}
 	h.writeGenerated(w, r, u, kind, "xlsx", filename, company,
 		reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter), year, body)
+}
+
+func (h *ReportHandlers) exportPlanFactProjection(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, company, partner, agreement, riskFilter string) {
+	items, err := h.Projection.List(r.Context(), activityprojection.Filter{
+		ReportYear: year, TenantID: company, PartnerID: partner, AgreementID: agreement,
+	})
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось собрать аналитическую проекцию")
+		return
+	}
+	filtered := make([]activityprojection.Contribution, 0, len(items))
+	for _, item := range items {
+		if !item.Eligibility.Passed {
+			continue
+		}
+		state := item.Risk.State
+		if state != "green" && state != "yellow" && state != "red" {
+			state = "red"
+		}
+		if riskFilter != "" && state != riskFilter {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if len(filtered) == 0 {
+		middleware.WriteError(w, 409, "нет утверждённых данных для формы")
+		return
+	}
+	groups, err := activityprojection.AggregateContributions(filtered, activityprojection.Grouping{Partner: true, Category: true})
+	if err != nil {
+		middleware.WriteError(w, 422, err.Error())
+		return
+	}
+	partnerNames, categoryNames, err := h.projectionLabels(r, company)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось прочитать справочники аналитики")
+		return
+	}
+	out := buildPlanFactProjectionRows(groups, partnerNames, categoryNames)
+	outputFormat := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	if outputFormat == "" {
+		outputFormat = "xlsx"
+	}
+	if outputFormat != "xlsx" && outputFormat != "csv" {
+		middleware.WriteError(w, 400, "format должен быть xlsx или csv")
+		return
+	}
+	filters := reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter)
+	if outputFormat == "csv" {
+		body, csvErr := tableCSV(regulatoryHeaders["plan_fact"], out)
+		if csvErr != nil {
+			middleware.WriteError(w, 500, "не удалось сформировать CSV")
+			return
+		}
+		h.writeGenerated(w, r, u, "plan_fact", "csv", fmt.Sprintf("план_факт_дельта_%d.csv", year), company, reportFilters(
+			"partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter, "format", "csv",
+		), year, body)
+		return
+	}
+	wb := xlsx.New()
+	wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], out)
+	body, err := wb.Bytes()
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось сформировать Excel")
+		return
+	}
+	h.writeGenerated(w, r, u, "plan_fact", "xlsx", fmt.Sprintf("план_факт_дельта_%d.xlsx", year), company, filters, year, body)
+}
+
+func (h *ReportHandlers) projectionLabels(r *http.Request, company string) (map[string]string, map[string]string, error) {
+	partnerNames := make(map[string]string)
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id::text,name FROM partners WHERE it_company_id::text=$1`, company)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var id, name string
+		if err = rows.Scan(&id, &name); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		partnerNames[id] = name
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return nil, nil, err
+	}
+	rows.Close()
+
+	categoryNames := make(map[string]string)
+	rows, err = h.DB.QueryContext(r.Context(), `SELECT code,name FROM activity_categories`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var code, name string
+		if err = rows.Scan(&code, &name); err != nil {
+			return nil, nil, err
+		}
+		categoryNames[code] = name
+	}
+	return partnerNames, categoryNames, rows.Err()
 }
 
 type absenceAgreement struct {
@@ -858,6 +966,27 @@ func buildPlanFactRows(data []regulatoryRow) [][]interface{} {
 			percent = math.Round(float64(a.fact-a.plan)/float64(a.plan)*100*100) / 100
 		}
 		out = append(out, []interface{}{a.name, a.category, a.plan, a.fact, delta, percent})
+	}
+	return out
+}
+
+func buildPlanFactProjectionRows(groups []activityprojection.Aggregate, partnerNames, categoryNames map[string]string) [][]interface{} {
+	out := make([][]interface{}, 0, len(groups))
+	for _, group := range groups {
+		if group.PlanAmount == 0 && group.FactAmount == 0 {
+			continue
+		}
+		delta := float64(group.FactAmount-group.PlanAmount) / 100
+		var percent interface{} = "—"
+		if group.PlanAmount > 0 {
+			percent = math.Round(float64(group.FactAmount-group.PlanAmount)/float64(group.PlanAmount)*100*100) / 100
+		}
+		partnerName := partnerNames[group.PartnerID]
+		categoryName := categoryNames[group.CategoryCode]
+		if categoryName == "" {
+			categoryName = group.CategoryCode
+		}
+		out = append(out, []interface{}{partnerName, categoryName, group.PlanAmount, group.FactAmount, delta, percent})
 	}
 	return out
 }

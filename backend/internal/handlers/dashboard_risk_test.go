@@ -9,6 +9,7 @@ import (
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	reportrepository "cybercalc/internal/modules/reporting/repository"
 	"cybercalc/internal/money"
 	"cybercalc/internal/testfixtures"
 )
@@ -85,7 +86,7 @@ func TestDashboardRiskBucketsSumUpToFactTotal(t *testing.T) {
 		}
 	}
 
-	handlers := DashboardHandlers{DB: db}
+	handlers := DashboardHandlers{DB: db, Projection: reportrepository.NewActivityProjection(db)}
 	user := middleware.AuthUser{ID: admin.ID, Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization, ITCompanyID: &company.ID}
 	recorder := httptest.NewRecorder()
 	handlers.Get(recorder, httptest.NewRequest("GET", fmt.Sprintf("/api/dashboard?report_year=%d", year), nil), user)

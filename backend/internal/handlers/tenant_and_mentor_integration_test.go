@@ -12,6 +12,7 @@ import (
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	reportrepository "cybercalc/internal/modules/reporting/repository"
 	"cybercalc/internal/testfixtures"
 )
 
@@ -132,7 +133,7 @@ func TestDashboardIsolatesTenants(t *testing.T) {
 	addEntry(foreign, "plan", "888000")
 	addEntry(foreign, "fact", "777000")
 
-	handlers := DashboardHandlers{DB: db}
+	handlers := DashboardHandlers{DB: db, Projection: reportrepository.NewActivityProjection(db)}
 	user := middleware.AuthUser{ID: own.admin, Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization, ITCompanyID: &own.company}
 	recorder := httptest.NewRecorder()
 	handlers.Get(recorder, httptest.NewRequest("GET", fmt.Sprintf("/api/dashboard?report_year=%d", year), nil), user)
@@ -179,6 +180,48 @@ func TestDashboardIsolatesTenants(t *testing.T) {
 	if emptyResp.PlanTotalRub != "0.00" || emptyResp.FactTotalRub != "0.00" {
 		t.Fatalf("у арендатора без мероприятий итоги %s/%s, ожидались нули",
 			emptyResp.PlanTotalRub, emptyResp.FactTotalRub)
+	}
+}
+
+// REPORT-01 on PostgreSQL: the plan/fact/delta constructor consumes the same
+// ActivityProjection as the dashboard and preserves exact money values.
+func TestPlanFactExportUsesActivityProjection(t *testing.T) {
+	db, year := integrationDB(t)
+	ctx := context.Background()
+	tenant := newTenant(ctx, t, testfixtures.New(db, t.Name()))
+	for _, row := range []struct {
+		category, period, amount string
+	}{
+		{"teachers", "plan", "1200.00"},
+		{"teachers", "fact", "900.00"},
+		{"ood_rpd", "plan", "1.00"},
+		{"ood_rpd", "fact", "1.00"},
+	} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO entries(category_code,partner_id,agreement_id,it_company_id,period_type,report_year,
+			audience,payload,amount_rub,formula_amount_rub,cost_method,created_by)
+			VALUES($1,$2,$3,$4,$5,$6,'vuz','{}',$7::numeric,$7::numeric,'average',$8)`,
+			row.category, tenant.partner, tenant.agreement, tenant.company, row.period, year, row.amount, tenant.admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, period := range []string{"plan", "fact"} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO agreement_reports(agreement_id,report_year,period_type,status,
+			scope_confirmed,conditions_confirmed,evidence_confirmed,counterparty_confirmed,approved_by,approved_at)
+			VALUES($1,$2,$3,'approved',true,true,true,true,$4,now())`, tenant.agreement, year, period, tenant.admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	handler := ReportHandlers{DB: db, Projection: reportrepository.NewActivityProjection(db)}
+	user := middleware.AuthUser{ID: tenant.admin, Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization, ITCompanyID: &tenant.company}
+	recorder := httptest.NewRecorder()
+	path := fmt.Sprintf("/api/reports/export?report_type=plan_fact&format=csv&report_year=%d", year)
+	handler.Export(recorder, httptest.NewRequest("GET", path, nil), user)
+	if recorder.Code != 200 {
+		t.Fatalf("plan/fact projection export returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, "1200.00;900.00;-300.00;-25.00") {
+		t.Fatalf("projection amounts are missing from CSV: %q", body)
 	}
 }
 

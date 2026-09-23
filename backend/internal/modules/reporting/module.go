@@ -28,7 +28,7 @@ type Options struct {
 
 func New(db *sql.DB, options Options) *Module {
 	projection := repository.NewActivityProjection(db)
-	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, options: options}
+	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, options: options}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {

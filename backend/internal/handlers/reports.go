@@ -14,11 +14,13 @@ import (
 	"strings"
 
 	"cybercalc/internal/middleware"
+	"cybercalc/internal/platform/activityprojection"
 	"cybercalc/internal/xlsx"
 )
 
 type ReportHandlers struct {
-	DB *sql.DB
+	DB         *sql.DB
+	Projection activityprojection.Reader
 }
 
 type reportEntryRow struct {
