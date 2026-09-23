@@ -52,12 +52,18 @@
     async function loadSearch(offset = 0) {
       currentOffset = Math.max(0, offset);
       result.innerHTML = '<div class="loading-state"><span class="spinner"></span>Поиск…</div>';
-      const page = await api(buildSearchPath({
-        query: searchForm.elements.query.value,
-        level: searchForm.elements.level.value,
-        limit: pageSize,
-        offset: currentOffset,
-      }));
+      let page;
+      try {
+        page = await api(buildSearchPath({
+          query: searchForm.elements.query.value,
+          level: searchForm.elements.level.value,
+          limit: pageSize,
+          offset: currentOffset,
+        }));
+      } catch (error) {
+        result.innerHTML = `<div class="empty-state"><b>Справочник ОКЗ пока недоступен</b><span>${escapeHTML(error.message)}. Загрузите активную версию CSV или примените миграции справочника.</span></div>`;
+        return;
+      }
       if (!page.version) {
         result.innerHTML = '<div class="empty-state"><b>Справочник ещё не загружен</b><span>Загрузите первую версию CSV в форме выше.</span></div>';
         return;
@@ -72,7 +78,14 @@
     }
 
     async function loadVersions() {
-      const versions = await api("/admin/okz/versions");
+      let versions;
+      try {
+        versions = await api("/admin/okz/versions");
+      } catch (error) {
+        root.querySelector("#okz-active-summary").textContent = "Версии ОКЗ недоступны";
+        root.querySelector("#okz-versions").innerHTML = `<p class="muted">${escapeHTML(error.message)}. После применения миграций загрузите CSV-версию справочника.</p>`;
+        return;
+      }
       const active = versions.find((item) => item.status === "active");
       root.querySelector("#okz-active-summary").textContent = active
         ? `${active.version} · действует с ${active.effective_on} · ${active.item_count} записей`
