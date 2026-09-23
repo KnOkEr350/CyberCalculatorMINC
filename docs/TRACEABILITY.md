@@ -5,7 +5,7 @@
 `docs/traceability_evidence.json`. Матрица показывает, где искать исполнение задачи; результат
 приёмки она не заменяет.
 
-Задач: 202 — выполнено 146, частично 31, не начато 25.
+Задач: 202 — выполнено 148, частично 29, не начато 25.
 
 | Задача | Название | Статус | Код | Тесты | Документы |
 |---|---|---|---|---|---|
@@ -46,7 +46,7 @@
 | SEC-04 | ORG_ADMIN / CURATOR и fallback | выполнено | `backend/internal/curators/curators.go`<br>`backend/internal/tasks/resolve.go`<br>`migrations/0809_workflow_tasks.sql` | `backend/internal/handlers/curator_scope_by_date_integration_test.go`<br>`backend/internal/handlers/workflow_tasks_integration_test.go` | — |
 | SEC-05 | HR / FINANCE / LEGAL | выполнено | — | `backend/internal/handlers/field_authorization_test.go` | — |
 | SEC-06 | AUDITOR_VIEWER | выполнено | — | `backend/internal/handlers/document_roles_test.go` | — |
-| SEC-07 | MFA policy v4.4 | выполнено | `backend/internal/handlers/admin.go`<br>`backend/internal/handlers/auth_handlers.go`<br>`backend/internal/handlers/mfa_policy.go` | `backend/internal/handlers/mfa_policy_integration_test.go` | — |
+| SEC-07 | MFA policy v4.4 | выполнено | `backend/internal/handlers/admin.go`<br>`backend/internal/handlers/auth_handlers.go`<br>`backend/internal/handlers/mfa_policy.go` | `backend/internal/handlers/mfa_policy_integration_test.go`<br>`frontend/architecture.test.cjs` | — |
 | SEC-08 | Политика сессий | выполнено | `backend/internal/auth/session.go`<br>`migrations/0106_session_idle_timeout.sql` | `backend/internal/handlers/audit_and_session_integration_test.go` | — |
 | SEC-09 | Security contract tests | частично | — | `backend/internal/handlers/rbac_matrix_test.go`<br>`backend/internal/handlers/role_category_matrix_integration_test.go`<br>`backend/internal/server/role_matrix_integration_test.go`<br>`backend/internal/traceability/traceability_test.go` | — |
 | SEC-10 | Диспетчер задач и эскалаций | частично | `backend/internal/handlers/workflow_tasks.go`<br>`backend/internal/rbac/rbac.go`<br>`backend/internal/tasks/resolve.go`<br>`frontend/app.js` и ещё 1 | `backend/internal/handlers/workflow_tasks_integration_test.go`<br>`frontend/architecture.test.cjs` | — |
@@ -77,7 +77,7 @@
 | PRA-01 | Карточка практиканта | выполнено | `backend/internal/calculators/internship.go`<br>`migrations/0401_practice_records.sql` | `backend/internal/handlers/practice_typed_model_integration_test.go` | — |
 | PRA-02 | Договор практической подготовки | выполнено | — | `backend/internal/handlers/document_roles_test.go` | — |
 | PRA-03 | Проверка официального трудоустройства | выполнено | — | — | `docs/EMPLOYMENT_PRACTICE.md`<br>`docs/EMPLOYMENT_PRACTICE.md` |
-| PRA-04 | Ограничения рабочего времени | частично | `backend/internal/calculators/internship.go` | `backend/internal/calculators/calculator_test.go`<br>`backend/internal/calculators/working_time_test.go`<br>`tests/workspace_integration_test.go` | — |
+| PRA-04 | Ограничения рабочего времени | частично | `backend/internal/calculators/internship.go`<br>`frontend/workspace.js` | `backend/internal/calculators/calculator_test.go`<br>`backend/internal/calculators/working_time_test.go`<br>`frontend/architecture.test.cjs`<br>`tests/workspace_integration_test.go` | — |
 | PRA-05 | Расчёт и документы наставника | выполнено | — | `backend/internal/calculators/school_and_ministry_test.go` | — |
 | PRA-06 | Legacy backfill | выполнено | `migrations/0401_practice_records.sql` | `backend/internal/handlers/practice_typed_model_integration_test.go` | — |
 | TOP-01 | Паспорт топ-программы | выполнено | `migrations/0601_top_program_model.sql` | `backend/internal/handlers/top_program_integration_test.go` | — |
@@ -106,7 +106,7 @@
 | SCH-08 | Legacy backfill | выполнено | `migrations/0703_school_typed_model.sql` | `backend/internal/dbx/migrations_integration_test.go` | — |
 | RISK-01 | Общий движок правил | выполнено | `backend/internal/modules/reporting/repository/activity_projection.go`<br>`backend/internal/risk/risk.go` | `backend/internal/dbx/no_manual_risk_test.go` | — |
 | RISK-02 | Правила преподавателей | выполнено | — | `backend/internal/compliance/risk_matrix_test.go` | `docs/adr/ADR-16-it-experience.md` |
-| RISK-03 | Правила стажировок/практики | выполнено | — | `backend/internal/compliance/risk_matrix_test.go` | — |
+| RISK-03 | Правила стажировок/практики | выполнено | `frontend/app.js` | `backend/internal/compliance/risk_matrix_test.go`<br>`frontend/architecture.test.cjs` | — |
 | RISK-04 | Правила ООП/РПД | выполнено | — | `backend/internal/compliance/risk_matrix_programs_test.go` | — |
 | RISK-05 | Правила ТОП-ИТ | выполнено | — | `backend/internal/compliance/risk_matrix_programs_test.go` | — |
 | RISK-06 | Правила школ | выполнено | — | `backend/internal/compliance/risk_matrix_programs_test.go` | — |
@@ -128,7 +128,7 @@
 | WF-08 | Источник «Факт на 1 мая» | выполнено | `backend/internal/handlers/annex4.go` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | — |
 | REPORT-01 | Reporting projection | выполнено | `migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | `docs/PERFORMANCE.md` |
 | REPORT-02 | Общий XLSX/DOCX toolkit | частично | `backend/internal/docx`<br>`backend/internal/xlsx` | `backend/internal/exchange/perf_test.go` | — |
-| REPORT-03 | Приложение №4 XLSX | частично | — | `backend/internal/handlers/limits_and_snapshots_test.go` | — |
+| REPORT-03 | Приложение №4 XLSX | частично | — | `backend/internal/handlers/limits_and_snapshots_test.go` | `docs/ORDER_270_ADR_ANALYSIS.md` |
 | REPORT-04 | Приложение №5, таблица 1 | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | `docs/adr/ADR-20-snapshot-cutoff.md` |
 | REPORT-05 | Приложение №1 к отчёту | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-06 | Приложение №2 к отчёту | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | `docs/adr/ADR-13-internship-agreement.md` |
@@ -137,7 +137,7 @@
 | REPORT-09 | АНО АЦ: 6 листов | не начато | — | — | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | REPORT-10 | Конструктор срезов | выполнено | `backend/internal/handlers/regulatory_reports.go`<br>`migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-11 | Реестр сформированных файлов | частично | `backend/internal/handlers/annex4.go`<br>`backend/internal/handlers/regulatory_reports.go` | `backend/internal/handlers/regulatory_reports_test.go` | — |
-| REPORT-12 | Golden regression suite | частично | `backend/internal/xlsx` | — | — |
+| REPORT-12 | Golden regression suite | частично | `backend/internal/xlsx` | — | `docs/ORDER_270_ADR_ANALYSIS.md` |
 | CRYPTO-00 | Production security profile | не начато | `backend/internal/cryptoengine/fixture.go`<br>`backend/internal/cryptoengine/software.go` | — | `docs/PACKAGE_EXCHANGE.md` |
 | CRYPTO-01 | Интерфейс CryptoEngine | выполнено | `backend/internal/cryptoengine` | — | — |
 | CRYPTO-02 | Модель ключей и сертификатов | выполнено | `backend/internal/cryptoengine/certificates.go` | — | — |
@@ -174,10 +174,10 @@
 | UI-13 | ЧАСТИЧНО | частично | `frontend/theme.css` | `frontend/architecture.test.cjs` | — |
 | UI-03 | Преподаватели | выполнено | `frontend/screens/teachers/index.js` | — | — |
 | UI-04 | ООП/РПД | выполнено | `frontend/screens/ood-rpd/index.js` | — | — |
-| UI-05 | Стажировки | частично | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
-| UI-06 | Практика | частично | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
+| UI-05 | Стажировки | частично | `frontend/app.js`<br>`frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
+| UI-06 | Практика | выполнено | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
 | UI-07 | ТОП-ИТ/ИИ | частично | `frontend/workspace.js` | `frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
-| UI-08 | Школы | частично | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
+| UI-08 | Школы | выполнено | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
 | UI-09 | Решение МЦ | выполнено | `frontend/screens/minc-decision/index.js` | — | — |
 | UI-10 | Отчётность | не начато | — | — | — |
 | UI-11 | Настройки | частично | — | `frontend/architecture.test.cjs` | — |

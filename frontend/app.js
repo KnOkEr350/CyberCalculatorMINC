@@ -42,6 +42,14 @@ const VALUE_LABELS = {
   absent: "Отсутствует",
   full_or_partial: "Есть полностью или частично",
   fixed_term: "Срочный трудовой договор",
+  candidate_search: "Поиск кандидата",
+  candidate_found: "Кандидат найден",
+  launched: "Запущена",
+  completed: "Завершена",
+  awaiting_university: "Ждём от вуза",
+  in_progress: "В работе",
+  implemented: "Реализовано нами",
+  university_approved: "Утверждено вузом",
   other: "Другой тип договора",
   president_instruction: "Поручение Президента РФ",
   government_instruction: "Поручение Правительства РФ",
@@ -969,6 +977,14 @@ function fieldInput(f, value, audience) {
                   absent: "Отсутствует",
                   full_or_partial: "Есть полностью или частично",
                   fixed_term: "Срочный трудовой договор",
+                  candidate_search: "Поиск кандидата",
+                  candidate_found: "Кандидат найден",
+                  launched: "Запущена",
+                  completed: "Завершена",
+                  awaiting_university: "Ждём от вуза",
+                  in_progress: "В работе",
+                  implemented: "Реализовано нами",
+                  university_approved: "Утверждено вузом",
                   other: "Другой тип договора",
                   president_instruction: "Поручение Президента РФ",
                   government_instruction: "Поручение Правительства РФ",
@@ -1437,6 +1453,7 @@ async function openEntryModal(entry, readOnly = false) {
     ${isEdit && cat.code === "minc_decision" ? '<div class="card" id="m-cost-history"><h2>История подтверждённой стоимости</h2><div class="loading-state"><span class="spinner"></span>Загрузка…</div></div>' : ""}
     ${renderAttachSection(attachmentReadOnly)}
     ${isEdit && cat.code === "top_it" ? renderTopItemsSection() : ""}
+    ${isEdit && LEGAL_DISPUTE_CATEGORIES.includes(cat.code) ? renderLegalDisputeSection() : ""}
     </form>
   `,
   });
@@ -1693,6 +1710,7 @@ async function openEntryModal(entry, readOnly = false) {
   if (isEdit) {
     wireAttachSection(backdrop, entry.id, attachmentReadOnly, attachmentUpload);
     if (cat.code === "top_it") wireTopItems(backdrop, entry.id, !readOnly);
+    if (LEGAL_DISPUTE_CATEGORIES.includes(cat.code)) wireLegalDispute(backdrop, entry.id);
   } else {
     backdrop.querySelector("#attach-list").textContent =
       "Файлы необязательны. Выбранные файлы загрузятся после создания записи.";
@@ -1900,6 +1918,54 @@ async function wireTopItems(root, entryId, canEdit) {
       }
     };
   }
+  refresh();
+}
+
+// UI-05, RISK-03: юридическое сомнение по записи. Ставит и снимает его только
+// юридическое управление (сервер проверяет право); остальные видят историю.
+const LEGAL_DISPUTE_CATEGORIES = ["internship", "employment_practice"];
+
+function renderLegalDisputeSection() {
+  return `<div class="card" id="legal-dispute-section" style="margin-top:14px;background:transparent;padding:0;border:none">
+    <h2>Юридическое сомнение</h2>
+    <p class="muted">Запись под сомнением не входит в зачётную сумму, пока сомнение не снято. Причина обязательна и при постановке, и при снятии.</p>
+    <div id="legal-dispute-list" class="muted">Загрузка…</div><div id="legal-dispute-form-box"></div></div>`;
+}
+
+async function wireLegalDispute(root, entryId) {
+  const list = root.querySelector("#legal-dispute-list");
+  const formBox = root.querySelector("#legal-dispute-form-box");
+  const canDispute = state.me?.entity_type === "organization" && ["super_admin", "holding_admin", "org_admin", "legal_specialist"].includes(state.me?.role);
+  const refresh = async () => {
+    try {
+      const items = (await api(`/entries/${encodeURIComponent(entryId)}/legal-disputes`)) || [];
+      const active = items.some((item) => item.active);
+      list.className = "";
+      list.innerHTML = items.length
+        ? `<ol class="task-history">${items.map((item) => `<li>${item.active ? '<span class="status-badge inactive">действует</span>' : '<span class="status-badge active">снято</span>'} ${escapeHTML(item.reason)}${item.lifted_reason ? ` — снято: ${escapeHTML(item.lifted_reason)}` : ""} <span class="muted">${escapeHTML(String(item.raised_at || "").slice(0, 10).split("-").reverse().join("."))}</span></li>`).join("")}</ol>`
+        : '<p class="muted">Сомнений не заявлено.</p>';
+      formBox.innerHTML = canDispute
+        ? `<form class="top-item-form"><div class="field"><label>Причина *</label><input name="reason" maxlength="2000" required></div><button class="btn secondary" type="submit">${active ? "Снять сомнение" : "Поставить под сомнение"}</button></form>`
+        : "";
+      const form = formBox.querySelector("form");
+      if (form) form.onsubmit = async (event) => {
+        event.preventDefault();
+        const submit = form.querySelector("button");
+        submit.disabled = true;
+        try {
+          await api(`/entries/${encodeURIComponent(entryId)}/legal-disputes`, { method: "POST", body: JSON.stringify({ action: active ? "lift" : "raise", reason: form.elements.reason.value.trim() }) });
+          showToast(active ? "Сомнение снято" : "Запись поставлена под сомнение", "success");
+          await refresh();
+        } catch (error) {
+          showToast(error.message);
+          submit.disabled = false;
+        }
+      };
+    } catch (error) {
+      list.className = "error";
+      list.textContent = error.message;
+    }
+  };
   refresh();
 }
 
@@ -2187,6 +2253,13 @@ async function renderAdminSettings(box) {
     <button class="btn" id="s-save">Сохранить</button>
     <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
   </div>
+  ${state.me.role === "super_admin" ? `<div class="card"><h2>Двухфакторная защита</h2>
+    <p class="muted">Политика действует для всех пользователей. Пока требование включено, вход без второго фактора невозможен после окончания льготного периода.</p>
+    <div class="grid cols-2">
+      <div class="field"><label class="check-row" for="s-mfa-required"><input type="checkbox" id="s-mfa-required" ${settings.mfa_required === "true" ? "checked" : ""}> Требовать второй фактор</label></div>
+      <div class="field"><label for="s-mfa-grace">Льготный период, часов (0–720)</label><input id="s-mfa-grace" type="number" min="0" max="720" step="1" value="${escapeHTML(settings.mfa_grace_period_hours || "0")}"></div>
+    </div>
+    <button class="btn" id="s-mfa-save" type="button">Сохранить политику</button></div>` : ""}
   <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2></div><span class="status-badge">Москва (UTC+3)</span></div>
     <div class="grid cols-3">
       <div class="field"><label>ИТ-компания</label><select id="snapshot-company"><option value="">Выберите компанию</option>${companies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
@@ -2196,6 +2269,23 @@ async function renderAdminSettings(box) {
     <p class="field-hint">Формирование разрешено только 1 мая выбранного отчётного года по московскому времени. Повторная запись за тот же год запрещена.</p>
     <div id="snapshot-list" class="loading-state"><span class="spinner"></span>Загрузка снимков…</div>
   </div>`;
+  box.querySelector("#s-mfa-save")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const hours = Number(box.querySelector("#s-mfa-grace").value);
+    if (!Number.isInteger(hours) || hours < 0 || hours > 720) { showToast("Льготный период задаётся целым числом часов от 0 до 720"); return; }
+    const required = box.querySelector("#s-mfa-required").checked;
+    if (required && !confirm("Включить обязательный второй фактор для всех пользователей?")) return;
+    button.disabled = true;
+    try {
+      await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "mfa_grace_period_hours", value: String(hours) }) });
+      await api("/admin/settings", { method: "POST", body: JSON.stringify({ key: "mfa_required", value: required ? "true" : "false" }) });
+      showToast("Политика второго фактора сохранена", "success");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
   box.querySelector("#s-save").onclick = async () => {
     const button = box.querySelector("#s-save");
     const attachmentDays = Number(box.querySelector("#s-attach").value);

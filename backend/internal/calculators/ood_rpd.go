@@ -61,6 +61,7 @@ func (oodRpdCalc) Fields() []FieldSpec {
 	return []FieldSpec{
 		{Key: "org_name", Label: "Наименование ОО", Type: "select", Required: true},
 		{Key: "doc_type", Label: "Вид документа", Type: "select", Required: true, Options: []string{"rpd", "oop"}},
+		{Key: "work_status", Label: "Текущий статус", Type: "select", Options: []string{"awaiting_university", "in_progress", "implemented", "university_approved"}},
 		{Key: "semester", Label: "Семестр", Type: "number", Integer: true, Minimum: 1, Maximum: 13},
 		{Key: "level", Label: "Уровень образования", Type: "select", Required: true, Options: []string{"vo", "spo"}},
 		{Key: "activity_type", Label: "Вид активности", Type: "select", Required: true, Options: []string{"development", "update", "expertise"}},

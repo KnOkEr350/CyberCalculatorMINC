@@ -433,9 +433,20 @@ function oopRegistryTable(entries, writable, canCreate) {
     const payload = entry.payload || {};
     const checks = entry.compliance?.checks || [];
     const complete = checks.filter((check) => check.complete).length;
-    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "—").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "—"))}</small></td><td><b>${escapeHTML(payload.program_name || "—")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "—"))}</td><td>${escapeHTML(payload.expert_full_name || "—")}</td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
+    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "—").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "—"))}</small></td><td><b>${escapeHTML(payload.program_name || "—")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "—"))}</td><td>${escapeHTML(payload.expert_full_name || "—")}<br><small>${escapeHTML(valueLabel(payload.work_status || ""))}</small></td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
   }).join("");
-  return `<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт</th><th>Охват</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
+  return `${workStatusSummary(entries)}<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт и статус</th><th>Охват</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
+}
+
+// Сводка по рабочему статусу из заготовки МЦ «Светофор»: сколько записей на каждом этапе.
+function workStatusSummary(entries) {
+  const counts = new Map();
+  for (const entry of entries) {
+    const status = entry.payload?.work_status;
+    if (status) counts.set(status, (counts.get(status) || 0) + 1);
+  }
+  if (!counts.size) return "";
+  return `<p class="status-summary">${[...counts].map(([status, count]) => `<span class="status-badge pending">${escapeHTML(valueLabel(status))}: ${count}</span>`).join(" ")}</p>`;
 }
 
 // Общая обвязка профильных реестров: риск, проверки комплектности и кнопка карточки.
@@ -452,6 +463,15 @@ function registryTable(className, headers, rows, count, emptyText) {
 const ruDate = (value) => (value ? escapeHTML(String(value).split("-").reverse().join(".")) : "—");
 const dash = (value) => (value === undefined || value === null || value === "" ? "—" : escapeHTML(String(value)));
 
+// PRA-04: ограничения ст. 63 и 92 ТК РФ. Отказ приходит из проверок записи;
+// правило здесь не дублируется — интерфейс показывает только вывод сервера.
+function laborLawCell(entry) {
+  const reasons = [...(entry.compliance?.blocking_reasons || []), ...(entry.compliance?.warnings || [])].filter((reason) => /ТК РФ|стать[яьёи]\s+(63|92)/.test(reason));
+  if (reasons.length) return reasons.map((reason) => `<span class="error">${escapeHTML(reason)}</span>`).join("<br>");
+  const p = entry.payload || {};
+  return p.student_age && p.weekly_hours !== undefined && p.weekly_hours !== "" ? '<span class="status-badge active">ст. 63, 92 соблюдены</span>' : '<span class="status-badge pending">возраст и часы не заданы</span>';
+}
+
 // UI-06: практика — трудоустройство, практический договор и ограничения ТК РФ.
 function practiceTable(entries, writable, canCreate) {
   const rows = entries.map((entry) => {
@@ -462,9 +482,11 @@ function practiceTable(entries, writable, canCreate) {
       `${dash(p.labor_contract_number)} от ${ruDate(p.labor_contract_date)}<br><small>${p.labor_contract_type === "fixed_term" ? "срочный" : dash(p.labor_contract_type)}</small>`,
       `${dash(p.practice_agreement_number)} от ${ruDate(p.practice_agreement_date)}`,
       `${dash(p.student_age)} лет · ${dash(p.weekly_hours)} ч/нед`,
+      laborLawCell(entry),
+      dash(valueLabel(p.work_status || "")),
     ]);
   }).join("");
-  return registryTable("practice-registry-grid", ["Практикант", "Период", "Трудовой договор", "Договор о практической подготовке", "Возраст и нагрузка"], rows, entries.length, canCreate ? "Практики ещё не добавлены." : "ИТ-организация ещё не добавила практику.");
+  return workStatusSummary(entries) + registryTable("practice-registry-grid", ["Практикант", "Период", "Трудовой договор", "Договор о практической подготовке", "Возраст и нагрузка", "Ограничения ТК РФ", "Статус"], rows, entries.length, canCreate ? "Практики ещё не добавлены." : "ИТ-организация ещё не добавила практику.");
 }
 
 // UI-05: стажировки — наставник, договор и справки.
@@ -478,9 +500,10 @@ function internshipTable(entries, writable, canCreate) {
       `${ruDate(p.period_start)} — ${ruDate(p.period_end)}<br><small>${dash(p.duration_months)} мес.</small>`,
       dash(p.internship_agreement_reference),
       `${certificates}/2`,
+      dash(valueLabel(p.work_status || "")),
     ]);
   }).join("");
-  return registryTable("internship-registry-grid", ["Студент", "Наставник", "Период", "Договор о стажировке", "Справки"], rows, entries.length, canCreate ? "Стажировки ещё не добавлены." : "ИТ-организация ещё не добавила стажировки.");
+  return workStatusSummary(entries) + registryTable("internship-registry-grid", ["Студент", "Наставник", "Период", "Договор о стажировке", "Справки", "Статус"], rows, entries.length, canCreate ? "Стажировки ещё не добавлены." : "ИТ-организация ещё не добавила стажировки.");
 }
 
 // UI-08: школы — виды 6/7/8, источник средств, акт и цифровой след.
@@ -596,6 +619,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   </div><div class="flex workspace-actions">${canManageWorkflow && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}${canManageWorkflow && isStaffUser() ? '<button class="btn secondary" id="edit-budget-target">Целевая сумма (3%)</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
   <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
     <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
+    ${screen?.id === "schools" && available.length > 1 ? `<div class="tab-strip" role="tablist" aria-label="Виды школьного трека" style="grid-column:1/-1">${available.map((c) => `<button type="button" role="tab" class="btn ${c.code === state.categoryCode ? "" : "secondary"}" aria-selected="${c.code === state.categoryCode}" data-school-tab="${c.code}">${escapeHTML(SCHOOL_KIND_LABELS[c.code] || c.name)}</button>`).join("")}</div>` : ""}
     <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Режим</label>${canCreate ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : `<input value="${canPrepare ? "Редактирование по роли" : "Просмотр и согласование"}" readonly>`}</div></div>
     <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Сотрудники и ОКЗ</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
@@ -666,6 +690,13 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     state.year = year;
     renderEntries(root);
   };
+  root.querySelectorAll("[data-school-tab]").forEach((tab) => {
+    tab.onclick = () => {
+      const select = root.querySelector("#category");
+      select.value = tab.dataset.schoolTab;
+      select.dispatchEvent(new Event("change"));
+    };
+  });
   root.querySelector("#category").onchange = (e) => {
     state.categoryCode = e.target.value;
     state.entryFilters = {};

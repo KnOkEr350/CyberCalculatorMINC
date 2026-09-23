@@ -73,6 +73,9 @@ func (internshipCalc) Fields() []FieldSpec {
 		{Key: "individual_program_reference", Label: "Индивидуальная программа / табель", Type: "text", MaxLength: 1000},
 		{Key: "incoming_certificate_reference", Label: "Входящая справка", Type: "text", MaxLength: 1000},
 		{Key: "outgoing_certificate_reference", Label: "Итоговая справка", Type: "text", MaxLength: 1000},
+		// Рабочий статус из заготовки МЦ «Светофор»: ведёт учёт хода стажировки и
+		// на комплектность и зачёт не влияет.
+		{Key: "work_status", Label: "Текущий статус", Type: "select", Options: []string{"candidate_search", "candidate_found", "launched", "completed"}},
 	}
 }
 

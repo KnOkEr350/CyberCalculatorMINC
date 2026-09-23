@@ -614,3 +614,5 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 .task-history { margin: 8px 0 12px; padding-left: 18px; font-size: 12px; display: grid; gap: 4px; }
 .agreement-history { flex: 1 0 100%; padding: 8px 0 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.tab-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.status-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }

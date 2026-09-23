@@ -222,3 +222,37 @@ test("UI-01 dashboard exposes semester and traffic-light slices from the МЦ te
   for (const label of ["Можем подтвердить сейчас", "Подтвердим, есть вопросы", "Низкая вероятность", "Осенние (нечётные)", "Весенние (чётные)"]) assert.ok(app.includes(label), label);
   assert.match(app, /\.\.\.dashboardSliceParams\(\)/);
 });
+
+test("UI-11 SEC-07: only the system administrator sees the second-factor policy", () => {
+  const app = source("./app.js");
+  assert.match(app, /state\.me\.role === "super_admin" \? `<div class="card"><h2>Двухфакторная защита/);
+  for (const key of ["mfa_required", "mfa_grace_period_hours"]) assert.ok(app.includes(key), key);
+});
+
+test("UI-06 PRA-04: practice registry shows labour-law limits from the server verdict", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function laborLawCell/);
+  assert.match(workspace, /Ограничения ТК РФ/);
+});
+
+test("UI-05 RISK-03: internship and practice cards expose the legal dispute history and actions", () => {
+  const app = source("./app.js");
+  assert.match(app, /LEGAL_DISPUTE_CATEGORIES = \["internship", "employment_practice"\]/);
+  assert.match(app, /\/entries\/\$\{encodeURIComponent\(entryId\)\}\/legal-disputes/);
+  assert.match(app, /action: active \? "lift" : "raise"/);
+});
+
+test("UI-08: school screen switches kinds 6/7/8 with tabs bound to the category selector", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /role="tablist" aria-label="Виды школьного трека"/);
+  assert.match(workspace, /data-school-tab/);
+  assert.match(workspace, /select\.dispatchEvent\(new Event\("change"\)\)/);
+});
+
+test("МЦ template work statuses are summarised in the internship, practice and OOP registries", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function workStatusSummary/);
+  assert.equal((workspace.match(/(?<!function )workStatusSummary\(entries\)/g) || []).length, 3);
+  const app = source("./app.js");
+  for (const label of ["Поиск кандидата", "Кандидат найден", "Запущена", "Ждём от вуза", "Утверждено вузом"]) assert.ok(app.includes(label), label);
+});
