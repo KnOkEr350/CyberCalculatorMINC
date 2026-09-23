@@ -27,6 +27,11 @@ type loginRequest struct {
 	Code     string `json:"code,omitempty"`
 }
 
+type changePasswordRequest struct {
+	Current string `json:"current_password"`
+	New     string `json:"new_password"`
+}
+
 func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -137,10 +142,7 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 const dummyPasswordHash = "pbkdf2$600000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 func (h *AuthHandlers) ChangePassword(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	var req struct {
-		Current string `json:"current_password"`
-		New     string `json:"new_password"`
-	}
+	var req changePasswordRequest
 	if decodeJSON(r, &req) != nil {
 		middleware.WriteError(w, 400, "некорректный запрос")
 		return

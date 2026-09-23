@@ -25,36 +25,36 @@
     "/api/health": { "get": { "tags": ["health"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "503": { "$ref": "#/components/responses/Error" } } } },
     "/api/features": { "get": { "tags": ["features"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" } } } },
 
-    "/api/auth/login": { "post": { "tags": ["authentication"], "security": [], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/login": { "post": { "tags": ["authentication"], "security": [], "requestBody": { "$ref": "#/components/requestBodies/LoginRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/auth/logout": { "post": { "tags": ["authentication"], "security": [], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" } } } },
-    "/api/auth/password": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/auth/mfa/enroll": { "post": { "tags": ["authentication"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/auth/mfa/confirm": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/password": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/ChangePasswordRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/mfa/enroll": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/MFAEnrollRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/mfa/confirm": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/MFAConfirmRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/auth/me": { "get": { "tags": ["authentication"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "401": { "$ref": "#/components/responses/Error" } } } },
-    "/api/auth/entity-type": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/auth/entity-type": { "post": { "tags": ["authentication"], "requestBody": { "$ref": "#/components/requestBodies/SetEntityTypeRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
 
     "/api/partners": {
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/CreatePartnerRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/partners/{partner_id}/org-units": {
       "parameters": [{ "$ref": "#/components/parameters/PartnerID" }],
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/OrgUnitWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/org-units/{id}": {
       "parameters": [{ "$ref": "#/components/parameters/ID" }],
-      "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/OrgUnitWriteRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
       "delete": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/partners/{partner_id}/academic-groups": {
       "parameters": [{ "$ref": "#/components/parameters/PartnerID" }],
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/AcademicGroupWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/academic-groups/{id}": {
       "parameters": [{ "$ref": "#/components/parameters/ID" }],
-      "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
+      "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/AcademicGroupWriteRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
       "delete": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/partners/{partner_id}/specialty-codes": {
@@ -63,37 +63,37 @@
     },
     "/api/it-companies": {
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/ITCompanyWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/it-companies/registry-search": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/it-companies/template": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/it-companies/import": { "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/directory": {
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/DirectoryWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/directory/stats": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/directory/proposals": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/directory/{id}/decision": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/directory/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/directory/{id}/decision": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/DirectoryDecisionRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/directory/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/DirectoryWriteRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/agreements": {
       "get": { "tags": ["directories"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/AgreementWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/agreements/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/agreements/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/AgreementWriteRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/legal-entity-groups": {
       "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/LegalEntityGroupWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/legal-entity-groups/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/legal-entity-groups/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/LegalEntityGroupWriteRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/regional-authorities": {
       "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/RegionalAuthorityWriteRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/regional-authorities/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/regional-authorities/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/RegionalAuthorityWriteRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/mentors": {
       "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/CreateMentorRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/admin/directory-template": { "get": { "tags": ["directories"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/admin/directory-import": { "post": { "tags": ["directories"], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
@@ -111,21 +111,21 @@
     "/api/categories": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/entries": {
       "get": { "tags": ["planning"], "parameters": [{ "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/CreateEntryRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/entries/summary": { "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/entries/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/entries/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/UpdateEntryRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/entries/{id}/comments": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/staff-members": {
       "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/StaffMemberRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/staff-members/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/staff-members/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/StaffMemberRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/teaching-payouts": {
       "get": { "tags": ["planning"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/TeachingPayoutRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/teaching-payouts/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/teaching-payouts/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "put": { "tags": ["planning"], "requestBody": { "$ref": "#/components/requestBodies/TeachingPayoutRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
 
     "/api/entries/{id}/attachments": {
       "parameters": [{ "$ref": "#/components/parameters/ID" }],
@@ -133,16 +133,16 @@
       "post": { "tags": ["documents"], "parameters": [{ "name": "document_type", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/DocumentType" } }], "requestBody": { "$ref": "#/components/requestBodies/FileUpload" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/attachments/{id}/download": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["documents"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/attachments/{id}/review": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "patch": { "tags": ["documents"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/attachments/{id}/review": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "patch": { "tags": ["documents"], "requestBody": { "$ref": "#/components/requestBodies/AttachmentReviewRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
 
-    "/api/dashboard": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/dashboard/target": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/dashboard": { "get": { "tags": ["reporting"], "responses": { "200": { "description": "Сводка дашборда", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DashboardResponse" } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/dashboard/target": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/SetBudgetTargetRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/reports/export": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/reports/generated": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/reports/generated/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/BinaryDownload" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-calendar": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/report-workflow": { "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
-    "/api/report-workflow/transition": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/report-workflow": { "get": { "tags": ["reporting"], "responses": { "200": { "description": "Состояние согласования отчёта", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportWorkflowResponse" } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/report-workflow/transition": { "post": { "tags": ["reporting"], "requestBody": { "$ref": "#/components/requestBodies/WorkflowTransitionRequest" }, "responses": { "200": { "description": "Обновлённое состояние согласования отчёта", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReportWorkflowResponse" } } } }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/report-snapshots": {
       "get": { "tags": ["reporting"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
       "post": { "tags": ["reporting"], "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
@@ -151,13 +151,13 @@
 
     "/api/admin/users": {
       "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/PaginatedJSON" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/CreateUserRequest" }, "responses": { "201": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
-    "/api/admin/users/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "patch": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
+    "/api/admin/users/{id}": { "parameters": [{ "$ref": "#/components/parameters/ID" }], "patch": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/UpdateUserRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/admin/it-company-options": { "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } } },
     "/api/admin/settings": {
       "get": { "tags": ["administration"], "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } },
-      "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/JSONBody" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
+      "post": { "tags": ["administration"], "requestBody": { "$ref": "#/components/requestBodies/UpdateSettingRequest" }, "responses": { "200": { "$ref": "#/components/responses/JSONSuccess" }, "default": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/admin/logs": { "get": { "tags": ["administration"], "parameters": [{ "name": "request_id", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 128 } }], "responses": { "200": { "description": "События единого audit-контракта", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEvent" } } } } }, "default": { "$ref": "#/components/responses/Error" } } } }
   },
@@ -177,6 +177,33 @@
       "DateTime": { "type": "string", "format": "date-time", "examples": ["2026-09-21T12:00:00Z"] },
       "Money": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,14})\\.[0-9]{2}$", "examples": ["125000.00"], "description": "Рубли и копейки; JSON float и экспоненциальная запись запрещены." },
       "DocumentType": { "type": "string", "enum": ["other", "employment_contract", "organization_agreement", "individual_plan", "appointment_order", "program_project", "expert_conclusion", "academic_council_protocol", "internship_agreement", "practice_agreement", "labor_contract", "mentor_order", "individual_program", "incoming_certificate", "outgoing_certificate", "top_agreement", "payment_order", "spending_act", "ano_letter", "school_agreement", "participant_groups", "acceptance_act", "digital_trace", "ministry_decision", "expense_evidence", "auditor_report"] },
+      "LoginRequest": { "x-go-struct": { "file": "backend/internal/handlers/auth_handlers.go", "name": "loginRequest" }, "type": "object", "properties": { "email": true, "password": true, "code": true }, "additionalProperties": false },
+      "ChangePasswordRequest": { "x-go-struct": { "file": "backend/internal/handlers/auth_handlers.go", "name": "changePasswordRequest" }, "type": "object", "properties": { "current_password": true, "new_password": true }, "additionalProperties": false },
+      "SetEntityTypeRequest": { "x-go-struct": { "file": "backend/internal/handlers/auth_handlers.go", "name": "setEntityTypeRequest" }, "type": "object", "properties": { "entity_type": true, "partner_id": true }, "additionalProperties": false },
+      "MFAEnrollRequest": { "x-go-struct": { "file": "backend/internal/handlers/mfa.go", "name": "mfaEnrollRequest" }, "type": "object", "properties": { "password": true }, "additionalProperties": false },
+      "MFAConfirmRequest": { "x-go-struct": { "file": "backend/internal/handlers/mfa.go", "name": "mfaConfirmRequest" }, "type": "object", "properties": { "code": true }, "additionalProperties": false },
+      "CreatePartnerRequest": { "x-go-struct": { "file": "backend/internal/handlers/partners.go", "name": "createPartnerRequest" }, "type": "object", "properties": { "directory_id": true, "initial_agreement": true }, "additionalProperties": false },
+      "OrgUnitWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/partner_structure.go", "name": "orgUnitWriteRequest" }, "type": "object", "properties": { "parent_unit_id": true, "unit_level_type": true, "unit_name": true, "head_fio": true, "head_position": true, "head_contacts": true, "chair_fio": true, "chair_contacts": true, "curator_fio": true, "curator_contacts": true }, "additionalProperties": false },
+      "AcademicGroupWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/partner_structure.go", "name": "academicGroupWriteRequest" }, "type": "object", "properties": { "unit_id": true, "group_name": true, "education_level": true, "course_num": true, "current_semester": true, "semester_period": true, "specialty_code": true, "students_count": true }, "additionalProperties": false },
+      "ITCompanyWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/it_companies.go", "name": "itCompanyWriteRequest" }, "type": "object", "properties": { "name": true, "inn": true, "ogrn": true, "accreditation_number": true, "registry_record_id": true, "registry_updated_at": true, "source_url": true, "notes": true, "legal_address": true, "phone": true, "email": true, "website": true, "director_name": true }, "additionalProperties": false },
+      "DirectoryWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/directory_review.go", "name": "directoryWriteRequest" }, "type": "object", "properties": { "name": true, "partner_kind": true, "region": true, "inn": true, "ogrn": true, "license_number": true, "license_status": true, "institution_status": true, "source_url": true, "registry_updated_at": true, "confirm": true, "confirmation_comment": true, "program_codes": true, "programs_source_url": true, "proposal_comment": true }, "additionalProperties": false },
+      "DirectoryDecisionRequest": { "x-go-struct": { "file": "backend/internal/handlers/directory_review.go", "name": "directoryDecisionRequest" }, "type": "object", "properties": { "decision": true, "comment": true }, "additionalProperties": false },
+      "AgreementWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/agreements.go", "name": "agreementWriteRequest" }, "type": "object", "properties": { "partner_ids": true, "agreement_kind": true, "number": true, "status": true, "signed_on": true, "valid_from": true, "valid_until": true, "regional_authority_id": true, "roiv_name": true, "legal_entity_group": true, "legal_entity_group_id": true, "signature_method": true, "signed_by": true, "signature_date": true, "document_reference": true, "notes": true, "responsible_people": true, "activity_codes": true }, "additionalProperties": false },
+      "LegalEntityGroupWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/legal_entity_groups.go", "name": "legalEntityGroupWriteRequest" }, "type": "object", "properties": { "name": true, "interaction_agreement_number": true, "interaction_agreement_date": true, "authorized_entity_name": true, "authorized_entity_inn": true, "authorized_entity_ogrn": true, "members": true }, "additionalProperties": false },
+      "RegionalAuthorityWriteRequest": { "x-go-struct": { "file": "backend/internal/handlers/regional_authorities.go", "name": "regionalAuthorityWriteRequest" }, "type": "object", "properties": { "name": true, "region": true, "inn": true, "ogrn": true, "status": true, "source_url": true }, "additionalProperties": false },
+      "CreateMentorRequest": { "x-go-struct": { "file": "backend/internal/handlers/directories.go", "name": "createMentorRequest" }, "type": "object", "properties": { "partner_id": true, "full_name": true }, "additionalProperties": false },
+      "CreateEntryRequest": { "x-go-struct": { "file": "backend/internal/handlers/entries.go", "name": "createEntryRequest" }, "type": "object", "properties": { "category_code": true, "partner_id": true, "agreement_id": true, "period_type": true, "report_year": true, "audience": true, "payload": true, "cost_method": true, "actual_amount_rub": true }, "additionalProperties": false },
+      "UpdateEntryRequest": { "x-go-struct": { "file": "backend/internal/handlers/entries.go", "name": "updateEntryRequest" }, "type": "object", "properties": { "payload": true, "audience": true, "agreement_id": true, "comment": true, "cost_method": true, "actual_amount_rub": true }, "additionalProperties": false },
+      "StaffMemberRequest": { "x-go-struct": { "file": "backend/internal/handlers/teaching_directory.go", "name": "staffMemberRequest" }, "type": "object", "properties": { "fio": true, "company_position": true, "company_department": true, "okz_code": true, "it_experience_days": true, "experience_document_reference": true, "record_status": true }, "additionalProperties": false },
+      "TeachingPayoutRequest": { "x-go-struct": { "file": "backend/internal/handlers/teaching_directory.go", "name": "teachingPayoutRequest" }, "type": "object", "properties": { "teaching_activity_id": true, "target_quarter": true, "target_year": true, "planned_compensation_rub": true, "is_fully_paid": true, "payout_date": true, "payout_order_num": true, "payout_scan_file": true }, "additionalProperties": false },
+      "AttachmentReviewRequest": { "x-go-struct": { "file": "backend/internal/handlers/attachments.go", "name": "attachmentReviewRequest" }, "type": "object", "properties": { "status": true, "comment": true }, "additionalProperties": false },
+      "SetBudgetTargetRequest": { "x-go-struct": { "file": "backend/internal/handlers/dashboard.go", "name": "setBudgetTargetRequest" }, "type": "object", "properties": { "report_year": true, "target_amount_rub": true, "savings_base_rub": true, "source_reference": true, "notified_at": true }, "additionalProperties": false },
+      "WorkflowTransitionRequest": { "x-go-struct": { "file": "backend/internal/handlers/report_workflow.go", "name": "workflowTransitionRequest" }, "type": "object", "properties": { "status": true, "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "actual_costs_confirmed": true, "auditor_report_reference": true, "counterparty_confirmed": true, "comment": true }, "additionalProperties": false },
+      "CreateUserRequest": { "x-go-struct": { "file": "backend/internal/handlers/admin.go", "name": "createUserRequest" }, "type": "object", "properties": { "email": true, "password": true, "full_name": true, "role": true, "entity_type": true, "partner_id": true, "it_company_id": true }, "additionalProperties": false },
+      "UpdateUserRequest": { "x-go-struct": { "file": "backend/internal/handlers/admin.go", "name": "updateUserRequest" }, "type": "object", "properties": { "is_active": true, "role": true, "entity_type": true, "partner_id": true, "it_company_id": true }, "additionalProperties": false },
+      "UpdateSettingRequest": { "x-go-struct": { "file": "backend/internal/handlers/admin.go", "name": "updateSettingRequest" }, "type": "object", "properties": { "key": true, "value": true }, "additionalProperties": false },
+      "DashboardResponse": { "x-go-struct": { "file": "backend/internal/handlers/dashboard.go", "name": "dashboardResponse" }, "type": "object", "properties": { "eligible_plan_total_rub": true, "eligible_fact_total_rub": true, "incomplete_entries": true, "report_year": true, "generated_at": true, "target_amount_rub": true, "savings_base_rub": true, "target_source_reference": true, "target_notified_at": true, "target_confirmed_fact_rub": true, "target_deficit_rub": true, "target_surplus_rub": true, "target_completion_pct": true, "plan_total_rub": true, "fact_total_rub": true, "plan_completion_pct": true, "plan_by_category": true, "fact_by_category": true, "category_filter": true, "audience_filter": true, "risk_buckets": true, "mandatory_higher_education": true }, "additionalProperties": false },
+      "ReportWorkflowResponse": { "x-go-struct": { "file": "backend/internal/handlers/report_workflow.go", "name": "reportWorkflowResponse" }, "type": "object", "properties": { "agreement_id": true, "report_year": true, "period_type": true, "status": true, "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "actual_costs_confirmed": true, "auditor_report_reference": true, "uses_actual_costs": true, "counterparty_confirmed": true, "comment": true, "activities": true, "automatic_checks": true, "missing": true, "higher_education": true, "top_it_exception": true, "top_it_exception_basis": true, "can_mark_ready": true, "can_verify": true, "can_approve": true, "can_return_draft": true, "ready_at": true, "verified_at": true, "approved_at": true, "review_due_date": true, "review_due_at": true, "review_calendar_days": true, "review_overdue": true, "history": true }, "additionalProperties": false },
       "FieldError": {
         "type": "object",
         "required": ["field", "message"],
@@ -352,6 +379,31 @@
         "required": true,
         "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
       },
+      "LoginRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } } },
+      "ChangePasswordRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" } } } },
+      "SetEntityTypeRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetEntityTypeRequest" } } } },
+      "MFAEnrollRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MFAEnrollRequest" } } } },
+      "MFAConfirmRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MFAConfirmRequest" } } } },
+      "CreatePartnerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePartnerRequest" } } } },
+      "OrgUnitWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrgUnitWriteRequest" } } } },
+      "AcademicGroupWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AcademicGroupWriteRequest" } } } },
+      "ITCompanyWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ITCompanyWriteRequest" } } } },
+      "DirectoryWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DirectoryWriteRequest" } } } },
+      "DirectoryDecisionRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DirectoryDecisionRequest" } } } },
+      "AgreementWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgreementWriteRequest" } } } },
+      "LegalEntityGroupWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LegalEntityGroupWriteRequest" } } } },
+      "RegionalAuthorityWriteRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegionalAuthorityWriteRequest" } } } },
+      "CreateMentorRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateMentorRequest" } } } },
+      "CreateEntryRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEntryRequest" } } } },
+      "UpdateEntryRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateEntryRequest" } } } },
+      "StaffMemberRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StaffMemberRequest" } } } },
+      "TeachingPayoutRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeachingPayoutRequest" } } } },
+      "AttachmentReviewRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttachmentReviewRequest" } } } },
+      "SetBudgetTargetRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetBudgetTargetRequest" } } } },
+      "WorkflowTransitionRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowTransitionRequest" } } } },
+      "CreateUserRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserRequest" } } } },
+      "UpdateUserRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateUserRequest" } } } },
+      "UpdateSettingRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSettingRequest" } } } },
       "FileUpload": {
         "required": true,
         "content": {

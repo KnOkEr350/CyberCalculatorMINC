@@ -30,6 +30,11 @@ type directoryWriteRequest struct {
 	ProposalComment     string    `json:"proposal_comment"`
 }
 
+type directoryDecisionRequest struct {
+	Decision string `json:"decision"`
+	Comment  string `json:"comment"`
+}
+
 const ministryEducationDirectoryURL = "https://adm.digital.gov.ru/app/uploads/2026/05/6027f0_perechen-oo-vo-realizuyushhih-it-speczialnosti.pdf"
 
 func normalizeDirectoryWrite(req *directoryWriteRequest) error {
@@ -414,10 +419,7 @@ func (h *PartnerHandlers) DecideDirectoryProposal(w http.ResponseWriter, r *http
 		middleware.WriteError(w, http.StatusForbidden, "решение по предложению принимает только администратор")
 		return
 	}
-	var req struct {
-		Decision string `json:"decision"`
-		Comment  string `json:"comment"`
-	}
+	var req directoryDecisionRequest
 	if decodeJSON(r, &req) != nil {
 		middleware.WriteError(w, 400, "некорректный запрос")
 		return

@@ -82,11 +82,13 @@ func validMentorName(name string) bool {
 	return true
 }
 
+type createMentorRequest struct {
+	PartnerID string `json:"partner_id"`
+	FullName  string `json:"full_name"`
+}
+
 func (h *EntryHandlers) CreateMentor(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	var req struct {
-		PartnerID string `json:"partner_id"`
-		FullName  string `json:"full_name"`
-	}
+	var req createMentorRequest
 	if decodeJSON(r, &req) != nil {
 		middleware.WriteError(w, 400, "некорректный запрос")
 		return

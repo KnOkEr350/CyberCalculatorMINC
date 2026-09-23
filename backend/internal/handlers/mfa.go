@@ -9,10 +9,16 @@ import (
 	"time"
 )
 
+type mfaEnrollRequest struct {
+	Password string `json:"password"`
+}
+
+type mfaConfirmRequest struct {
+	Code string `json:"code"`
+}
+
 func (h *AuthHandlers) MFAEnroll(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	var req struct {
-		Password string `json:"password"`
-	}
+	var req mfaEnrollRequest
 	if decodeJSON(r, &req) != nil {
 		middleware.WriteError(w, 400, "некорректный запрос")
 		return
@@ -59,9 +65,7 @@ func (h *AuthHandlers) MFAEnroll(w http.ResponseWriter, r *http.Request, u middl
 }
 
 func (h *AuthHandlers) MFAConfirm(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	var req struct {
-		Code string `json:"code"`
-	}
+	var req mfaConfirmRequest
 	if decodeJSON(r, &req) != nil {
 		middleware.WriteError(w, 400, "некорректный запрос")
 		return
