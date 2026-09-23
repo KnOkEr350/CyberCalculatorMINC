@@ -563,9 +563,9 @@ async function renderDashboard(root) {
   state.dashboard = d;
 
   const groupedChart = (plan, fact) => {
-    const amounts = (items) => (items || []).reduce((map, item) => map.set(item.category_code, (map.get(item.category_code) || 0) + Number(item.amount_rub || 0)), new Map());
-    const planMap = amounts(plan);
-    const factMap = amounts(fact);
+    const counts = (items) => (items || []).reduce((map, item) => map.set(item.category_code, (map.get(item.category_code) || 0) + Number(item.entry_count || 0)), new Map());
+    const planMap = counts(plan);
+    const factMap = counts(fact);
     const codes = [...new Set([...planMap.keys(), ...factMap.keys()])];
     if (!codes.length)
       return `<div class="chart-empty">Добавьте записи плана или факта — здесь появится сравнение.</div>`;
@@ -580,13 +580,13 @@ async function renderDashboard(root) {
       <div class="chart-legend"><span><i class="legend-plan"></i>План</span><span><i class="legend-fact"></i>Факт</span></div>
       ${codes
         .map((code) => {
-          const planAmount = planMap.get(code) || 0;
-          const factAmount = factMap.get(code) || 0;
+          const planCount = planMap.get(code) || 0;
+          const factCount = factMap.get(code) || 0;
           return `<div class="compare-row">
             <div class="compare-label" title="${escapeHTML(CATEGORY_LABELS[code] || code)}">${escapeHTML(CATEGORY_LABELS[code] || code)}</div>
             <div class="compare-bars">
-              <div class="compare-bar plan" style="width:${(planAmount / max) * 100}%"><span>${escapeHTML(fmtMoney(planAmount))}</span></div>
-              <div class="compare-bar fact" style="width:${(factAmount / max) * 100}%"><span>${escapeHTML(fmtMoney(factAmount))}</span></div>
+              <div class="compare-bar plan" style="width:${(planCount / max) * 100}%"><span>${planCount}</span></div>
+              <div class="compare-bar fact" style="width:${(factCount / max) * 100}%"><span>${factCount}</span></div>
             </div>
           </div>`;
         })
@@ -594,58 +594,44 @@ async function renderDashboard(root) {
     </div>`;
   };
 
-  const donutChart = (items, total, title) => {
-    if (!items || !items.length || !Number(total)) {
+  const donutChart = (items, title) => {
+    const total = (items || []).reduce((sum, item) => sum + Number(item.entry_count || 0), 0);
+    if (!items || !items.length || !total) {
       return `<div class="donut-panel"><div class="chart-empty">Нет данных для диаграммы «${escapeHTML(title)}»</div></div>`;
     }
     const grouped = [...(items || []).reduce((map, item) => {
-      const current = map.get(item.category_code) || { ...item, amount_rub: 0, share_percent: 0 };
-      current.amount_rub += Number(item.amount_rub || 0);
-      current.share_percent += Number(item.share_percent || 0);
+      const current = map.get(item.category_code) || { ...item, entry_count: 0 };
+      current.entry_count += Number(item.entry_count || 0);
       map.set(item.category_code, current);
       return map;
     }, new Map()).values()];
     let cursor = 0;
     const segments = grouped.map((item, index) => {
       const start = cursor;
-      cursor += clampPercent(item.share_percent);
+      cursor += clampPercent((item.entry_count / total) * 100);
       return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`;
     });
     return `<div class="donut-panel">
       <div class="donut" style="background:conic-gradient(${segments.join(",")})">
-        <div class="donut-hole"><span>${escapeHTML(title)}</span><strong>${escapeHTML(fmtMoney(total))}</strong></div>
+        <div class="donut-hole"><span>${escapeHTML(title)}</span><strong>${total}</strong></div>
       </div>
       <div class="donut-legend">${grouped
         .map(
           (item, index) =>
             `<div><i style="background:${CHART_COLORS[index % CHART_COLORS.length]}"></i><span>${escapeHTML(
               CATEGORY_LABELS[item.category_code] || item.category_code,
-            )}</span><b>${Number(item.share_percent || 0).toLocaleString("ru-RU")}%</b></div>`,
+            )}</span><b>${Math.round((item.entry_count / total) * 100)}%</b></div>`,
         )
         .join("")}</div>
     </div>`;
   };
 
-  const planPct = clampPercent(d.plan_completion_pct);
-  const targetAmount = d.target_amount_rub == null
-    ? null
-    : Number(d.target_amount_rub);
-  const confirmedAmount = Number(
-    d.target_confirmed_fact_rub ?? d.eligible_fact_total_rub ?? 0,
-  );
-  // DASH-01: нехватку, превышение и процент выполнения норматива считает
-  // сервер точной денежной арифметикой — здесь их только показываем.
-  const targetGap = targetAmount == null ? null : Number(d.target_deficit_rub ?? 0);
-  const targetSurplus = targetAmount == null ? null : Number(d.target_surplus_rub ?? 0);
-  const targetReached = targetAmount != null && targetGap === 0;
-  const targetCompletionPct = Number(d.target_completion_pct ?? 0);
-  const targetPct = clampPercent(targetCompletionPct);
-  const amountsByCategory = (items) => (items || []).reduce((result, item) => {
-    result[item.category_code] = (result[item.category_code] || 0) + Number(item.amount_rub || 0);
+  const countsByCategory = (items) => (items || []).reduce((result, item) => {
+    result[item.category_code] = (result[item.category_code] || 0) + Number(item.entry_count || 0);
     return result;
   }, {});
-  const planAmounts = amountsByCategory(d.plan_by_category);
-  const factAmounts = amountsByCategory(d.fact_by_category);
+  const planCounts = countsByCategory(d.plan_by_category);
+  const factCounts = countsByCategory(d.fact_by_category);
   const dashboardSlice = ["plan", "fact", "delta"].includes(state.dashboardSlice)
     ? state.dashboardSlice
     : "fact";
@@ -655,8 +641,8 @@ async function renderDashboard(root) {
     delta: "Дельта (Факт-План)",
   };
   const activityRows = state.categories.map((category) => {
-    const plan = planAmounts[category.code] || 0;
-    const fact = factAmounts[category.code] || 0;
+    const plan = planCounts[category.code] || 0;
+    const fact = factCounts[category.code] || 0;
     const delta = fact - plan;
     const risk = fact > 0 && (plan === 0 || fact >= plan)
       ? "green"
@@ -675,14 +661,9 @@ async function renderDashboard(root) {
     yellow: { entry_count: riskCounts.yellow, amount_rub: 0 },
     red: { entry_count: riskCounts.red, amount_rub: 0 },
   };
-  // DASH-03: обязательный минимум ВО считает сервер — только по аудитории
-  // высшего образования и с объяснением исключения по пункту 22 Порядка.
-  const mandatory = (d.mandatory_higher_education || []).map((chip) => ({
-    label: chip.label,
-    complete: Boolean(chip.complete),
-    optional: Boolean(chip.alternative),
-    explanation: chip.explanation || "",
-  }));
+  const factEntries = (d.fact_by_category || []).reduce((sum, item) => sum + Number(item.entry_count || 0), 0);
+  const activeAgreements = state.partners.reduce((sum, partner) => sum + Number(partner.active_agreements_count || 0), 0);
+  const attentionEntries = Number(riskBuckets.yellow?.entry_count || 0) + Number(riskBuckets.red?.entry_count || 0);
   const selectedPartner = state.partners.find(
     (partner) => partner.id === state.partnerID,
   );
@@ -695,64 +676,50 @@ async function renderDashboard(root) {
       <div><span class="eyebrow">Экран 1</span><h1>Пульс проекта</h1></div>
       <span class="year-badge">${state.year}</span>
     </section>
+    <div class="dashboard-primary-kpis" aria-label="Ключевые показатели">
+      <article class="dashboard-kpi target">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
+        <div class="dashboard-kpi-label">Партнёры</div>
+        <div class="dashboard-kpi-value">${state.partners.length}</div>
+      </article>
+      <article class="dashboard-kpi confirmed">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
+        <div class="dashboard-kpi-label">Действующие соглашения</div>
+        <div class="dashboard-kpi-value">${activeAgreements}</div>
+      </article>
+      <article class="dashboard-kpi gap reached">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
+        <div class="dashboard-kpi-label">Мероприятия по факту</div>
+        <div class="dashboard-kpi-value">${factEntries}</div>
+      </article>
+      <article class="dashboard-kpi date">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("gap")}</div>
+        <div class="dashboard-kpi-label">Требуют внимания</div>
+        <div class="dashboard-kpi-value">${attentionEntries}</div>
+      </article>
+    </div>
+    ${partnerDistributionMarkup(state.partners)}
     <div class="card dashboard-filter-card">
       <div class="dashboard-toolbar">
-        <h2 style="margin:0">Фильтры аналитики</h2>
+        <h2 style="margin:0">Аналитика</h2>
         <div class="dashboard-filters">
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
-          <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта (Факт-План)</option></select></div>
+          <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта</option></select></div>
           <div class="field"><label class="check-row" for="dash-hide-zero"><input type="checkbox" id="dash-hide-zero" ${state.dashboardHideZero ? "checked" : ""}> Скрыть нулевые позиции</label></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
         </div>
       </div>
     </div>
-    <div class="dashboard-primary-kpis" aria-label="Ключевые показатели">
-      <article class="dashboard-kpi target">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
-        <div class="dashboard-kpi-label">Целевой показатель</div>
-        <div class="dashboard-kpi-value">${targetAmount == null ? "Не задан" : fmtMoney(targetAmount)}</div>
-      </article>
-      <article class="dashboard-kpi confirmed">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
-        <div class="dashboard-kpi-label">Подтверждённые расходы</div>
-        <div class="dashboard-kpi-value">${fmtMoney(confirmedAmount)}</div>
-      </article>
-      <article class="dashboard-kpi gap ${targetReached ? "reached" : ""}">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon(targetReached ? "confirmed" : "gap")}</div>
-        <div class="dashboard-kpi-label">${targetReached ? "Профицит" : "До выполнения цели"}</div>
-        <div class="dashboard-kpi-value">${targetGap == null ? "—" : fmtMoney(targetReached ? targetSurplus : targetGap)}</div>
-      </article>
-      <article class="dashboard-kpi date">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon("date")}</div>
-        <div class="dashboard-kpi-label">Дата формирования отчёта</div>
-        <div class="dashboard-kpi-value">${escapeHTML(fmtReportDate(d.generated_at))}</div>
-      </article>
-    </div>
-    <div class="dashboard-summary-strip" aria-label="Дополнительные показатели">
-      <div><span>План, всего</span><strong>${fmtMoney(d.plan_total_rub)}</strong></div>
-      <div><span>Факт, всего</span><strong>${fmtMoney(d.fact_total_rub)}</strong></div>
-      <div><span>Утверждённый план</span><strong>${fmtMoney(d.eligible_plan_total_rub)}</strong></div>
-      <div class="${Number(d.incomplete_entries || 0) ? "has-warning" : ""}"><span>Не учтено записей</span><strong>${Number(d.incomplete_entries || 0).toLocaleString("ru-RU")}</strong></div>
-    </div>
-    <div class="mandatory-strip" aria-label="Обязательный минимум высшего образования">
-      <div><span class="eyebrow">Обязательный минимум ВО</span><b>Пункт 22</b></div>
-      ${mandatory.map((item) => `<span class="mandatory-chip ${item.complete ? "complete" : "missing"}" title="${escapeHTML(item.explanation)}">${item.complete ? "✓" : "!"} ${escapeHTML(item.label)}${item.optional ? " · альтернатива" : ""}</span>`).join("")}
-    </div>
-    <div class="progress-card dashboard-progress">
-      <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
-      <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
-      ${targetAmount ? `<div class="progress-header target"><span>Подтверждённые расходы к минимальному объёму 3%</span><strong>${targetCompletionPct.toLocaleString("ru-RU")}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
-    </div>
     <div class="grid cols-2 dashboard-risk-grid">
-      <div class="card"><h2>Распределение документальных рисков</h2><div class="risk-buckets"><div class="green"><span>${fmtMoney(riskBuckets.green?.amount_rub || 0)}</span><b>Гарантировано · ${Number(riskBuckets.green?.entry_count || 0)}</b></div><div class="yellow"><span>${fmtMoney(riskBuckets.yellow?.amount_rub || 0)}</span><b>Прогноз · ${Number(riskBuckets.yellow?.entry_count || 0)}</b></div><div class="red"><span>${fmtMoney(riskBuckets.red?.amount_rub || 0)}</span><b>В зоне риска · ${Number(riskBuckets.red?.entry_count || 0)}</b></div></div></div>
-      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.selected)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets"><div class="green"><span>${Number(riskBuckets.green?.entry_count || 0)}</span><b>Готово</b></div><div class="yellow"><span>${Number(riskBuckets.yellow?.entry_count || 0)}</span><b>В работе</b></div><div class="red"><span>${Number(riskBuckets.red?.entry_count || 0)}</span><b>Требует внимания</b></div></div></div>
+      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Готовность</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${item.selected}</td><td>${item.plan}</td><td>${item.fact}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Готово" : item.risk === "yellow" ? "В работе" : "Нет данных"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
-    <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
+    <div class="card"><h2>Количество мероприятий по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
-      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
-      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
+      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, "План")}</div>
+      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, "Факт")}</div>
     </div>
   `;
   root.querySelector("#dash-year").onchange = (e) => {

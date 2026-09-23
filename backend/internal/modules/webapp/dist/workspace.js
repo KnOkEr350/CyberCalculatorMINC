@@ -330,13 +330,13 @@ function workspaceQuery() {
 
 function entryFiltersMarkup(category) {
   const value = (key) => escapeHTML(state.entryFilters?.[key] || "");
-  const common = `<div class="field"><label>Поиск по реквизитам и ФИО</label><input data-entry-filter="q" value="${value("q")}" placeholder="Введите текст"></div><div class="field"><label>Метод стоимости</label><select data-entry-filter="cost_method"><option value="">Все методы</option><option value="average" ${value("cost_method") === "average" ? "selected" : ""}>Средние значения</option><option value="actual" ${value("cost_method") === "actual" ? "selected" : ""}>Фактические затраты</option></select></div>`;
+  const common = `<div class="field"><label>Поиск по реквизитам и ФИО</label><input data-entry-filter="q" value="${value("q")}" placeholder="Введите текст"></div>`;
   const byCategory = {
     teachers: `<div class="field"><label>ФИО преподавателя</label><input data-entry-filter="teacher_full_name" value="${value("teacher_full_name")}"></div><div class="field"><label>Уровень программы</label><select data-entry-filter="education_level"><option value="">Все уровни</option>${[["bachelor", "Бакалавриат"], ["master", "Магистратура"], ["specialist", "Специалитет"], ["spo", "СПО"]].map(([key, label]) => `<option value="${key}" ${value("education_level") === key ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Семестр</label><select data-entry-filter="semester"><option value="">Все семестры</option>${Array.from({ length: 13 }, (_, index) => index + 1).map((semester) => `<option value="${semester}" ${value("semester") === String(semester) ? "selected" : ""}>${semester}</option>`).join("")}</select></div><div class="field"><label>Направление подготовки</label><input data-entry-filter="training_direction" value="${value("training_direction")}"></div><div class="field"><label>Кафедра / институт / факультет</label><input data-entry-filter="structural_unit" value="${value("structural_unit")}"></div>`,
     ood_rpd: `<div class="field"><label>Вид документа</label><select data-entry-filter="doc_type"><option value="">Все</option><option value="rpd" ${value("doc_type") === "rpd" ? "selected" : ""}>РПД</option><option value="oop" ${value("doc_type") === "oop" ? "selected" : ""}>ООП</option></select></div><div class="field"><label>Вид активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="development" ${value("activity_type") === "development" ? "selected" : ""}>Разработка</option><option value="update" ${value("activity_type") === "update" ? "selected" : ""}>Актуализация</option><option value="expertise" ${value("activity_type") === "expertise" ? "selected" : ""}>Экспертиза</option></select></div>`,
     internship: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
     employment_practice: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
-    top_it: `<div class="field"><label>Тип активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="assistance" ${value("activity_type") === "assistance" ? "selected" : ""}>Содействие</option><option value="cofinancing" ${value("activity_type") === "cofinancing" ? "selected" : ""}>Софинансирование</option></select></div><div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>Тип затрат</label><input data-entry-filter="cost_type" value="${value("cost_type")}"></div>`,
+    top_it: `<div class="field"><label>Тип активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="assistance" ${value("activity_type") === "assistance" ? "selected" : ""}>Содействие</option><option value="cofinancing" ${value("activity_type") === "cofinancing" ? "selected" : ""}>Софинансирование</option></select></div><div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div>`,
     minc_decision: `<div class="field"><label>Номер Решения</label><input data-entry-filter="decision_number" value="${value("decision_number")}" placeholder="Например, МЦ-П12-402"></div><div class="field"><label>Основание поручения</label><select data-entry-filter="instruction_authority"><option value="">Все основания</option><option value="president" ${value("instruction_authority") === "president" ? "selected" : ""}>Президент РФ</option><option value="prime_minister" ${value("instruction_authority") === "prime_minister" ? "selected" : ""}>Правительство РФ</option><option value="deputy_prime_minister" ${value("instruction_authority") === "deputy_prime_minister" ? "selected" : ""}>Куратор Министерства</option><option value="security_council" ${value("instruction_authority") === "security_council" ? "selected" : ""}>Совет Безопасности РФ</option></select></div>`,
   }[category] || "";
   return `<div class="grid cols-3">${common}${byCategory}</div><div class="flex"><button class="btn secondary" id="entry-filter-apply">Применить фильтры</button><button class="btn secondary" id="entry-filter-reset">Сбросить</button></div>`;
@@ -363,12 +363,12 @@ function ministryDecisionTable(entries, writable, canCreate) {
       <td><b>${escapeHTML(payload.metric_description || "—")}</b><br><small>${escapeHTML(payload.metric_unit || "Единица не указана")}</small></td>
       <td>${volume(payload.planned_volume, payload.metric_unit)}</td>
       <td>${volume(payload.actual_volume, payload.metric_unit)}</td>
-      <td><b>${fmtMoney(entry.amount_rub)}</b><br><small>${escapeHTML(payload.calculation_basis || "Основание не указано")}</small></td>
+      <td>${escapeHTML(payload.calculation_basis || "Основание не указано")}</td>
       <td><span class="status-badge ${completeDocuments === documentChecks.length && documentChecks.length ? "active" : "pending"}">${completeDocuments}/${documentChecks.length}</span><br><small>подтверждений</small></td>
       <td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка и документы" : "Просмотреть"}</button></td>
     </tr>`;
   }).join("");
-  return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="ministry-decision-grid"><thead><tr><th>Риск</th><th>Решение и поручение</th><th>Мероприятие и условия</th><th>Срок</th><th>Динамический показатель</th><th>План</th><th>Факт</th><th>Подтверждённая стоимость</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Решения ещё не зарегистрированы. Добавьте карточку мероприятия." : "ИТ-организация ещё не добавила мероприятия по Решению Минцифры."}</p>` : ""}`;
+  return `<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="ministry-decision-grid"><thead><tr><th>Риск</th><th>Решение и поручение</th><th>Мероприятие и условия</th><th>Срок</th><th>Динамический показатель</th><th>План</th><th>Факт</th><th>Основание расчёта</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Решения ещё не зарегистрированы. Добавьте карточку мероприятия." : "ИТ-организация ещё не добавила мероприятия по Решению Минцифры."}</p>` : ""}`;
 }
 
 function entryRisk(entry) {
@@ -392,7 +392,7 @@ function teachingWorkloadTable(entries, payouts, writable, canCreate) {
     const paid = entryPayouts.filter((payout) => payout.is_fully_paid).length;
     const compensation = !entryPayouts.length
       ? '<span class="status-badge inactive">Не запланирована</span>'
-      : `<span class="status-badge ${paid === entryPayouts.length ? "active" : "pending"}">${paid === entryPayouts.length ? "Выплачено" : "По графику"} ${paid}/${entryPayouts.length}</span><br><small>${entryPayouts.map((payout) => `${escapeHTML(payout.target_quarter)} ${payout.target_year}: ${fmtMoney(payout.planned_compensation_rub)}`).join("<br>")}</small>`;
+      : `<span class="status-badge ${paid === entryPayouts.length ? "active" : "pending"}">${paid === entryPayouts.length ? "Выплачено" : "По графику"} ${paid}/${entryPayouts.length}</span><br><small>${entryPayouts.map((payout) => `${escapeHTML(payout.target_quarter)} ${payout.target_year}`).join(" · ")}</small>`;
     const unit = [payload.institute, payload.faculty, payload.department].filter(Boolean).map(escapeHTML).join(" / ") || "—";
     const education = `${escapeHTML(valueLabel(payload.education_level || "—"))}<br><small>семестр ${escapeHTML(payload.semester ?? "—")} · ${escapeHTML(payload.academic_group || "группа не указана")}</small>`;
     const checks = entry.compliance?.checks || [];
@@ -404,13 +404,12 @@ function teachingWorkloadTable(entries, payouts, writable, canCreate) {
       <td>${unit}</td><td>${education}</td>
       <td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td>
       <td><b>${Number(payload.academic_hours || 0).toLocaleString("ru-RU")}</b></td>
-      <td><b>${fmtMoney(entry.amount_rub)}</b><br><small>${entry.cost_method === "actual" ? "Фактические затраты" : "Нормативный тариф"}</small></td>
       <td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td>
       <td>${compensation}</td>
       <td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td>
     </tr>`;
   }).join("");
-  return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="teaching-workload-grid"><thead><tr><th>Риск</th><th>Преподаватель</th><th>Дисциплина</th><th>Подразделение</th><th>Программа и семестр</th><th>Охват</th><th>Ак. часы</th><th>Затраты</th><th>Документы</th><th>Компенсация</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Нагрузка ещё не добавлена." : "ИТ-организация ещё не добавила педагогическую нагрузку."}</p>` : ""}`;
+  return `<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="teaching-workload-grid"><thead><tr><th>Риск</th><th>Преподаватель</th><th>Дисциплина</th><th>Подразделение</th><th>Программа и семестр</th><th>Охват</th><th>Ак. часы</th><th>Документы</th><th>Компенсация</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Нагрузка ещё не добавлена." : "ИТ-организация ещё не добавила педагогическую нагрузку."}</p>` : ""}`;
 }
 
 function oopMatrix(summary) {
@@ -418,15 +417,15 @@ function oopMatrix(summary) {
   const actions = [["development", "Разработка"], ["update", "Актуализация"], ["expertise", "Экспертиза"]];
   const items = new Map((summary.ood_rpd_matrix || []).map((item) => [`${item.document_type}:${item.activity_type}`, item]));
   const cell = (doc, action) => items.get(`${doc}:${action}`) || { count: 0, amount_rub: 0 };
-  const total = (values) => values.reduce((result, item) => ({ count: result.count + Number(item.count || 0), amount: result.amount + Number(item.amount_rub || 0) }), { count: 0, amount: 0 });
+  const total = (values) => values.reduce((result, item) => result + Number(item.count || 0), 0);
   const body = docs.map(([doc, label]) => {
     const values = actions.map(([action]) => cell(doc, action));
     const rowTotal = total(values);
-    return `<tr><th>${label}</th>${values.map((item) => `<td><b>${fmtMoney(item.amount_rub)}</b><br><small>${item.count} шт.</small></td>`).join("")}<td><b>${fmtMoney(rowTotal.amount)}</b><br><small>${rowTotal.count} шт.</small></td></tr>`;
+    return `<tr><th>${label}</th>${values.map((item) => `<td><b>${item.count}</b><br><small>документов</small></td>`).join("")}<td><b>${rowTotal}</b></td></tr>`;
   }).join("");
   const columnTotals = actions.map(([action]) => total(docs.map(([doc]) => cell(doc, action))));
   const grandTotal = total([...items.values()]);
-  return `<div class="oop-matrix" aria-label="Матрица ООП и РПД"><div class="flex between"><h2>Краткая матричная выжимка</h2><span class="status-badge ${grandTotal.count ? "active" : "inactive"}">${grandTotal.count} документов</span></div><div class="table-wrap"><table><thead><tr><th>Вид документа</th>${actions.map(([, label]) => `<th>${label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${body}<tr class="total-row"><th>Итого</th>${columnTotals.map((item) => `<td><b>${fmtMoney(item.amount)}</b><br><small>${item.count} шт.</small></td>`).join("")}<td><b>${fmtMoney(grandTotal.amount)}</b><br><small>${grandTotal.count} шт.</small></td></tr></tbody></table></div></div>`;
+  return `<div class="oop-matrix" aria-label="Матрица ООП и РПД"><div class="flex between"><h2>Краткая матричная выжимка</h2><span class="status-badge ${grandTotal ? "active" : "inactive"}">${grandTotal} документов</span></div><div class="table-wrap"><table><thead><tr><th>Вид документа</th>${actions.map(([, label]) => `<th>${label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${body}<tr class="total-row"><th>Итого</th>${columnTotals.map((item) => `<td><b>${item}</b></td>`).join("")}<td><b>${grandTotal}</b></td></tr></tbody></table></div></div>`;
 }
 
 function oopRegistryTable(entries, writable, canCreate) {
@@ -434,9 +433,9 @@ function oopRegistryTable(entries, writable, canCreate) {
     const payload = entry.payload || {};
     const checks = entry.compliance?.checks || [];
     const complete = checks.filter((check) => check.complete).length;
-    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "—").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "—"))}</small></td><td><b>${escapeHTML(payload.program_name || "—")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "—"))}</td><td>${escapeHTML(payload.expert_full_name || "—")}</td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><b>${fmtMoney(entry.amount_rub)}</b></td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
+    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "—").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "—"))}</small></td><td><b>${escapeHTML(payload.program_name || "—")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "—"))}</td><td>${escapeHTML(payload.expert_full_name || "—")}</td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
   }).join("");
-  return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт</th><th>Охват</th><th>Затраты</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
+  return `<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт</th><th>Охват</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
 }
 async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(state.view)) {
   const generation = (root.workspaceGeneration || 0) + 1;
@@ -647,12 +646,13 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ood_rpd: `Партнёры: ${summary.partners_count} · программы: ${summary.programs_count}`,
     internship: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · стажёры: ${summary.students_count}`,
     employment_practice: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · практиканты: ${summary.students_count}`,
-    minc_decision: `Решений: ${summary.count} · подтверждено: ${fmtMoney(summary.amount_rub)}`,
+    minc_decision: `Решений: ${summary.count}`,
   }[state.categoryCode] || `Партнёры: ${summary.partners_count}`;
   const matrix = state.categoryCode === "ood_rpd" ? oopMatrix(summary) : "";
-  const units = summary.structural_units?.length ? `<details><summary>Структурные подразделения</summary><div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Записи</th><th>Сумма</th></tr></thead><tbody>${summary.structural_units.map((item) => `<tr><td>${escapeHTML(item.unit)}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
-  summaryBox.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${Number(summary.count || 0).toLocaleString("ru-RU")}</div></div><div class="stat"><div class="label">Общая сумма</div><div class="value">${fmtMoney(summary.amount_rub)}</div></div><div class="stat"><div class="label">Итоговые показатели</div><div class="value" style="font-size:16px">${escapeHTML(categoryTotals)}</div></div></div>${matrix}${units}`;
+  const units = summary.structural_units?.length ? `<details><summary>Структурные подразделения</summary><div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Записи</th></tr></thead><tbody>${summary.structural_units.map((item) => `<tr><td>${escapeHTML(item.unit)}</td><td>${item.count}</td></tr>`).join("")}</tbody></table></div></details>` : "";
+  summaryBox.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Всего записей</div><div class="value">${Number(summary.count || 0).toLocaleString("ru-RU")}</div></div><div class="stat"><div class="label">Итоговые показатели</div><div class="value" style="font-size:16px">${escapeHTML(categoryTotals)}</div></div></div>${matrix}${units}`;
   const obligation = root.querySelector("#obligation-box");
+  if (state.categoryCode === "ood_rpd") obligation.hidden = true;
   const workflowLabels = { draft: "Черновик ИТ-организации", ready: state.period === "fact" ? "Направлено на рассмотрение" : "Готово", verified: state.period === "fact" ? "Согласовано ОО / РОИВ" : "Проверено", approved: "Утверждено" };
   const automaticOK = workflow.automatic_checks.every((check) => check.complete || check.code === "actual_costs");
   const confirmationsDisabled = workflow.status !== "draft" || !canManageWorkflow;
@@ -674,7 +674,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ${workflow.review_due_date ? `<p class="${workflow.review_overdue ? "error" : "notice"}">${workflow.review_overdue ? "Просрочено рассмотрение" : "Срок рассмотрения"}: по ${escapeHTML(workflow.review_due_date.split("-").reverse().join("."))} включительно · ${Number(workflow.review_calendar_days)} календарных дней по приказу № 270.</p>` : ""}
     <h3>Автоматические проверки</h3><ul>${workflow.automatic_checks.map((check) => `<li>${check.complete ? "✓" : "✕"} ${escapeHTML(check.label)}</li>`).join("")}</ul>
     <h3>Виды мероприятий соглашения</h3><div class="grid cols-2">${workflow.activities.map((activity) => `<button class="btn secondary" data-required="${activity.code}">${activity.complete ? "✓" : "＋"} ${escapeHTML(activity.name)}</button>`).join("")}</div>
-    ${workflow.top_it_exception ? `<p class="notice">Применено исключение ТОП ИТ/ИИ (п. 22 Порядка): обязательные Виды 1 и 3 реализованы в другой образовательной организации с утверждённым отчётом.${workflow.top_it_exception_basis ? ` Основание: ${escapeHTML(workflow.top_it_exception_basis.partner_name)}, соглашение ${escapeHTML(workflow.top_it_exception_basis.agreement_number)} — ${workflow.top_it_exception_basis.records.map((record) => `${escapeHTML(record.category_name)}: ${Number(record.entry_count)} на ${fmtMoney(record.amount_rub)}`).join("; ")}.` : ""}</p>` : ""}
+    ${workflow.top_it_exception ? `<p class="notice">Применено исключение ТОП ИТ/ИИ (п. 22 Порядка): обязательные Виды 1 и 3 реализованы в другой образовательной организации с утверждённым отчётом.${workflow.top_it_exception_basis ? ` Основание: ${escapeHTML(workflow.top_it_exception_basis.partner_name)}, соглашение ${escapeHTML(workflow.top_it_exception_basis.agreement_number)} — ${workflow.top_it_exception_basis.records.map((record) => `${escapeHTML(record.category_name)}: ${Number(record.entry_count)} записей`).join("; ")}.` : ""}</p>` : ""}
     <h3>Юридические подтверждения ИТ-организации</h3><label class="check-row"><input id="wf-scope" type="checkbox" ${workflow.scope_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Конкретный перечень, объём, сроки и условия соответствуют соглашению</label>
     <label class="check-row"><input id="wf-conditions" type="checkbox" ${workflow.conditions_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Выполнены условия реализации каждого вида из приложения № 1 приказа</label>
     <label class="check-row"><input id="wf-evidence" type="checkbox" ${workflow.evidence_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Подтверждающие документы имеются и позволяют установить факт мероприятия (загрузка в систему необязательна)</label>
@@ -716,9 +716,13 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   }
   const paint = () => {
     const list = entries;
+    const hiddenOverviewFields = new Set([
+      "monthly_salary_rub", "cost_type", "cofinancing_amount_rub", "grant_amount_rub",
+      "planned_cofinancing_amount_rub", "transferred_amount_rub", "actual_spent_amount_rub", "amount_manual",
+    ]);
     const fields =
       currentCategory()?.fields.filter(
-        (f) => !["org_name", "mentor_id", "staff_member_id"].includes(f.key),
+        (f) => !["org_name", "mentor_id", "staff_member_id"].includes(f.key) && !hiddenOverviewFields.has(f.key),
       ) || [];
     root.querySelector("#entries-table").innerHTML = state.categoryCode === "minc_decision"
       ? ministryDecisionTable(list, writable, canCreate)
@@ -726,7 +730,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
         ? teachingWorkloadTable(list, payoutItems, writable, canCreate)
         : state.categoryCode === "ood_rpd"
           ? oopRegistryTable(list, writable, canCreate)
-          : `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${entryRisk(e)}</td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+          : `<p>На странице: ${list.length}.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${entryRisk(e)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(
@@ -1257,6 +1261,19 @@ async function refreshDirectoryProposalBadge(root = document) {
   }
 }
 
+function partnerDistributionMarkup(partners = []) {
+  const schools = partners.filter((partner) => partner.partner_kind === "school").length;
+  const universities = partners.filter((partner) => partner.partner_kind === "vuz").length;
+  const colleges = partners.filter((partner) => partner.partner_kind === "kolledj").length;
+  const compared = schools + universities;
+  const schoolPercent = compared ? Math.round((schools / compared) * 100) : 0;
+  const universityPercent = compared ? 100 - schoolPercent : 0;
+  const gradient = compared
+    ? `conic-gradient(#397ec4 0 ${universityPercent}%, #43a98b ${universityPercent}% 100%)`
+    : "conic-gradient(#dfe7ef 0 100%)";
+  return `<div class="card partner-distribution"><div><span class="eyebrow">Структура партнёров</span><h2>Школы и вузы</h2></div><div class="partner-distribution-chart" role="img" aria-label="Вузы ${universityPercent} процентов, школы ${schoolPercent} процентов" style="background:${gradient}"><span>${compared}</span></div><div class="partner-distribution-legend"><div><i class="university"></i><span>Вузы</span><b>${universityPercent}% · ${universities}</b></div><div><i class="school"></i><span>Школы</span><b>${schoolPercent}% · ${schools}</b></div>${colleges ? `<div><i class="college"></i><span>СПО отдельно</span><b>${colleges}</b></div>` : ""}</div></div>`;
+}
+
 async function renderPartnerDirectory(root, embedded = false) {
   if (!canReviewEducationDirectory()) {
     root.innerHTML = '<div class="card error-state">Справочник учебных заведений недоступен для этого профиля</div>';
@@ -1265,11 +1282,13 @@ async function renderPartnerDirectory(root, embedded = false) {
   const canSuggest = canProposeEducationDirectory();
   const canApprove = canApproveEducationDirectory();
   state.regionalAuthorities = await api("/regional-authorities");
-  root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Учебные заведения и соглашения</h2></div>' : '<section class="page-heading"><div><h1>Учебные заведения и соглашения</h1></div></section>'}
-  ${isStaffUser() && state.me?.it_company_id ? '<div class="card"><div class="flex between"><div><h2>Группа юридических лиц</h2></div><button class="btn secondary" id="legal-groups">Управлять группами</button></div></div>' : ""}
-  ${canSuggest || canApprove ? '<div id="directory-proposals" class="card proposal-center"><div class="loading-state"><span class="spinner"></span>Загрузка предложений…</div></div>' : ""}
-  <div class="card"><h2>Состояние справочника</h2><div id="directory-stats">Загрузка…</div><details class="rules-note"><summary>Что требует проверки</summary><p>Для записей с жёлтым статусом сверьте ИНН и ОГРН, затем подтвердите реквизиты. Партнёром может стать организация с действующей лицензией.</p></details></div>
-  <div class="card"><div class="flex between directory-heading"><div><h2>Поиск в официальном справочнике</h2></div>${canSuggest || canApprove ? `<button class="btn" id="directory-add">+ ${canApprove ? "Добавить ОО" : "Предложить ОО"}</button>` : ""}</div><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
+  root.innerHTML = `${embedded ? '<div class="section-intro"><h2>Партнёры и соглашения</h2></div>' : '<section class="page-heading"><div><h1>Партнёры и соглашения</h1></div></section>'}
+  <div class="card partner-action-strip"><div class="partner-action-flow">${isStaffUser() && state.me?.it_company_id ? '<button class="btn secondary" id="legal-groups">Юридические лица</button>' : ""}${canSuggest || canApprove ? `<button class="btn" id="directory-add">+ Добавить образовательную организацию</button><button class="btn secondary" id="partner-decisions">Требуют решения <span class="nav-count" id="partner-decisions-count" hidden></span></button>` : ""}</div></div>
+  <div id="partner-distribution"></div>
+  <div class="card"><div class="flex between"><div><span class="eyebrow">Отдельный перечень</span><h2>Подтверждённые партнёры</h2></div><span class="count-badge" id="confirmed-partner-count"></span></div><div id="confirmed-partner-list"></div></div>
+  ${canSuggest || canApprove ? '<div id="directory-proposals" class="card proposal-center" hidden></div>' : ""}
+  <div class="card"><div class="flex between"><h2>Наши партнёры</h2><span class="count-badge" id="partner-count"></span></div><div class="grid cols-3"><div class="field"><label>Вид учебного заведения</label><select id="partner-kind-filter"><option value="">Все виды</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div><div class="field"><label>Название или ИНН</label><input id="partner-name-filter" placeholder="Начните вводить название или ИНН"></div><button class="btn secondary" id="partner-filter-reset">Сбросить</button></div><div id="partner-list"></div></div>
+  <div hidden aria-hidden="true"><div id="directory-stats"></div><div><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
     AUDIENCE_LABELS,
   )
     .map(
@@ -1278,9 +1297,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     )
     .join(
       "",
-    )}</select></div><div class="field"><label>Название, регион, ИНН, ОГРН или лицензия</label><input id="d-search" placeholder="Поиск"></div><button class="btn secondary" id="d-find">Найти</button></div><div id="d-results"></div>${canApprove ? '<button class="btn secondary" id="d-import">Редактировать и подтверждать через Excel</button>' : ""}</div>
-  <div class="card"><div class="flex between"><h2>Региональные органы управления образованием</h2>${isStaffUser() ? '<button class="btn secondary" id="roiv-add">+ Добавить РОИВ</button>' : ""}</div><div id="roiv-list">${state.regionalAuthorities.length ? `<div class="table-wrap"><table><thead><tr><th>Регион и РОИВ</th><th>Реквизиты</th><th>Связи</th><th></th></tr></thead><tbody>${state.regionalAuthorities.map((authority) => `<tr><td>${escapeHTML(authority.region)}<br><b>${escapeHTML(authority.name)}</b></td><td>ИНН ${escapeHTML(authority.inn)}<br>ОГРН ${escapeHTML(authority.ogrn)}<br><a href="${escapeHTML(authority.source_url)}" target="_blank" rel="noopener noreferrer">Официальный источник</a></td><td><span class="status-badge ${authority.status === "active" ? "active" : "inactive"}">${authority.status === "active" ? "Действует" : "Не действует"}</span><br>Школ: ${authority.schools_count}<br>Мероприятий: ${authority.activities_count}</td><td>${isStaffUser() ? `<button class="btn secondary" data-edit-roiv="${authority.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>РОИВ ещё не добавлены. Сначала добавьте РОИВ, затем школьного партнёра.</p>"}</div></div>
-  <div class="card"><div class="flex between"><h2>Наши партнёры</h2><span class="count-badge" id="partner-count"></span></div><div class="grid cols-3"><div class="field"><label>Вид учебного заведения</label><select id="partner-kind-filter"><option value="">Все виды</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div><div class="field"><label>Название или ИНН</label><input id="partner-name-filter" placeholder="Начните вводить название или ИНН"></div><button class="btn secondary" id="partner-filter-reset">Сбросить</button></div><div id="partner-list"></div></div>${isStaffUser() ? '<div id="partner-create"></div>' : ""}`;
+    )}</select></div><div class="field"><label>Поиск</label><input id="d-search"></div><button id="d-find">Найти</button></div><div id="d-results"></div>${canApprove ? '<button id="d-import">Импорт</button>' : ""}</div><button id="roiv-add"></button><div id="roiv-list"></div></div>${isStaffUser() ? '<div id="partner-create" hidden></div>' : ""}`;
   let generation = 0;
   const reviewFilter = el('<label class="muted"><input type="checkbox" id="d-review-all"> Показать также вузы без подтверждённого направления — для проверки</label>');
   root.querySelector("#d-results").before(reviewFilter);
@@ -1340,7 +1357,7 @@ async function renderPartnerDirectory(root, embedded = false) {
   root.querySelector("#d-find").onclick = search;
   root.querySelector("#directory-add")?.addEventListener("click", () =>
     openDirectoryCreate(async () => {
-      await Promise.all([search(), loadDirectoryProposals(root, () => renderPartnerDirectory(root, embedded))]);
+      await renderPartnerDirectory(root, embedded);
       await refreshDirectoryProposalBadge(document);
     }),
   );
@@ -1372,27 +1389,68 @@ async function renderPartnerDirectory(root, embedded = false) {
         () => renderPartnerDirectory(root, embedded),
       );
   });
-  if (canSuggest || canApprove) {
-    loadDirectoryProposals(root, async () => {
-      await renderPartnerDirectory(root, embedded);
-      await refreshDirectoryProposalBadge(document);
-    }).catch((error) => {
-      const box = root.querySelector("#directory-proposals");
-      if (box) box.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
-    });
-  }
+  let proposalsLoaded = false;
+  root.querySelector("#partner-decisions")?.addEventListener("click", async () => {
+    const box = root.querySelector("#directory-proposals");
+    if (!box) return;
+    box.hidden = !box.hidden;
+    if (box.hidden || proposalsLoaded) return;
+    proposalsLoaded = true;
+    box.innerHTML = '<div class="loading-state"><span class="spinner"></span>Загрузка…</div>';
+    try {
+      await loadDirectoryProposals(root, async () => {
+        await renderPartnerDirectory(root, embedded);
+        await refreshDirectoryProposalBadge(document);
+      });
+    } catch (error) {
+      box.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+    }
+  });
   api("/directory/stats")
     .then((stats) => {
-      const box = root.querySelector("#directory-stats");
-      if (!box) return;
-      box.innerHTML = `<div class="grid cols-2"><div class="stat"><div class="label">Организации из перечня</div><div class="value">${stats.all_total}</div></div><div class="stat warning-stat"><div class="label">Требуют проверки реквизитов</div><div class="value">${stats.pending || 0}</div></div><div class="stat"><div class="label">Подтверждены и действуют</div><div class="value">${stats.verified_active}</div></div><div class="stat"><div class="label">С подходящими направлениями</div><div class="value">${stats.total}</div></div></div><p class="muted">Вузов из перечня Минцифры № 27: ${stats.all_universities}. Направления ещё не получены: ${stats.programs_unknown}. Последнее подтверждение: ${stats.last_verified_at ? new Date(stats.last_verified_at).toLocaleString("ru-RU") : "записей пока нет"}. ${stats.sync_status ? `Обогащение/обновление: ${escapeHTML(stats.sync_status)}${stats.sync_finished_at ? `, ${new Date(stats.sync_finished_at).toLocaleString("ru-RU")}` : ""}${stats.sync_error ? ` — ${escapeHTML(stats.sync_error)}` : ""}.` : "Автоматическое обогащение ещё не запускалось."}</p>`;
+      const count = canApprove ? Number(stats.pending_proposals || 0) : Number(stats.own_pending_proposals || 0);
+      const badge = root.querySelector("#partner-decisions-count");
+      if (!badge) return;
+      badge.textContent = count;
+      badge.hidden = count === 0;
     })
-    .catch((error) => {
-      const box = root.querySelector("#directory-stats");
-      if (box) box.textContent = error.message;
-    });
+    .catch(() => {});
+  const partnerDetails = new Map();
+  const wirePartnerDetails = (partner, box) => {
+    box.querySelector("[data-lazy-agreements]")?.addEventListener("click", () => openAgreements(partner.id, refreshPartners));
+    box.querySelector("[data-lazy-structure]")?.addEventListener("click", () => openPartnerStructure(partner.id, refreshPartners));
+    box.querySelector("[data-lazy-mentors]")?.addEventListener("click", () => openMentors(partner.id));
+  };
+  const loadPartnerDetails = async (partner, box) => {
+    if (partnerDetails.has(partner.id)) {
+      box.innerHTML = partnerDetails.get(partner.id);
+      wirePartnerDetails(partner, box);
+      return;
+    }
+    box.innerHTML = '<div class="loading-state"><span class="spinner"></span>Загрузка сведений партнёра…</div>';
+    try {
+      const [agreements, units, groups, mentors] = await Promise.all([
+        api(`/agreements?partner_id=${encodeURIComponent(partner.id)}`),
+        partner.partner_kind === "school" ? Promise.resolve([]) : api(`/partners/${encodeURIComponent(partner.id)}/org-units`),
+        partner.partner_kind === "school" ? Promise.resolve([]) : api(`/partners/${encodeURIComponent(partner.id)}/academic-groups`),
+        api(`/mentors?partner_id=${encodeURIComponent(partner.id)}`),
+      ]);
+      const markup = `<div class="partner-lazy-grid"><section><span class="eyebrow">4 · Соглашения</span><b>${agreements.length}</b><p>${agreements.filter((agreement) => agreement.status === "active").length} действующих</p><button class="btn secondary" data-lazy-agreements="${partner.id}">Открыть</button></section><section><span class="eyebrow">5 · Учебная структура</span><b>${units.length} / ${groups.length}</b><p>подразделений / групп</p>${partner.partner_kind === "school" ? "" : `<button class="btn secondary" data-lazy-structure="${partner.id}">Открыть</button>`}</section><section><span class="eyebrow">6 · Наставники</span><b>${mentors.length}</b><p>закреплено за партнёром</p><button class="btn secondary" data-lazy-mentors="${partner.id}">Открыть</button></section></div>`;
+      partnerDetails.set(partner.id, markup);
+      box.innerHTML = markup;
+      wirePartnerDetails(partner, box);
+    } catch (error) {
+      box.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+    }
+  };
+  let confirmedDirectory = [];
   const refreshPartners = async () => {
-    state.partners = await api("/partners");
+    const directoryRequests = isStaffUser()
+      ? ["vuz", "kolledj", "school"].map((kind) => api(`/directory?${new URLSearchParams({ partner_kind: kind, verified_only: "1" })}`))
+      : [];
+    const [partners, ...directoryGroups] = await Promise.all([api("/partners"), ...directoryRequests]);
+    state.partners = partners;
+    confirmedDirectory = directoryGroups.flat().filter((item) => item.selectable);
     paintPartners();
   };
   const paintPartners = () => {
@@ -1402,24 +1460,44 @@ async function renderPartnerDirectory(root, embedded = false) {
       (!kind || partner.partner_kind === kind) &&
       (!term || partner.name.toLocaleLowerCase("ru").includes(term) || String(partner.inn || "").includes(term)),
     );
+    root.querySelector("#partner-distribution").innerHTML = partnerDistributionMarkup(state.partners);
+    const confirmed = confirmedDirectory.length ? confirmedDirectory : state.partners.filter((partner) => partner.verification_status === "verified");
+    root.querySelector("#confirmed-partner-count").textContent = String(confirmed.length);
+    root.querySelector("#confirmed-partner-list").innerHTML = confirmed.length
+      ? `<div class="confirmed-partner-list">${confirmed.map((partner) => { const added = state.partners.some((item) => item.inn && item.inn === partner.inn); return `<div class="confirmed-partner"><b>${escapeHTML(partner.name)}</b><span>${escapeHTML(AUDIENCE_LABELS[partner.partner_kind] || partner.partner_kind)} · ИНН ${escapeHTML(partner.inn || "—")}</span>${isStaffUser() ? `<button class="btn secondary" data-confirmed-partner="${partner.id}" ${added ? "disabled" : ""}>${added ? "Уже в наших партнёрах" : "Добавить в наши партнёры"}</button>` : ""}</div>`; }).join("")}</div>`
+      : '<p class="muted">Подтверждённых партнёров пока нет.</p>';
     root.querySelector("#partner-count").textContent = `Показано: ${partners.length} из ${state.partners.length}`;
     root.querySelector("#partner-list").innerHTML = partners.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Учебное заведение</th><th>Проверка</th><th>Соглашения</th><th>Учебная структура</th><th></th></tr></thead><tbody>${partners.map((p) => `<tr><td>${escapeHTML(p.name)}<br><small>${escapeHTML(AUDIENCE_LABELS[p.partner_kind])}</small></td><td><span class="status-badge ${p.verification_status === "verified" ? "active" : "inactive"}">${p.verification_status === "verified" ? "Реестр подтверждён" : "Историческая запись"}</span><br><small>${escapeHTML(p.inn || "ИНН не указан")}</small></td><td>Всего: ${p.agreements_count}<br>Действующих сейчас: ${p.active_agreements_count}</td><td>Подразделений: ${Number(p.org_units_count || 0)}<br>Групп: ${Number(p.academic_groups_count || 0)}</td><td><button class="btn secondary" data-partner="${p.id}">План / факт</button><button class="btn secondary" data-agreements="${p.id}">Соглашения</button><button class="btn secondary" data-structure="${p.id}" ${p.partner_kind === "school" ? "disabled" : ""}>Структура и группы</button><button class="btn secondary" data-mentors="${p.id}">Наставники</button></td></tr>`).join("")}</tbody></table></div>`
+      ? `<div class="table-wrap"><table class="partner-list-table"><thead><tr><th>Раскрыть</th><th>Партнёр</th><th>Тип</th><th>Рабочий раздел</th></tr></thead><tbody>${partners.map((p) => `<tr><td><label class="partner-expand-control"><input type="checkbox" data-partner-expand="${p.id}" aria-label="Раскрыть сведения: ${escapeHTML(p.name)}"><span>⌄</span></label></td><td><b>${escapeHTML(p.name)}</b><br><small>ИНН ${escapeHTML(p.inn || "—")}</small></td><td>${escapeHTML(AUDIENCE_LABELS[p.partner_kind] || p.partner_kind)}</td><td><button class="btn secondary" data-partner="${p.id}">Открыть мероприятия</button></td></tr><tr class="partner-detail-row" data-partner-detail-row="${p.id}" hidden><td colspan="4"><div data-partner-detail="${p.id}"></div></td></tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Партнёры по выбранным условиям не найдены.</p>';
+    root.querySelectorAll("[data-confirmed-partner]").forEach((button) => button.onclick = () => {
+      const item = confirmedDirectory.find((candidate) => candidate.id === button.dataset.confirmedPartner);
+      const box = root.querySelector("#partner-create");
+      if (!item || !box) return;
+      box.hidden = false;
+      box.dataset.directoryId = item.id;
+      box.querySelector("#p-selected").innerHTML = `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ОГРН ${escapeHTML(item.ogrn)} · лицензия ${escapeHTML(item.license_number || "—")}`;
+      box.querySelector("[type=submit]").disabled = false;
+      const agreementKind = box.querySelector("#p-a-kind");
+      agreementKind.value = item.partner_kind === "school" ? "roiv" : "education_organization";
+      agreementKind.dispatchEvent(new Event("change"));
+      box.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    root.querySelectorAll("[data-partner-expand]").forEach((input) => {
+      input.onchange = async () => {
+        const row = root.querySelector(`[data-partner-detail-row="${CSS.escape(input.dataset.partnerExpand)}"]`);
+        row.hidden = !input.checked;
+        input.closest("label").classList.toggle("expanded", input.checked);
+        if (!input.checked) return;
+        const partner = state.partners.find((item) => item.id === input.dataset.partnerExpand);
+        await loadPartnerDetails(partner, row.querySelector("[data-partner-detail]"));
+      };
+    });
     root.querySelectorAll("[data-partner]").forEach((button) => {
       button.onclick = () => {
         state.partnerID = button.dataset.partner;
         CyberCalcRouter.activate("teachers");
       };
-    });
-    root.querySelectorAll("[data-mentors]").forEach((button) => {
-      button.onclick = () => openMentors(button.dataset.mentors);
-    });
-    root.querySelectorAll("[data-structure]").forEach((button) => {
-      if (!button.disabled) button.onclick = () => openPartnerStructure(button.dataset.structure, refreshPartners);
-    });
-    root.querySelectorAll("[data-agreements]").forEach((button) => {
-      button.onclick = () => openAgreements(button.dataset.agreements, refreshPartners);
     });
   };
   root.querySelector("#partner-kind-filter").onchange = paintPartners;
@@ -1455,7 +1533,7 @@ async function renderPartnerDirectory(root, embedded = false) {
       }
     };
   }
-  await Promise.all([search(), refreshPartners()]);
+  await refreshPartners();
 }
 
 const ORG_UNIT_LABELS = {
