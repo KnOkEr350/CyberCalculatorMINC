@@ -1347,6 +1347,7 @@ async function openEntryModal(entry, readOnly = false) {
     </div>
     ${isEdit && cat.code === "minc_decision" ? '<div class="card" id="m-cost-history"><h2>История подтверждённой стоимости</h2><div class="loading-state"><span class="spinner"></span>Загрузка…</div></div>' : ""}
     ${renderAttachSection(attachmentReadOnly)}
+    ${isEdit && cat.code === "top_it" ? renderTopItemsSection() : ""}
     </form>
   `,
   });
@@ -1602,6 +1603,7 @@ async function openEntryModal(entry, readOnly = false) {
 
   if (isEdit) {
     wireAttachSection(backdrop, entry.id, attachmentReadOnly, attachmentUpload);
+    if (cat.code === "top_it") wireTopItems(backdrop, entry.id, !readOnly);
   } else {
     backdrop.querySelector("#attach-list").textContent =
       "Файлы необязательны. Выбранные файлы загрузятся после создания записи.";
@@ -1679,6 +1681,136 @@ async function wireAttachSection(root, entryId, readOnly = false, uploadControl 
       uploadButton.textContent = "Загрузить";
     }
   };
+  refresh();
+}
+
+// ТОП-ИТ/ТОП-ИИ: составляющие программы (TOP-04, TOP-06, TOP-07) — неденежная
+// поддержка, стипендиаты и производственные кейсы. Пороги и шкала прогресса не
+// показываются: они ждут решения ADR-14.
+const TOP_KIND_LABELS = { support: "Неденежная поддержка", scholarship: "Стипендиаты", case: "Производственные кейсы" };
+const TOP_SUPPORT_KIND_LABELS = { equipment: "Оборудование", software: "Программное обеспечение" };
+const TOP_CASE_STATUS_LABELS = { proposed: "Предложен", implemented: "Внедрён" };
+const TOP_FIELDS = {
+  support: [
+    { key: "support_kind", label: "Вид поддержки", type: "select", options: TOP_SUPPORT_KIND_LABELS },
+    { key: "act_reference", label: "Реквизиты акта приёма-передачи", type: "text" },
+    { key: "act_date", label: "Дата акта", type: "date" },
+    { key: "balance_value_rub", label: "Балансовая стоимость, ₽", type: "money" },
+    { key: "appraised_value_rub", label: "Оценочная стоимость, ₽", type: "money" },
+    { key: "confirmed_value_rub", label: "Подтверждённая стоимость, ₽", type: "money" },
+  ],
+  scholarship: [
+    { key: "student_name", label: "Студент", type: "text" },
+    { key: "group_name", label: "Группа", type: "text" },
+    { key: "course", label: "Курс (1–6)", type: "number" },
+    { key: "period_start", label: "Начало периода", type: "date" },
+    { key: "period_end", label: "Конец периода", type: "date" },
+    { key: "amount_rub", label: "Сумма стипендии, ₽", type: "money" },
+    { key: "criterion", label: "Критерий отбора", type: "text" },
+    { key: "donor_name", label: "Компания-донор", type: "text" },
+  ],
+  case: [
+    { key: "implementation_org", label: "Организация внедрения", type: "text" },
+    { key: "implementation_status", label: "Статус внедрения", type: "select", options: TOP_CASE_STATUS_LABELS },
+    { key: "implemented_on", label: "Дата внедрения (только у внедрённого)", type: "date" },
+    { key: "description", label: "Описание", type: "text" },
+  ],
+};
+
+function topItemSummary(item) {
+  const money = (value) => (value == null ? "—" : `${Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`);
+  if (item.kind === "support")
+    return `${TOP_SUPPORT_KIND_LABELS[item.support_kind] || item.support_kind} · акт ${item.act_reference || "—"} от ${String(item.act_date || "").split("-").reverse().join(".")} · подтверждено ${money(item.confirmed_value_rub)}`;
+  if (item.kind === "scholarship")
+    return `${item.student_name}, ${item.group_name}, ${item.course} курс · ${item.period_start} — ${item.period_end} · ${money(item.amount_rub)} · донор ${item.donor_name}`;
+  return `${item.implementation_org} · ${TOP_CASE_STATUS_LABELS[item.implementation_status] || item.implementation_status}${item.implemented_on ? " " + item.implemented_on : ""}`;
+}
+
+function renderTopItemsSection() {
+  return `<div class="card" id="top-items-section" style="margin-top:14px;background:transparent;padding:0;border:none">
+    <h2>Составляющие программы</h2>
+    <p class="muted">Неденежная поддержка, стипендиаты и производственные кейсы. Суммы здесь — сведения о программе; зачётный объём определяет отчёт о софинансировании.</p>
+    <div id="top-items-list" class="attach-list muted">Загрузка…</div>
+    <div id="top-items-form-box"></div>
+  </div>`;
+}
+
+async function wireTopItems(root, entryId, canEdit) {
+  const list = root.querySelector("#top-items-list");
+  const formBox = root.querySelector("#top-items-form-box");
+  const refresh = async () => {
+    try {
+      const data = await api(`/entries/${encodeURIComponent(entryId)}/top-items`);
+      const items = data?.items || [];
+      const summary = data?.summary || {};
+      list.className = "attach-list";
+      list.innerHTML = ["support", "scholarship", "case"]
+        .map((kind) => {
+          const rows = items.filter((item) => item.kind === kind);
+          return `<h3>${escapeHTML(TOP_KIND_LABELS[kind])} · ${rows.length}</h3>${rows.length
+            ? rows.map((item) => `<div class="top-item-row"><span><b>${escapeHTML(item.title)}</b> — ${escapeHTML(topItemSummary(item))}</span>${canEdit ? `<button type="button" class="btn secondary" data-top-delete="${escapeHTML(item.id)}">Удалить</button>` : ""}</div>`).join("")
+            : '<p class="muted">Строк пока нет.</p>'}`;
+        })
+        .join("");
+      if (summary.supports || summary.scholarships || summary.cases)
+        list.insertAdjacentHTML("beforeend", `<p class="muted">Подтверждённая поддержка: ${Number(summary.confirmed_support_rub || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽ (без подтверждения: ${Number(summary.unconfirmed_supports || 0)}); стипендии: ${Number(summary.scholarships_total_rub || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽; внедрено кейсов: ${Number(summary.implemented_cases || 0)} из ${Number(summary.cases || 0)}.</p>`);
+      list.querySelectorAll("[data-top-delete]").forEach((button) => {
+        button.onclick = async () => {
+          if (!confirm("Удалить строку?")) return;
+          button.disabled = true;
+          try {
+            await api(`/top-items/${encodeURIComponent(button.dataset.topDelete)}`, { method: "DELETE" });
+            await refresh();
+          } catch (error) {
+            showToast(error.message);
+            button.disabled = false;
+          }
+        };
+      });
+    } catch (error) {
+      list.className = "error";
+      list.textContent = error.message;
+    }
+  };
+  if (canEdit) {
+    formBox.innerHTML = `<form id="top-item-form" class="top-item-form"><div class="field"><label>Что добавить</label><select name="kind">${Object.entries(TOP_KIND_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div>
+      <div class="field"><label>Название *</label><input name="title" maxlength="300" required></div><div id="top-item-fields" class="grid cols-2"></div>
+      <button type="submit" class="btn secondary">Добавить строку</button></form>`;
+    const form = formBox.querySelector("form");
+    const fields = form.querySelector("#top-item-fields");
+    const drawFields = () => {
+      fields.innerHTML = TOP_FIELDS[form.elements.kind.value]
+        .map((field) => `<div class="field"><label>${escapeHTML(field.label)}</label>${field.type === "select"
+          ? `<select name="${field.key}">${Object.entries(field.options).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select>`
+          : `<input name="${field.key}" type="${field.type === "money" ? "text" : field.type}" ${field.type === "money" ? 'inputmode="decimal"' : ""}>`}</div>`)
+        .join("");
+    };
+    form.elements.kind.onchange = drawFields;
+    drawFields();
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const kind = form.elements.kind.value;
+      const body = { kind, title: form.elements.title.value.trim() };
+      for (const field of TOP_FIELDS[kind]) {
+        const raw = String(form.elements[field.key].value || "").trim().replace(",", ".");
+        if (raw === "") continue;
+        body[field.key] = field.type === "number" ? Number(raw) : raw;
+      }
+      const submit = form.querySelector("button[type=submit]");
+      submit.disabled = true;
+      try {
+        await api(`/entries/${encodeURIComponent(entryId)}/top-items`, { method: "POST", body: JSON.stringify(body) });
+        form.reset();
+        drawFields();
+        await refresh();
+        showToast("Строка добавлена", "success");
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        submit.disabled = false;
+      }
+    };
+  }
   refresh();
 }
 

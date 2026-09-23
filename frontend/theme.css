@@ -604,3 +604,10 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 .dashboard-quick > span { margin-right: 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .dashboard-quick .btn { min-height: 32px; padding: 4px 12px; font-size: 12px; }
 @media (max-width: 720px) { .dashboard-actions { padding: 10px 12px; } .dashboard-quick { width: 100%; } }
+
+/* Составляющие программы ТОП-ИТ */
+.top-item-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.top-item-row span { min-width: 0; overflow-wrap: anywhere; }
+.top-item-row .btn { flex: 0 0 auto; min-height: 28px; padding: 2px 10px; }
+.top-item-form { margin-top: 12px; display: grid; gap: 10px; }
+#top-items-section h3 { margin: 12px 0 4px; font-size: 12px; color: var(--navy); }

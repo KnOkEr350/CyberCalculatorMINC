@@ -4,10 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"cybercalc/internal/money"
 )
@@ -111,4 +114,58 @@ func TestRichInlineAndNonFirstPhysicalSheet(t *testing.T) {
 	if rows[0][0] != "Фамилия" || rows[0][1] != "" || rows[0][2] != "3" {
 		t.Fatalf("rich/sparse parsing: %v", rows)
 	}
+}
+
+// QA-10: генерация книги на согласованном объёме — 50 000 строк по 13 граф
+// (Приложение № 4) — укладывается в бюджет времени и памяти.
+func TestLargeWorkbookBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("длинная проверка")
+	}
+	const rows = 50_000
+	headers := make([]string, 13)
+	for i := range headers {
+		headers[i] = fmt.Sprintf("Графа %d", i+1)
+	}
+	data := make([][]interface{}, rows)
+	for i := range data {
+		row := make([]interface{}, 13)
+		for c := range row {
+			if c%3 == 0 {
+				row[c] = float64(i*c) / 7
+			} else {
+				row[c] = fmt.Sprintf("Значение %d-%d", i, c)
+			}
+		}
+		data[i] = row
+	}
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	wb := New()
+	wb.AddSheet("Данные", headers, data)
+	start := time.Now()
+	var out bytes.Buffer
+	if err := wb.Encode(&out); err != nil {
+		t.Fatal(err)
+	}
+	took := time.Since(start)
+	limit := 10 * time.Second
+	if raceBuild {
+		limit *= 8
+	}
+	if took > limit {
+		t.Errorf("книга на %d строк собиралась %v при бюджете %v", rows, took, limit)
+	}
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	// Сжатая книга остаётся небольшой; пик памяти держится в разумных пределах.
+	if out.Len() > 60<<20 {
+		t.Errorf("книга занимает %d МиБ", out.Len()>>20)
+	}
+	if peak := int64(after.TotalAlloc) - int64(before.TotalAlloc); peak > 6<<30 {
+		t.Errorf("сборка выделила %d МиБ", peak>>20)
+	}
+	t.Logf("50 000 строк: %v, %d КиБ, выделено %d МиБ", took, out.Len()>>10, (int64(after.TotalAlloc)-int64(before.TotalAlloc))>>20)
+	runtime.KeepAlive(data)
 }

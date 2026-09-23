@@ -5,7 +5,7 @@
 `docs/traceability_evidence.json`. Матрица показывает, где искать исполнение задачи; результат
 приёмки она не заменяет.
 
-Задач: 202 — выполнено 145, частично 22, не начато 35.
+Задач: 202 — выполнено 146, частично 26, не начато 30.
 
 | Задача | Название | Статус | Код | Тесты | Документы |
 |---|---|---|---|---|---|
@@ -48,7 +48,7 @@
 | SEC-06 | AUDITOR_VIEWER | выполнено | — | `backend/internal/handlers/document_roles_test.go` | — |
 | SEC-07 | MFA policy v4.4 | выполнено | `backend/internal/handlers/admin.go`<br>`backend/internal/handlers/auth_handlers.go`<br>`backend/internal/handlers/mfa_policy.go` | `backend/internal/handlers/mfa_policy_integration_test.go` | — |
 | SEC-08 | Политика сессий | выполнено | `backend/internal/auth/session.go`<br>`migrations/0106_session_idle_timeout.sql` | `backend/internal/handlers/audit_and_session_integration_test.go` | — |
-| SEC-09 | Security contract tests | частично | — | `backend/internal/handlers/rbac_matrix_test.go`<br>`backend/internal/server/role_matrix_integration_test.go`<br>`backend/internal/traceability/traceability_test.go` | — |
+| SEC-09 | Security contract tests | частично | — | `backend/internal/handlers/rbac_matrix_test.go`<br>`backend/internal/handlers/role_category_matrix_integration_test.go`<br>`backend/internal/server/role_matrix_integration_test.go`<br>`backend/internal/traceability/traceability_test.go` | — |
 | SEC-10 | Диспетчер задач и эскалаций | частично | `backend/internal/handlers/workflow_tasks.go`<br>`backend/internal/rbac/rbac.go`<br>`backend/internal/tasks/resolve.go`<br>`migrations/0809_workflow_tasks.sql` | `backend/internal/handlers/workflow_tasks_integration_test.go` | — |
 | TCH-01 | Модель педагогической нагрузки | выполнено | `backend/internal/handlers/entries.go`<br>`migrations/0301_teaching_load_atomic_key.sql` | `backend/internal/handlers/teaching_load_key_integration_test.go` | — |
 | TCH-02 | Матрица семестров | выполнено | — | — | `docs/TEACHING_SEMESTERS.md`<br>`docs/TEACHING_SEMESTERS.md` |
@@ -127,7 +127,7 @@
 | WF-07 | Snapshot API | выполнено | — | `backend/internal/handlers/limits_and_snapshots_test.go` | — |
 | WF-08 | Источник «Факт на 1 мая» | выполнено | `backend/internal/handlers/annex4.go` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | — |
 | REPORT-01 | Reporting projection | выполнено | `migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | `docs/PERFORMANCE.md` |
-| REPORT-02 | Общий XLSX/DOCX toolkit | частично | `backend/internal/docx`<br>`backend/internal/xlsx` | — | — |
+| REPORT-02 | Общий XLSX/DOCX toolkit | частично | `backend/internal/docx`<br>`backend/internal/xlsx` | `backend/internal/exchange/perf_test.go` | — |
 | REPORT-03 | Приложение №4 XLSX | частично | — | `backend/internal/handlers/limits_and_snapshots_test.go` | — |
 | REPORT-04 | Приложение №5, таблица 1 | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | `docs/adr/ADR-20-snapshot-cutoff.md` |
 | REPORT-05 | Приложение №1 к отчёту | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | — |
@@ -145,7 +145,7 @@
 | CRYPTO-04 | Экспорт: sign + encrypt | частично | — | `backend/internal/exchange/exchange_test.go` | — |
 | CRYPTO-05 | Импорт: decrypt + verify | частично | — | `backend/internal/exchange/exchange_test.go` | — |
 | CRYPTO-06 | Composite matching | выполнено | — | `backend/internal/exchange/matching_test.go` | — |
-| CRYPTO-07 | Diff Engine | выполнено | — | `backend/internal/exchange/diff_test.go` | `docs/PERFORMANCE.md` |
+| CRYPTO-07 | Diff Engine | выполнено | — | `backend/internal/exchange/diff_test.go` | — |
 | CRYPTO-08 | Разрешение конфликтов | не начато | — | — | — |
 | CRYPTO-09 | Протокол разногласий XLSX | выполнено | — | `backend/internal/exchange/protocol_test.go` | — |
 | CRYPTO-10 | Fixture provider и CryptoPro adapter stub | выполнено | `backend/internal/cryptoengine` | — | — |
@@ -182,16 +182,16 @@
 | UI-10 | Отчётность | не начато | — | — | — |
 | UI-11 | Настройки | не начато | — | — | — |
 | OPS-01 | Встраивание SPA | выполнено | `backend/internal/modules/webapp/module.go` | `backend/internal/modules/webapp/module_test.go` | `docs/adr/ADR-05-frontend-delivery.md` |
-| OPS-02 | TLS bootstrap | не начато | — | — | — |
+| OPS-02 | TLS bootstrap | частично | `backend/cmd/tlsbootstrap/main.go`<br>`backend/internal/tlsboot/tlsboot.go` | — | `docs/RUNBOOK.md` |
 | OPS-03 | nginx hardening/WAF | выполнено | — | `backend/internal/handlers/nginx_hardening_test.go` | — |
-| OPS-04 | Offline container bundle | не начато | — | — | `docs/adr/ADR-05-frontend-delivery.md` |
+| OPS-04 | Offline container bundle | частично | `scripts/build-offline-bundle.sh`<br>`scripts/offline-install.sh` | — | `docs/RUNBOOK.md`<br>`docs/adr/ADR-05-frontend-delivery.md` |
 | OPS-05 | Debian 12 hardened base | не начато | — | — | — |
 | OPS-06 | First boot/recovery console | не начато | — | — | — |
 | OPS-07 | OVA/OVF image | не начато | — | — | — |
 | OPS-08 | QCOW2 image | не начато | — | — | — |
 | OPS-09 | VHDX image | не начато | — | — | — |
-| OPS-10 | Backup/restore v4.4 | не начато | — | — | `docs/adr/ADR-07-retention-policy.md` |
-| OPS-11 | Upgrade/rollback | не начато | — | — | `docs/adr/ADR-05-frontend-delivery.md` |
+| OPS-10 | Backup/restore v4.4 | выполнено | `backend/cmd/backupbundle/main.go`<br>`backend/internal/backup/bundle.go` | `backend/internal/backup/backup_test.go`<br>`backend/internal/backup/drill_integration_test.go` | `docs/RUNBOOK.md`<br>`docs/adr/ADR-07-retention-policy.md` |
+| OPS-11 | Upgrade/rollback | частично | `backend/cmd/upgradecheck/main.go`<br>`backend/internal/upgrade/upgrade.go` | — | `docs/RUNBOOK.md`<br>`docs/adr/ADR-05-frontend-delivery.md` |
 | OPS-12 | Monitoring/runbook | выполнено | `backend/internal/handlers/operations_metrics.go` | `backend/internal/handlers/operations_metrics_integration_test.go` | `docs/RUNBOOK.md` |
 | QA-01 | Formula conformance | выполнено | — | `backend/internal/calculators/conformance_test.go` | — |
 | QA-02 | RBAC/tenant/fallback conformance | выполнено | — | `backend/internal/handlers/tenant_conformance_integration_test.go`<br>`backend/internal/rbac/rbac_test.go`<br>`backend/internal/server/endpoint_matrix_test.go` | — |
@@ -202,8 +202,8 @@
 | QA-07 | Storage security tests | выполнено | — | `backend/internal/filestore/concurrency_test.go`<br>`backend/internal/handlers/upload_quota_race_integration_test.go` | — |
 | QA-08 | API contract suite | выполнено | — | `backend/internal/apicontract/coverage_test.go`<br>`backend/internal/apicontract/dto_schema_test.go` | — |
 | QA-09 | E2E по 11 экранам | не начато | — | — | — |
-| QA-10 | Performance/load | частично | `migrations/0108_entries_hot_path_indexes.sql` | `backend/internal/handlers/dashboard_load_integration_test.go` | `docs/PERFORMANCE.md` |
-| QA-11 | Disaster recovery drill | не начато | — | — | — |
+| QA-10 | Performance/load | частично | `migrations/0108_entries_hot_path_indexes.sql` | `backend/internal/backup/backup_test.go`<br>`backend/internal/exchange/perf_test.go`<br>`backend/internal/handlers/dashboard_load_integration_test.go`<br>`backend/internal/xlsx/xlsx_test.go` | `docs/PERFORMANCE.md` |
+| QA-11 | Disaster recovery drill | частично | `backend/cmd/backupbundle/main.go`<br>`backend/internal/backup/drill.go` | `backend/internal/backup/drill_integration_test.go` | `docs/RUNBOOK.md` |
 | QA-12 | Offline acceptance | не начато | — | — | — |
 | INTG-01 | Подключение backend-модулей | выполнено | — | `backend/internal/server/composition_test.go` | — |
 | INTG-02 | Подключение frontend-экранов | выполнено | `frontend/screens.js` | `frontend/screens.test.cjs` | — |
