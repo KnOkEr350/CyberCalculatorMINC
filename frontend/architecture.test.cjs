@@ -85,3 +85,16 @@ test("product shell locks page scroll and delegates overflow to workspace", () =
   assert.match(theme, /\.app-body\s*\{[^}]*height:\s*100vh[^}]*min-height:\s*0/s);
   assert.match(theme, /\.container\s*\{[^}]*height:\s*calc\(100vh - var\(--topbar-height\)\)[^}]*overflow:\s*auto/s);
 });
+
+test("enterprise shell keeps topbar/sidebar proportions and active hierarchy", () => {
+  const theme = source("./theme.css");
+  const shell = source("./shell/app-shell.js");
+  assert.match(theme, /--topbar-height:\s*56px/);
+  assert.match(theme, /--sidebar-width:\s*248px/);
+  assert.match(theme, /\.topbar\s*\{[^}]*grid-template-columns:\s*var\(--sidebar-width\)\s+52px\s+minmax\(220px,\s*1fr\)\s+auto/s);
+  assert.match(theme, /\.sidebar\s*\{[^}]*position:\s*fixed[^}]*top:\s*var\(--topbar-height\)[^}]*overflow:\s*hidden auto/s);
+  assert.match(theme, /\.primary-nav button\.active\s*\{[^}]*background:\s*rgba\(77,145,220,\.23\)[^}]*color:\s*#fff/s);
+  assert.match(theme, /\.primary-nav button\.active::before\s*\{[^}]*background:\s*#69a9ea/s);
+  assert.match(shell, /navigationIcon\(screen\.icon\)/);
+  assert.match(shell, /11 экранов системы/);
+});

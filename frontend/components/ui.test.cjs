@@ -116,6 +116,18 @@ test("drawer is modal and exposes a labelled close action", () => {
   assert.match(html, /data-drawer-close/);
 });
 
+test("drawer contract keeps right panel overlay, focus trap and guarded close", () => {
+  const source = readFileSync(join(__dirname, "ui.js"), "utf8");
+  const theme = readFileSync(join(__dirname, "..", "theme.css"), "utf8");
+  assert.match(source, /function trapFocus\(event, root\)/);
+  assert.match(source, /if \(event\.key === "Escape"\) close\(\);/);
+  assert.match(source, /if \(options\.canClose && options\.canClose\(\) === false\) return;/);
+  assert.match(source, /const previous = doc\.activeElement/);
+  assert.match(source, /previous\?\.focus/);
+  assert.match(theme, /\.ui-drawer-backdrop\s*\{[^}]*justify-content:\s*flex-end/s);
+  assert.match(theme, /\.ui-drawer\s*\{[^}]*height:\s*100%[^}]*overflow:\s*auto/s);
+});
+
 test("upload is keyboard reachable and restricts accepted files", () => {
   const html = ui.uploadField({ id: "source", accept: ".pdf", required: true });
   assert.match(html, /role="button"/);

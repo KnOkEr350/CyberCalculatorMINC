@@ -64,6 +64,25 @@ func TestFormatAbsenceStatement(t *testing.T) {
 	}
 }
 
+func TestBuildAbsenceStatementRowsSupportsMultipleAgreements(t *testing.T) {
+	rows := buildAbsenceStatementRows([]absenceAgreement{
+		{PartnerName: "МФТИ (НИУ)", SignedOn: "2026-01-20", Number: "14-СОГЛ"},
+		{PartnerName: "МФТИ (НИУ)", SignedOn: "2026-03-05", Number: "22-ДОП"},
+	})
+	if len(rows) != 2 {
+		t.Fatalf("ожидали 2 строки справки, получили %+v", rows)
+	}
+	if rows[0][0] != "Соглашение с МФТИ (НИУ) от 20.01.2026 № 14-СОГЛ" ||
+		rows[1][0] != "Соглашение с МФТИ (НИУ) от 05.03.2026 № 22-ДОП" {
+		t.Fatalf("строки справки по нескольким соглашениям неверны: %+v", rows)
+	}
+	for _, row := range rows {
+		if row[1] != "Фактически подтверждённые мероприятия отсутствуют" {
+			t.Fatalf("основание отсутствия неверно: %+v", row)
+		}
+	}
+}
+
 // REPORT-04: Таблица 1 Приложения № 5 считает процент от единого норматива
 // 3% компании (а не от собственного плана контрагента, которого в
 // официальной форме вообще нет), собирает реквизиты соглашений контрагента

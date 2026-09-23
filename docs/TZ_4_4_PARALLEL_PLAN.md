@@ -308,7 +308,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | REPORT-04 | Приложение №5, таблица 1 — **ВЫПОЛНЕНО** | L | REPORT-01, REPORT-02, DATA-11 | Шесть граф формы воспроизведены: контрагент, реквизиты соглашений, единый норматив 3% компании, сумма затрат и процент от норматива в тыс. руб.; добавлена строка «ИТОГО» и общий подписной блок организации/ОО-РОИВ, закреплено unit-тестами |
 | REPORT-05 | Приложение №1 к отчёту — **ВЫПОЛНЕНО** | M | REPORT-01, REPORT-02 | Форма воспроизведена: отдельный лист на каждую ОО/РОИВ, только реализованные мероприятия, графы вида/мероприятия/метрики/показателя объёма/стоимости и суммы в тыс. руб., строка «ИТОГО» и общий подписной блок ОО/РОИВ и организации |
 | REPORT-06 | Приложение №2 к отчёту — **ВЫПОЛНЕНО** | M | REPORT-01, REPORT-02, INT-01 | Форма построена по программам стажировок с метрикой, объёмом часов, стоимостью и суммой в тыс. руб., строкой «ИТОГО» и подписным блоком; отдельный режим «Отчёт по наставникам» также закрывается итогом и подписным блоком |
-| REPORT-07 | Приложение №3 DOCX — **ЧАСТИЧНО** | M | REPORT-01, REPORT-02 | Справка формируется только при отсутствии факта по конкретному соглашению (партнёр и соглашение обязательны) и содержит формулировку «Соглашение с <ОО> от <дата> № <номер>» вместо сырых UUID; справка по нескольким соглашениям сразу, как допускает официальная форма, не реализована |
+| REPORT-07 | Приложение №3 DOCX — **ВЫПОЛНЕНО** | M | REPORT-01, REPORT-02 | Справка формируется только при отсутствии факта: по конкретному соглашению либо сразу по всем соглашениям выбранного партнёра без фактических мероприятий за год; строки содержат формулировку «Соглашение с <ОО> от <дата> № <номер>» вместо сырых UUID, а кнопка на экране отчётности доступна уже после выбора партнёра |
 | REPORT-08 | Типовые соглашения DOCX — **ЧАСТИЧНО** | L | DATA-01, DATA-02, REPORT-02 | Выгружается связный текст примерной формы соглашения («в лице …, действующего на основании …») с реквизитами и подписантами обеих сторон, отдельно для ОО (Прил. №2) и РОИВ (Прил. №3); незаполненные реквизиты остаются местами для заполнения. Осталось: подписант и основание полномочий со стороны контрагента не хранятся в БД (DATA-02) и печатаются как пропуски |
 | REPORT-09 | АНО АЦ: 6 листов | L | TOP-01–TOP-09, REPORT-02, ADR-14 | Паспорт, cash, in-kind, стипендии, кейсы, РИД; структура только из официальной формы АНО АЦ |
 | REPORT-10 | Конструктор срезов — **ВЫПОЛНЕНО** | L | REPORT-01 | План/факт/дельта с абсолютным и процентным значением реализованы, нулевые строки программно удаляются, при плане=0 и факте>0 «Дельта, %» выводит прочерк «—»; добавлены `risk_filter` (`green/yellow/red`) на том же readiness engine, CSV-выгрузка конструктора и отдельная CSV-плашка на экране 10 |
@@ -324,7 +324,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | ID | Пакет | Размер | Зависимости | Критерий готовности |
 |---|---|---:|---|---|
 | CRYPTO-00 | Production security profile | M | ADR-09 | Утверждены CryptoPro/иной provider, алгоритмы, допустимые виды ЭП, trust store, key storage, chain/revocation/time validation, ротация и threat model |
-| CRYPTO-01 | Интерфейс CryptoEngine | M | ADR-09 | `EncryptForRecipients/Decrypt/Sign/Verify`, provider factory и typed errors не зависят от HTTP/БД и не передают private key через persistence |
+| CRYPTO-01 | Интерфейс CryptoEngine — **ВЫПОЛНЕНО** | M | ADR-09 | Добавлен provider-neutral пакет `internal/cryptoengine`: `EncryptForRecipients/Decrypt/Sign/Verify`, provider factory, typed errors и DTO со ссылками на ключи/сертификаты без передачи private key material через HTTP/БД/persistence |
 | CRYPTO-02 | Модель ключей и сертификатов | M | CRYPTO-01, DATA-01 | Public certificate/key refs для организации и представителя, назначение, срок, статус/отзыв, ротация; private material отсутствует в БД |
 | CRYPTO-03 | Versioned envelope `.pkg` | M | CRYPTO-01, CRYPTO-02, BASE-02 | Canonical signed manifest, sender/recipients, signer/recipient key IDs, algorithms, schema, timestamps, ciphertext hash, limits и forward compatibility |
 | CRYPTO-04 | Экспорт: sign + encrypt | L | CRYPTO-00, CRYPTO-02, CRYPTO-03, REPORT-01 | Представитель подписывает manifest/hash; content key обёрнут на каждого получателя; plaintext не пишется на диск |
@@ -333,7 +333,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | CRYPTO-07 | Diff Engine | L | CRYPTO-06 | identical/collision/missing с локальными и входящими значениями |
 | CRYPTO-08 | Разрешение конфликтов | L | CRYPTO-07, SEC-01 | Принять/отклонить/добавить атомарно; обязательна причина и аудит |
 | CRYPTO-09 | Протокол разногласий XLSX | M | CRYPTO-07, REPORT-02 | Все различия и решения оператора выгружаются |
-| CRYPTO-10 | Fixture provider и CryptoPro adapter stub | M | CRYPTO-01 | Детерминированный тестовый provider; build tags/CGO hooks и понятная ошибка при отсутствии CSP; не маркируется production-ready |
+| CRYPTO-10 | Fixture provider и CryptoPro adapter stub — **ВЫПОЛНЕНО** | M | CRYPTO-01 | Детерминированный `fixture` provider покрывает round-trip шифрования и подписи для тестов, а `cryptopro_cgo` регистрируется как enterprise stub и возвращает понятную ошибку недоступности CSP/CGO/PKCS#11; fixture явно не маркируется production-ready |
 | CRYPTO-11 | Certificate/signature policy | M | CRYPTO-01, CRYPTO-02, CRYPTO-10 | Canonicalization, signer metadata, key usage, chain/time/revocation checks и test vectors |
 
 ## 12. Файлы, CAS и Audit Trail
@@ -386,9 +386,9 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | ID | Пакет визуального соответствия | Размер | Зависимости | Критерий готовности |
 |---|---|---:|---|---|
 | UIR-01 | Карта визуальных токенов — **ВЫПОЛНЕНО** | S | BASE-06 | Из референсов зафиксированы цвета, размеры sidebar/header, сетка, типографика, отступы и состояния; token contract экспортирован в `CyberCalcUI.tokens` и сверяется с CSS |
-| UIR-02 | Sidebar и верхняя область | M | UIR-01, UI-00 | Повторены пропорции, иерархия, активный пункт, line-icons и полноэкранная композиция |
+| UIR-02 | Sidebar и верхняя область — **ВЫПОЛНЕНО** | M | UIR-01, UI-00 | Повторены пропорции, иерархия, активный пункт, line-icons и полноэкранная композиция; topbar/sidebar размеры, fixed-композиция, active marker и использование icon registry закреплены architecture test |
 | UIR-03 | Плотные таблицы, selected state и DnD — **ВЫПОЛНЕНО** | L | UIR-01, BASE-06 | Поиск, сортировка, выделение и пагинация вынесены в общий table contract; reorder/dropzone имеют keyboard alternative в общей библиотеке, а предметные операции продолжают подключать permissions/audit на уровне экранов |
-| UIR-04 | Правые drawer-панели | M | UIR-01, BASE-06 | Просмотр/редактирование открываются справа с overlay, закрытием и сохранением контекста таблицы |
+| UIR-04 | Правые drawer-панели — **ВЫПОЛНЕНО** | M | UIR-01, BASE-06 | Просмотр/редактирование открываются справа с overlay, режимами view/edit, focus trap, Escape/close, восстановлением фокуса и `canClose` guard для сохранения контекста таблицы; контракт закреплён component test |
 | UIR-05 | Формы, переключатели и действия — **ВЫПОЛНЕНО** | M | UIR-01, BASE-06 | Поля, toggle, primary/secondary actions, inline links, compound fields и validation states образуют единую систему в `CyberCalcUI` |
 | UIR-06 | Собственная библиотека пиктограмм — **ВЫПОЛНЕНО** | M | UIR-01 | Единый stroke/размер/состояния вынесены в общий registry; чужие логотипы и закрытые ассеты не используются |
 | UIR-07 | Visual reference suite | M | UIR-02–UIR-06 | Эталонные снимки shell/table/drawer/form на 1366×768 и 1920×1080 проходят regression check |

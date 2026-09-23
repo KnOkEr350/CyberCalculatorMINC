@@ -175,10 +175,8 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		h.exportAgreementTemplate(w, r, u, year, kind, company, partner, agreement)
 		return
 	}
-	if kind == "annex3" && (partner == "" || agreement == "") {
-		// Приложение № 3 — справка по конкретному соглашению; без реквизитов
-		// соглашения формулировка «Соглашение с … от … №…» невозможна.
-		middleware.WriteError(w, 400, "выберите партнёра и соглашение")
+	if kind == "annex3" {
+		h.exportAbsenceStatements(w, r, u, year, company, partner, agreement)
 		return
 	}
 	conds := []string{"e.it_company_id::text=$1", "e.report_year=$2", "eligibility.eligible"}
@@ -228,32 +226,6 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	}
 	if riskFilter != "" {
 		data = filterRegulatoryRowsByRisk(data, riskFilter)
-	}
-	if kind == "annex3" {
-		if len(data) > 0 {
-			middleware.WriteError(w, 409, "справка об отсутствии недоступна: по соглашению есть мероприятия")
-			return
-		}
-		var number, signedOn, partnerName string
-		err := h.DB.QueryRowContext(r.Context(), `SELECT a.number,a.signed_on::text,p.name
-			FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id JOIN partners p ON p.id=ap.partner_id
-			WHERE a.id::text=$1 AND p.id::text=$2 AND a.it_company_id::text=$3`, agreement, partner, company).Scan(&number, &signedOn, &partnerName)
-		if err != nil {
-			middleware.WriteError(w, 404, "соглашение не найдено")
-			return
-		}
-		statement := formatAbsenceStatement(partnerName, signedOn, number)
-		body, err := docx.Table(
-			fmt.Sprintf("Приложение № 3. Информационная справка об отсутствии реализованных мероприятий за %d год", year),
-			[]string{"Соглашение", "Основание"},
-			[][]string{{statement, "Фактически подтверждённые мероприятия отсутствуют"}},
-		)
-		if err != nil {
-			middleware.WriteError(w, 500, "не удалось сформировать справку")
-			return
-		}
-		h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("приложение_3_%d.docx", year), company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
-		return
 	}
 	if len(data) == 0 {
 		middleware.WriteError(w, 409, "нет утверждённых данных для формы")
@@ -322,6 +294,72 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	}
 	h.writeGenerated(w, r, u, kind, "xlsx", filename, company,
 		reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter), year, body)
+}
+
+type absenceAgreement struct {
+	PartnerName string
+	SignedOn    string
+	Number      string
+}
+
+func buildAbsenceStatementRows(items []absenceAgreement) [][]string {
+	rows := make([][]string, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, []string{
+			formatAbsenceStatement(item.PartnerName, item.SignedOn, item.Number),
+			"Фактически подтверждённые мероприятия отсутствуют",
+		})
+	}
+	return rows
+}
+
+func (h *ReportHandlers) exportAbsenceStatements(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, company, partner, agreement string) {
+	if partner == "" {
+		middleware.WriteError(w, 400, "выберите партнёра")
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT p.name,a.signed_on::text,a.number
+		FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id JOIN partners p ON p.id=ap.partner_id
+		WHERE p.id::text=$1 AND a.it_company_id::text=$2 AND ($3='' OR a.id::text=$3)
+		AND NOT EXISTS(
+			SELECT 1 FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id
+			WHERE e.it_company_id::text=$2 AND e.partner_id=p.id AND e.agreement_id=a.id
+				AND e.report_year=$4 AND e.period_type='fact' AND eligibility.eligible
+		)
+		ORDER BY a.signed_on,a.number,a.id`, partner, company, agreement, year)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось проверить соглашения для справки")
+		return
+	}
+	defer rows.Close()
+	items := []absenceAgreement{}
+	for rows.Next() {
+		var item absenceAgreement
+		if err := rows.Scan(&item.PartnerName, &item.SignedOn, &item.Number); err != nil {
+			middleware.WriteError(w, 500, "не удалось прочитать соглашения для справки")
+			return
+		}
+		items = append(items, item)
+	}
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "не удалось прочитать соглашения для справки")
+		return
+	}
+	if len(items) == 0 {
+		middleware.WriteError(w, 409, "справка об отсутствии недоступна: выбранные соглашения не найдены или по ним есть мероприятия")
+		return
+	}
+	body, err := docx.Table(
+		fmt.Sprintf("Приложение № 3. Информационная справка об отсутствии реализованных мероприятий за %d год", year),
+		[]string{"Соглашение", "Основание"},
+		buildAbsenceStatementRows(items),
+	)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось сформировать справку")
+		return
+	}
+	h.writeGenerated(w, r, u, "annex3", "docx", fmt.Sprintf("приложение_3_%d.docx", year), company,
+		reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
 }
 
 func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, kind, company, partner, agreement string) {
