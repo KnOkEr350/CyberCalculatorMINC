@@ -129,6 +129,19 @@ func TestBuildPlanFactRowsDropsZeroRows(t *testing.T) {
 	}
 }
 
+func TestBuildPlanFactRowsShowsDashPercentWithoutPlan(t *testing.T) {
+	data := []regulatoryRow{
+		{PartnerID: "p1", Partner: "МГУ", Category: "internship", CategoryName: "Стажировки", Period: "fact", Amount: money.Amount(150_000_00)},
+	}
+	rows := buildPlanFactRows(data)
+	if len(rows) != 1 {
+		t.Fatalf("ожидали 1 строку, получили %d: %+v", len(rows), rows)
+	}
+	if percent := rows[0][5]; percent != "—" {
+		t.Fatalf("при плане=0 и факте>0 процент дельты должен быть прочерком, получили %v", percent)
+	}
+}
+
 // Регрессия: fmt.Sprint(p[key]) на отсутствующем ключе печатает буквальное
 // "<nil>" в ячейку регламентной формы вместо пустой строки.
 func TestPayloadValueMissingKeyIsEmptyNotNilString(t *testing.T) {

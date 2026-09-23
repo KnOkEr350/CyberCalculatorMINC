@@ -676,9 +676,9 @@ func buildPlanFactRows(data []regulatoryRow) [][]interface{} {
 			continue
 		}
 		delta := float64(a.fact-a.plan) / 100
-		percent := 0.0
+		var percent interface{} = "—"
 		if a.plan > 0 {
-			percent = float64(a.fact-a.plan) / float64(a.plan) * 100
+			percent = math.Round(float64(a.fact-a.plan)/float64(a.plan)*100*100) / 100
 		}
 		out = append(out, []interface{}{a.name, a.category, a.plan, a.fact, delta, percent})
 	}
