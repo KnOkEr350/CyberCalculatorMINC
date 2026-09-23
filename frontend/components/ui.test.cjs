@@ -42,9 +42,11 @@ test("table renders sort semantics, selected row and empty state", () => {
 });
 
 test("drawer is modal and exposes a labelled close action", () => {
-  const html = ui.drawerMarkup({ id: "details", title: "Карточка", content: "<p>Тело</p>" });
+  const html = ui.drawerMarkup({ id: "details", title: "Карточка", content: "<p>Тело</p>", wide: true, mode: "view" });
   assert.match(html, /role="dialog"/);
   assert.match(html, /aria-labelledby="details-title"/);
+  assert.match(html, /ui-drawer-wide/);
+  assert.match(html, /data-drawer-mode="view"/);
   assert.match(html, /data-drawer-close/);
 });
 

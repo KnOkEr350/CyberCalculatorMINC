@@ -100,7 +100,8 @@
 
   function drawerMarkup(options = {}) {
     const id = options.id || "ui-drawer";
-    return `<div class="ui-drawer-backdrop" data-drawer-backdrop><section class="ui-drawer" id="${escapeHTML(id)}" role="dialog" aria-modal="true" aria-labelledby="${escapeHTML(id)}-title" tabindex="-1"><header><h2 id="${escapeHTML(id)}-title">${escapeHTML(options.title || "Панель")}</h2><button type="button" class="btn secondary" data-drawer-close aria-label="Закрыть панель">Закрыть</button></header><div class="ui-drawer-body">${options.content || ""}</div></section></div>`;
+    const mode = options.mode === "view" ? "view" : "edit";
+    return `<div class="ui-drawer-backdrop" data-drawer-backdrop><section class="ui-drawer${options.wide ? " ui-drawer-wide" : ""}" id="${escapeHTML(id)}" role="dialog" aria-modal="true" aria-labelledby="${escapeHTML(id)}-title" data-drawer-mode="${mode}" tabindex="-1"><header><h2 id="${escapeHTML(id)}-title">${escapeHTML(options.title || "Панель")}</h2><button type="button" class="btn secondary" data-drawer-close aria-label="Закрыть панель">Закрыть</button></header><div class="ui-drawer-body">${options.content || ""}</div></section></div>`;
   }
 
   function focusableElements(root) {
@@ -126,6 +127,7 @@
     const drawer = backdrop.querySelector(".ui-drawer");
     const previous = doc.activeElement;
     const close = () => {
+      if (options.canClose && options.canClose() === false) return;
       backdrop.remove();
       if (previous?.focus) previous.focus();
       options.onClose?.();

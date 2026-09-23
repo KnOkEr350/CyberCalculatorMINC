@@ -318,16 +318,21 @@ function renderLogin() {
 }
 
 function openPasswordDialog() {
-  const modal = el(`<div class="modal-backdrop"><div class="card modal"><h2>Смена пароля</h2>
+  const drawer = CyberCalcUI.openDrawer({
+    id: "password-drawer",
+    title: "Смена пароля",
+    mode: "edit",
+    content: `
     <p>После смены пароля потребуется войти заново на всех устройствах.</p>
     <form><label>Текущий пароль<input name="current" type="password" autocomplete="current-password" required maxlength="128"></label>
     <label>Новый пароль<input name="next" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
     <label>Повторите новый пароль<input name="repeat" type="password" autocomplete="new-password" required maxlength="128"></label>
     <p>10–128 символов: заглавная и строчная буквы, цифра и специальный символ.</p>
-    <p role="alert" class="error"></p><button class="btn" type="submit">Сменить пароль</button><button class="btn secondary" type="button">Отмена</button></form></div></div>`);
-  document.body.append(modal);
+    <p role="alert" class="error"></p><button class="btn" type="submit">Сменить пароль</button><button class="btn secondary" type="button">Отмена</button></form>`,
+  });
+  const modal = drawer.element;
   const form = modal.querySelector("form");
-  form.querySelector('[type="button"]').onclick = () => modal.remove();
+  form.querySelector('[type="button"]').onclick = drawer.close;
   form.onsubmit = async (event) => {
     event.preventDefault();
     const error = form.querySelector('[role="alert"]');
@@ -335,7 +340,7 @@ function openPasswordDialog() {
     const button = form.querySelector('[type="submit"]'); button.disabled = true;
     try {
       await api("/auth/password", { method: "POST", body: JSON.stringify({current_password: form.elements.current.value, new_password: form.elements.next.value}) });
-      form.reset(); modal.remove(); state.me = null; render(); showToast("Пароль изменён. Войдите с новым паролем.");
+      form.reset(); drawer.close(); state.me = null; render(); showToast("Пароль изменён. Войдите с новым паролем.");
     } catch (e) { error.textContent = e.message; } finally { button.disabled = false; }
   };
 }
@@ -1041,8 +1046,13 @@ async function openStaffMembersDialog() {
   const role = state.me?.role;
   const canManage = ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(role);
   const canConfirm = ["super_admin", "holding_admin", "org_admin"].includes(role);
-  const backdrop = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true">
-    <div class="flex between"><div><h2>Сотрудники-преподаватели</h2><p class="muted">Единый профиль должности, ОКЗ и подтверждённого ИТ-стажа за последние пять лет.</p></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
+  const drawer = CyberCalcUI.openDrawer({
+    id: "staff-members-drawer",
+    title: "Сотрудники-преподаватели",
+    mode: canManage ? "edit" : "view",
+    wide: true,
+    content: `
+    <p class="muted">Единый профиль должности, ОКЗ и подтверждённого ИТ-стажа за последние пять лет.</p>
     ${canManage ? `<form id="staff-form"><input type="hidden" name="id"><div class="grid cols-3">
       <div class="field"><label>ФИО *</label><input name="fio" maxlength="200" required></div>
       <div class="field"><label>Должность *</label><input name="company_position" maxlength="200" required></div>
@@ -1053,11 +1063,9 @@ async function openStaffMembersDialog() {
       <div class="field"><label>Документ о стаже</label><input name="experience_document_reference" maxlength="1000" placeholder="СТД-Р / трудовая книжка, номер и дата"></div>
     </div><div class="flex"><button class="btn" type="submit">Сохранить профиль</button><button class="btn secondary" type="button" data-staff-reset>Новый профиль</button></div><p class="error" data-staff-error></p></form>` : ""}
     <div id="staff-list">Загрузка…</div>
-  </div></div>`);
-  document.body.appendChild(backdrop);
-  const close = () => backdrop.remove();
-  backdrop.querySelector("[data-close]").onclick = close;
-  backdrop.onclick = (event) => { if (event.target === backdrop) close(); };
+  `,
+  });
+  const backdrop = drawer.element;
   const form = backdrop.querySelector("#staff-form");
   let items = [];
   const reset = () => {
@@ -1112,8 +1120,13 @@ async function openTeachingPayoutsDialog() {
   const role = state.me?.role;
   const canManage = ["super_admin", "holding_admin", "org_admin", "financial_specialist"].includes(role);
   const teachingEntries = (state.entries || []).filter((item) => item.category_code === "teachers");
-  const backdrop = el(`<div class="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true">
-    <div class="flex between"><div><h2>График компенсаций</h2><p class="muted">Квартальный план и подтверждение фактических выплат преподавателям.</p></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
+  const drawer = CyberCalcUI.openDrawer({
+    id: "teaching-payouts-drawer",
+    title: "График компенсаций",
+    mode: canManage ? "edit" : "view",
+    wide: true,
+    content: `
+    <p class="muted">Квартальный план и подтверждение фактических выплат преподавателям.</p>
     ${canManage ? `<form id="payout-form"><input type="hidden" name="id"><div class="grid cols-3">
       <div class="field"><label>Педагогическая нагрузка *</label><select name="teaching_activity_id" required><option value="">— Выберите —</option>${teachingEntries.map((item) => `<option value="${item.id}">${escapeHTML(item.payload.teacher_full_name || "Преподаватель")} · ${escapeHTML(item.payload.course_name || "Курс")} · ${escapeHTML(item.period_type === "fact" ? "Факт" : "План")}</option>`).join("")}</select></div>
       <div class="field"><label>Квартал *</label><select name="target_quarter" required>${[1,2,3,4].map((q) => `<option value="Q${q}">Q${q}</option>`).join("")}</select></div>
@@ -1125,10 +1138,9 @@ async function openTeachingPayoutsDialog() {
       <label class="check-row"><input name="is_fully_paid" type="checkbox"> Выплачено полностью</label>
     </div><div class="flex"><button class="btn" type="submit">Сохранить выплату</button><button class="btn secondary" type="button" data-payout-reset>Новая выплата</button></div><p class="error" data-payout-error></p></form>` : ""}
     <div id="payout-list">Загрузка…</div>
-  </div></div>`);
-  document.body.appendChild(backdrop);
-  const close = () => backdrop.remove();
-  backdrop.querySelector("[data-close]").onclick = close;
+  `,
+  });
+  const backdrop = drawer.element;
   let items = [];
   const form = backdrop.querySelector("#payout-form");
   const reset = () => { if (form) { form.reset(); form.elements.id.value = ""; form.elements.target_year.value = state.year; } };
@@ -1222,10 +1234,15 @@ async function openEntryModal(entry, readOnly = false) {
     ? `<div class="card compliance-card"><div class="flex between"><h3>Документальная готовность</h3><span class="risk-label ${escapeHTML(entry.compliance.state)}"><i></i>${entry.compliance.state === "green" ? "Готово" : entry.compliance.state === "yellow" ? "Нужна доработка" : "Заблокировано"}</span></div><ul>${entry.compliance.checks.map((check) => `<li>${check.complete ? "✓" : check.blocking ? "✕" : "!"} ${escapeHTML(check.label)}</li>`).join("")}</ul><small>Набор правил: ${escapeHTML(entry.compliance.ruleset_version)}</small></div>`
     : "";
 
-  const backdrop =
-    el(`<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true">
+  const drawerTitle = `${readOnly ? "Просмотр записи" : financialOnly ? "Подтверждение компенсации" : isEdit ? "Редактировать запись" : "Новая запись"} — ${cat.name}`;
+  const drawer = CyberCalcUI.openDrawer({
+    id: "entry-drawer",
+    title: drawerTitle,
+    mode: readOnly ? "view" : "edit",
+    wide: true,
+    canClose: () => !busy,
+    content: `
     <form id="m-form" novalidate>
-    <h2 style="margin-top:0">${readOnly ? "Просмотр записи" : financialOnly ? "Подтверждение компенсации" : isEdit ? "Редактировать запись" : "Новая запись"} — ${escapeHTML(cat.name)}</h2>
     ${financialOnly ? '<p class="notice">Финансовая роль изменяет только квартал, плановую компенсацию и реквизиты выплаты. Учебные показатели и расчётная сумма защищены от изменения.</p>' : ""}
     <div class="field"><label>Аудитория</label>
       <select id="m-audience" disabled><option value="${escapeHTML(audience)}">${escapeHTML(AUDIENCE_LABELS[audience])}</option></select>
@@ -1250,7 +1267,9 @@ async function openEntryModal(entry, readOnly = false) {
     </div>
     ${renderAttachSection(attachmentReadOnly)}
     </form>
-  </div></div>`);
+  `,
+  });
+  const backdrop = drawer.element;
 
   const fieldsBox = backdrop.querySelector("#m-fields");
   const syncCostMethod = () => {
@@ -1383,19 +1402,8 @@ async function openEntryModal(entry, readOnly = false) {
     syncSemesterRange();
   }
 
-  const closeModal = () => {
-    if (busy) return;
-    document.removeEventListener("keydown", closeOnEscape);
-    backdrop.remove();
-  };
-  const closeOnEscape = (event) => {
-    if (event.key === "Escape") closeModal();
-  };
+  const closeModal = drawer.close;
   backdrop.querySelector("#m-cancel").onclick = closeModal;
-  backdrop.onclick = (event) => {
-    if (event.target === backdrop) closeModal();
-  };
-  document.addEventListener("keydown", closeOnEscape);
   if (!readOnly) backdrop.querySelector("#m-form").onsubmit = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -1496,8 +1504,6 @@ async function openEntryModal(entry, readOnly = false) {
       partnerSelect.value = selected;
     clearFieldErrors(fieldsBox);
   };
-
-  document.body.appendChild(backdrop);
 
   if (isEdit) {
     wireAttachSection(backdrop, entry.id, attachmentReadOnly, attachmentUpload);
