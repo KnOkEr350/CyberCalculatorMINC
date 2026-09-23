@@ -11,7 +11,7 @@ import (
 func TestComposeBoundary(t *testing.T) {
 	s := newComposeSmoke(t)
 	c := s.newClient(t)
-	for _, path := range []string{"/", "/app.js", "/screens.js", "/style.css", "/api/live", "/api/ready", "/version.txt"} {
+	for _, path := range []string{"/", "/app.js", "/screens.js", "/style.css", "/api/live", "/api/ready", "/api/features", "/version.txt"} {
 		t.Run(path, func(t *testing.T) {
 			data := c.request(t, "GET", path, "", nil, http.StatusOK)
 			switch path {
@@ -22,6 +22,19 @@ func TestComposeBoundary(t *testing.T) {
 			case "/api/live", "/api/ready":
 				if decodeSmoke[struct{ Status string }](t, data).Status != "ok" {
 					t.Fatalf("unhealthy response: %s", data)
+				}
+			case "/api/features":
+				features := decodeSmoke[struct {
+					Version int             `json:"version"`
+					Flags   map[string]bool `json:"flags"`
+				}](t, data)
+				if features.Version != 1 || len(features.Flags) == 0 {
+					t.Fatalf("invalid CI feature snapshot: %+v", features)
+				}
+				for name, enabled := range features.Flags {
+					if !enabled {
+						t.Fatalf("CI frontend feature %q is disabled; disposable smoke stack must enable all features", name)
+					}
 				}
 			case "/version.txt":
 				if got := strings.TrimSpace(string(data)); got != s.version {
@@ -36,6 +49,9 @@ func TestComposeBoundary(t *testing.T) {
 		}
 	})
 	t.Run("authentication", func(t *testing.T) {
+		// A registered protected route returns 401 before login. A 404 here
+		// means the disposable stack forgot to enable its backend features.
+		c.json(t, "GET", "/api/partners", nil, http.StatusUnauthorized)
 		c.json(t, "GET", "/api/auth/me", nil, http.StatusUnauthorized)
 		s.login(t, smokeAdminEmail, smokeAdminPassword)
 	})

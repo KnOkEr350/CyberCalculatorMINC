@@ -508,6 +508,8 @@ jobs:
             echo "BACKEND_REPLICAS=2"
             echo "ADMIN_BOOTSTRAP_EMAIL=ci-admin@example.invalid"
             echo "ADMIN_BOOTSTRAP_PASSWORD=ci-only-admin-password"
+            echo "BACKEND_FEATURE_FLAGS=all"
+            echo "FRONTEND_FEATURE_FLAGS=all"
           } > .env
 
       - name: Validate Compose configuration
