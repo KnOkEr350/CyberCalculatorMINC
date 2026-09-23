@@ -1260,6 +1260,26 @@
         }
       }
     },
+    "/api/entries/{id}/cost-history": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "planning"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/staff-members": {
       "get": {
         "tags": [
@@ -2281,6 +2301,10 @@
           "legal_entity_group_id": true,
           "signature_method": true,
           "signed_by": true,
+          "company_signer_authority": true,
+          "counterparty_signer_name": true,
+          "counterparty_signer_position": true,
+          "counterparty_signer_authority": true,
           "signature_date": true,
           "document_reference": true,
           "notes": true,

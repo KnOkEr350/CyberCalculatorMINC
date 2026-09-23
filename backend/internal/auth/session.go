@@ -96,9 +96,20 @@ func UserIDFromRequest(r *http.Request, db *sql.DB) (string, bool) {
 	}
 	var userID string
 	var expires time.Time
-	err = db.QueryRowContext(r.Context(), `SELECT user_id, expires_at FROM sessions WHERE token_hash = $1 OR (token_hash IS NULL AND token = $2)`, TokenHash(c.Value), c.Value).
+	// SEC-08: check both the absolute TTL and the configurable sliding idle
+	// timeout in the same statement that records activity. A stale session can
+	// therefore never be revived by a concurrent request.
+	err = db.QueryRowContext(r.Context(), `UPDATE sessions SET last_activity_at=now()
+		WHERE (token_hash=$1 OR (token_hash IS NULL AND token=$2))
+		  AND expires_at>now()
+		  AND last_activity_at>now()-make_interval(mins=>COALESCE(
+		    (SELECT value::integer FROM settings WHERE key='session_idle_timeout_minutes'),30))
+		RETURNING user_id,expires_at`, TokenHash(c.Value), c.Value).
 		Scan(&userID, &expires)
 	if err != nil {
+		// Remove an expired/idle row eagerly. The retention job remains a safety
+		// net, not the mechanism that enforces access.
+		db.ExecContext(r.Context(), `DELETE FROM sessions WHERE token_hash=$1 OR (token_hash IS NULL AND token=$2)`, TokenHash(c.Value), c.Value)
 		return "", false
 	}
 	if time.Now().After(expires) {

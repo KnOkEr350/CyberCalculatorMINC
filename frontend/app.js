@@ -1267,11 +1267,26 @@ async function openEntryModal(entry, readOnly = false) {
         ${readOnly ? "" : `<button type="submit" class="btn" id="m-save">${isEdit ? "Сохранить" : "Создать"}</button>`}
       </div>
     </div>
+    ${isEdit && cat.code === "minc_decision" ? '<div class="card" id="m-cost-history"><h2>История подтверждённой стоимости</h2><div class="loading-state"><span class="spinner"></span>Загрузка…</div></div>' : ""}
     ${renderAttachSection(attachmentReadOnly)}
     </form>
   `,
   });
   const backdrop = drawer.element;
+
+  if (isEdit && cat.code === "minc_decision") {
+    api(`/entries/${encodeURIComponent(entry.id)}/cost-history`).then((items) => {
+      const history = backdrop.querySelector("#m-cost-history div");
+      history.className = "table-wrap";
+      history.innerHTML = items.length
+        ? `<table><thead><tr><th>Редакция</th><th>Было</th><th>Стало</th><th>Основание</th><th>Причина</th><th>Дата</th></tr></thead><tbody>${items.map((item) => `<tr><td>№ ${item.revision_no}</td><td>${item.previous_amount_rub == null ? "—" : fmtMoney(item.previous_amount_rub)}</td><td>${fmtMoney(item.confirmed_amount_rub)}</td><td>${escapeHTML(item.calculation_basis)}</td><td>${escapeHTML(item.correction_reason)}</td><td>${new Date(item.changed_at).toLocaleString("ru-RU")}</td></tr>`).join("")}</tbody></table>`
+        : '<span class="muted">История пока пуста</span>';
+    }).catch((error) => {
+      const history = backdrop.querySelector("#m-cost-history div");
+      history.className = "error";
+      history.textContent = error.message;
+    });
+  }
 
   const fieldsBox = backdrop.querySelector("#m-fields");
   const syncCostMethod = () => {
@@ -1867,6 +1882,8 @@ async function renderAdminSettings(box) {
         <input id="s-attach" type="number" min="1" max="3650" step="1" value="${settings.attachment_retention_days || 365}"></div>
       <div class="field"><label>Хранение журнала изменений, дней</label>
         <input id="s-audit" type="number" min="60" max="3650" step="1" value="${settings.audit_log_retention_days || 60}"></div>
+      ${state.me.role === "super_admin" ? `<div class="field"><label>Выход при бездействии, минут</label>
+        <input id="s-session-idle" type="number" min="5" max="1440" step="1" value="${settings.session_idle_timeout_minutes || 30}"></div>` : ""}
     </div>
     <button class="btn" id="s-save">Сохранить</button>
     <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
@@ -1884,6 +1901,8 @@ async function renderAdminSettings(box) {
     const button = box.querySelector("#s-save");
     const attachmentDays = Number(box.querySelector("#s-attach").value);
     const auditDays = Number(box.querySelector("#s-audit").value);
+    const idleInput = box.querySelector("#s-session-idle");
+    const idleMinutes = idleInput ? Number(idleInput.value) : null;
     if (auditDays < 60) { showToast("Журнал аудита хранится минимум 60 дней"); return; }
     if (
       ![attachmentDays, auditDays].every(
@@ -1891,6 +1910,10 @@ async function renderAdminSettings(box) {
       )
     ) {
       showToast("Срок хранения должен быть целым числом от 1 до 3650 дней");
+      return;
+    }
+    if (idleInput && (!Number.isInteger(idleMinutes) || idleMinutes < 5 || idleMinutes > 1440)) {
+      showToast("Выход при бездействии задаётся целым числом от 5 до 1440 минут");
       return;
     }
     button.disabled = true;
@@ -1902,6 +1925,10 @@ async function renderAdminSettings(box) {
           key: "attachment_retention_days",
           value: String(attachmentDays),
         }),
+      });
+      if (idleInput) await api("/admin/settings", {
+        method: "POST",
+        body: JSON.stringify({ key: "session_idle_timeout_minutes", value: String(idleMinutes) }),
       });
       await api("/admin/settings", {
         method: "POST",

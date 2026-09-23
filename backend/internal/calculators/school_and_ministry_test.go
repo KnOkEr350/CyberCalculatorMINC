@@ -130,6 +130,8 @@ func ministryPayload() map[string]interface{} {
 		"metric_description": "Количество переданных подсистем", "metric_unit": "модуль ПО",
 		"planned_volume": 2.0, "actual_volume": 2.0,
 		"calculation_basis": "Акт сдачи-приёмки и платёжные поручения", "amount_manual": 300000.0,
+		"decision_required_documents": "Акт сдачи-приёмки\nПлатёжное поручение",
+		"decision_provided_documents": "Акт сдачи-приёмки\nПлатёжное поручение",
 	}
 }
 
@@ -161,6 +163,8 @@ func TestMinistryDecisionDynamicMetrics(t *testing.T) {
 		{"нет подтверждённой стоимости", func(p map[string]interface{}) { delete(p, "amount_manual") }, "подтверждённую стоимость"},
 		{"нулевая стоимость", func(p map[string]interface{}) { p["amount_manual"] = 0.0 }, "подтверждённую стоимость"},
 		{"нет методики расчёта", func(p map[string]interface{}) { delete(p, "calculation_basis") }, "методику расчёта"},
+		{"нет состава документов Решения", func(p map[string]interface{}) { delete(p, "decision_required_documents") }, "состав подтверждающих документов"},
+		{"лишний документ", func(p map[string]interface{}) { p["decision_provided_documents"] = "Счёт-фактура" }, "отсутствует в составе"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

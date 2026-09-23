@@ -204,6 +204,19 @@ func TestExpiredSessionIsNotAccepted(t *testing.T) {
 	if remaining != 0 {
 		t.Fatal("истёкшая сессия должна удаляться при обращении, а не ждать фоновой очистки")
 	}
+	idle := issue(8 * time.Hour)
+	if _, err := db.ExecContext(ctx, `UPDATE sessions SET last_activity_at=now()-interval '31 minutes' WHERE token_hash=$1`, auth.TokenHash(idle)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := auth.UserIDFromRequest(request(idle), db); ok {
+		t.Fatal("сессия после тайм-аута бездействия не должна приниматься")
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE token_hash=$1`, auth.TokenHash(idle)).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 0 {
+		t.Fatal("сессия с истёкшим idle timeout должна удаляться при обращении")
+	}
 	// Отказ по сроку не задевает другие сессии того же пользователя.
 	if _, ok := auth.UserIDFromRequest(request(live), db); !ok {
 		t.Fatal("действующая сессия не должна пострадать")

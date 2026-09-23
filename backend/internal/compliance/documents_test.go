@@ -65,19 +65,24 @@ func TestTopITAnoDocuments(t *testing.T) {
 // решение с исходным поручением и первичные документы о расходах.
 func TestMinistryDecisionDocuments(t *testing.T) {
 	documents := []string{"ministry_decision", "expense_evidence"}
-	if got := Evaluate("minc_decision", "fact", map[string]interface{}{}, documents); got.State != "green" {
+	payload := map[string]interface{}{"decision_required_documents": "Акт\nПлатёжное поручение", "decision_provided_documents": "Акт\nПлатёжное поручение"}
+	if got := Evaluate("minc_decision", "fact", payload, documents); got.State != "green" {
 		t.Fatalf("полный комплект по Решению должен быть зелёным: %+v", got)
 	}
-	noDecision := Evaluate("minc_decision", "fact", map[string]interface{}{}, without(documents, "ministry_decision"))
+	noDecision := Evaluate("minc_decision", "fact", payload, without(documents, "ministry_decision"))
 	if noDecision.State != "red" {
 		t.Fatalf("без Решения Минцифры мероприятие не засчитывается: %+v", noDecision)
 	}
-	noEvidence := Evaluate("minc_decision", "fact", map[string]interface{}{}, without(documents, "expense_evidence"))
+	noEvidence := Evaluate("minc_decision", "fact", payload, without(documents, "expense_evidence"))
 	if noEvidence.State != "yellow" {
 		t.Fatalf("без первичных документов ожидалась жёлтая зона: %+v", noEvidence)
 	}
 	// Плановая строка по Решению может опережать первичные документы.
-	if plan := Evaluate("minc_decision", "plan", map[string]interface{}{}, nil); plan.State == "red" {
+	if plan := Evaluate("minc_decision", "plan", payload, nil); plan.State == "red" {
 		t.Fatalf("плановая строка не должна блокироваться отсутствием документов: %+v", plan)
+	}
+	incomplete := map[string]interface{}{"decision_required_documents": "Акт\nПлатёжное поручение", "decision_provided_documents": "Акт"}
+	if got := Evaluate("minc_decision", "fact", incomplete, documents); got.State != "yellow" {
+		t.Fatalf("неполный динамический комплект должен оставаться жёлтым: %+v", got)
 	}
 }

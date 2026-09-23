@@ -74,6 +74,8 @@ func (s *composeSmoke) createPartner(t *testing.T, admin *smokeClient) smokePart
 			"number": "CI-1", "status": "active", "signed_on": "2026-01-01",
 			"valid_from": "2020-01-01", "valid_until": "2100-12-31",
 			"signature_method": "qualified_electronic", "signed_by": "CI Signer",
+			"company_signer_authority": "Charter", "counterparty_signer_name": "CI Partner Signer",
+			"counterparty_signer_position": "Director", "counterparty_signer_authority": "Charter",
 			"signature_date": "2026-01-01", "document_reference": "CI smoke test",
 			"responsible_people": []map[string]string{
 				{"party": "cyberprotect", "full_name": "CI Administrator"},

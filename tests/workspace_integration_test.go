@@ -173,6 +173,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 			"agreement_kind": "education_organization", "number": number, "status": "active",
 			"signed_on": "2026-01-01", "valid_from": "2026-01-01", "valid_until": "2026-12-31",
 			"signature_method": "qualified_electronic", "signed_by": "Иванов Иван Иванович", "signature_date": "2026-01-01",
+			"company_signer_authority": "Устав", "counterparty_signer_name": "Сидоров Сидор Сидорович",
+			"counterparty_signer_position": "Ректор", "counterparty_signer_authority": "Устав",
 			"responsible_people": []map[string]string{{"party": "cyberprotect", "full_name": "Петров Пётр Петрович"}, {"party": "counterparty", "full_name": "Сидоров Сидор Сидорович"}},
 			"activity_codes":     []string{"teachers", "ood_rpd", "internship", "top_it"},
 		}
@@ -370,6 +372,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	internship := map[string]interface{}{
 		"org_name": p1, "mentor_id": mentor, "mentor_full_name": "Поддельное Имя", "student_full_name": "Сидоров Сидор",
 		"duration_months": 2, "student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3,
+		"mentor_assignment_start": "2026-01-01", "mentor_assignment_end": "2026-12-31",
+		"mentor_order_number": "Приказ-2", "mentor_order_date": "2025-12-30",
 		"internship_agreement_reference": "Соглашение-1", "mentor_order_reference": "Приказ-2",
 		"individual_program_reference": "Программа-1", "incoming_certificate_reference": "Справка-вход",
 		"outgoing_certificate_reference": "Справка-итог",
@@ -385,6 +389,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practiceHeaders := []string{
 		"mentor_full_name", "student_full_name", "duration_months", "student_load_hours_per_month", "mentor_load_hours_per_month",
 		"labor_contract_type", "labor_contract_number", "labor_contract_date",
+		"mentor_assignment_start", "mentor_assignment_end", "mentor_order_number", "mentor_order_date",
 		"Номер договора о практической подготовке", "Дата договора о практической подготовке",
 		// PRA-04: возраст и недельные часы обязательны — без них нечем
 		// подтвердить нормы ТК РФ (ст. 63, 92), и практика к зачёту не
@@ -395,6 +400,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		wb := xlsx.New()
 		wb.AddSheet("Данные", practiceHeaders, [][]interface{}{{
 			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01",
+			"2026-09-01", "2026-09-30", "12-ОК", "2026-08-30",
 			"ПР-12", "2026-05-15", 19, 30,
 		}})
 		book, err := wb.Bytes()
@@ -415,6 +421,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practice := map[string]interface{}{
 		"org_name": p1, "mentor_id": mentor, "student_full_name": "Практикантов Павел", "duration_months": 1,
 		"student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3,
+		"mentor_assignment_start": "2026-09-01", "mentor_assignment_end": "2026-09-30",
+		"mentor_order_number": "12-ОК", "mentor_order_date": "2026-08-30",
 		// PRA-04: возраст и недельные часы обязательны для практики.
 		"student_age": 19, "weekly_hours": 30,
 	}
@@ -459,12 +467,13 @@ func TestWorkspaceIntegration(t *testing.T) {
 	mentor2 := object(call(admin, "POST", "/mentors", map[string]string{"partner_id": p2, "full_name": "Орлов Олег Олегович"}, 201))["id"].(string)
 	create(admin, p2, agreement2, "teachers", "plan", teacher(p2), 201)
 	create(admin, p2, agreement2, "ood_rpd", "plan", map[string]interface{}{"org_name": p2, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Другая программа"}, 201)
-	create(admin, p2, agreement2, "internship", "plan", map[string]interface{}{"org_name": p2, "mentor_id": mentor2, "student_full_name": "Орлов Студент", "duration_months": 1, "student_load_hours_per_month": 2, "mentor_load_hours_per_month": 1}, 201)
+	create(admin, p2, agreement2, "internship", "plan", map[string]interface{}{"org_name": p2, "mentor_id": mentor2, "student_full_name": "Орлов Студент", "duration_months": 1, "student_load_hours_per_month": 2, "mentor_load_hours_per_month": 1, "mentor_assignment_start": "2026-01-01", "mentor_assignment_end": "2026-01-31", "mentor_order_number": "1-ОК", "mentor_order_date": "2025-12-30"}, 201)
 	create(admin, p2, agreement2, "minc_decision", "plan", map[string]interface{}{
 		"org_name": p2, "decision_reference": "Решение МЦ-1", "instruction_authority": "president",
 		"instruction_reference": "Поручение П-1", "implementation_deadline": "2026-12-31",
 		"activity_description": "Тестовое мероприятие", "metric_description": "Одна единица",
 		"metric_unit": "ед.", "actual_volume": 1, "calculation_basis": "Фактическая стоимость", "amount_manual": 1000,
+		"decision_required_documents": "Акт", "decision_provided_documents": "",
 	}, 201)
 	otherTransition := "/report-workflow/transition?agreement_id=" + agreement2 + "&report_year=2026&period_type=plan"
 	call(admin, "POST", otherTransition, map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "comment": "Другая ОО комплектна"}, 200)

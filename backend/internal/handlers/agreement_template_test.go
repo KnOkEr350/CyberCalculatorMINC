@@ -16,6 +16,8 @@ func agreementFixture() agreementParty {
 		PartnerName: "МГУ им. М.В. Ломоносова", PartnerINN: "7729082090",
 		CompanyName: "ООО «ИТ-Холдинг»", CompanyINN: "7701234567", CompanyOGRN: "1027700123456",
 		CompanyAddress: "119991, Москва, Ленинские горы, 1", CompanyDirector: "Петров П.П.",
+		CompanySignerAuthority: "Устава", CounterpartySigner: "Иванов И.И.",
+		CounterpartySignerPosition: "Ректор", CounterpartySignerAuthority: "Устава университета",
 	}
 }
 
@@ -60,7 +62,7 @@ func TestAgreementTemplateContainsBothParties(t *testing.T) {
 		"01/26-МЦ", "15.01.2026",
 		"МГУ им. М.В. Ломоносова", "7729082090",
 		"7701234567", "1027700123456", "119991, Москва, Ленинские горы, 1", "Петров П.П.",
-		"в лице", "действующего на основании", "Реквизиты и подписи Сторон",
+		"Иванов И.И.", "Устава университета", "в лице", "действующего на основании", "Реквизиты и подписи Сторон",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("в тексте соглашения нет фрагмента %q", fragment)

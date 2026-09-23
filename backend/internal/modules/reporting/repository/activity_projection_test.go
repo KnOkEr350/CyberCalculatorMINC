@@ -56,7 +56,7 @@ func TestProjectLegacyActivityKeepsUnapprovedFactOutOfCountedAmount(t *testing.T
 		period:        "fact",
 		amount:        money.Amount(50_000),
 		formulaAmount: money.Amount(50_000),
-		payload:       []byte(`{"actual_value":1}`),
+		payload:       []byte(`{"actual_value":1,"decision_required_documents":"Акт","decision_provided_documents":"Акт"}`),
 		reportStatus:  "draft",
 		documents:     []string{"ministry_decision:approved", "expense_evidence:approved"},
 	}

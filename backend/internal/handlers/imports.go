@@ -263,7 +263,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 				}
 				row.Payload["mentor_id"] = id
 			}
-			if err := h.validateMentor(r, category, partner, row.Payload); err != nil {
+			if err := h.validateMentor(r, category, partner, "", row.Payload); err != nil {
 				return err
 			}
 			if err := calculators.ValidatePayload(calc, row.Payload); err != nil {
@@ -334,10 +334,22 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	for _, row := range result.Rows {
 		payload, _ := json.Marshal(row.Payload)
+		mentor := mentorColumns(category, row.Payload)
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, u.ID).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,created_by,
+			mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,'')::uuid,NULLIF($15,'')::date,NULLIF($16,'')::date,NULLIF($17,''),NULLIF($18,'')::date,NULLIF(lower($19),'')) RETURNING id`,
+			category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, u.ID,
+			mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
+		}
+		if category == "minc_decision" {
+			if _, err := tx.ExecContext(r.Context(), `INSERT INTO ministry_cost_revisions(entry_id,revision_no,confirmed_amount_rub,calculation_basis,correction_reason,changed_by)
+				VALUES($1,1,$2,$3,'Начальная редакция, импорт Excel',$4)`, id, row.Amount, strings.TrimSpace(fmt.Sprint(row.Payload["calculation_basis"])), u.ID); err != nil {
+				middleware.WriteError(w, 500, "ошибка истории стоимости; импорт отменён")
+				return
+			}
 		}
 		if logAudit(r.Context(), tx, "entry", id, "create", u.ID, "импорт Excel", nil, row) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита; импорт отменён")

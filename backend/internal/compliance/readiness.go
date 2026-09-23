@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const RulesetVersion = "mincifry-270-2026.1"
+const RulesetVersion = "mincifry-270-2026.2"
 
 type Check struct {
 	Code     string `json:"code"`
@@ -190,6 +190,18 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 	case "minc_decision":
 		require("ministry_decision", "Решение Минцифры и исходное поручение", hasDoc("ministry_decision", "decision_reference"), blockDocuments)
 		require("expense_evidence", "Акты, платежи и первичные документы", hasDoc("expense_evidence", "expense_evidence_reference"), false)
+		// MIN-04: the Decision itself defines its evidence package. The generic
+		// attachment proves the uploaded package, while this inventory verifies
+		// every named item instead of assuming one hard-coded composition.
+		required := evidenceList(payload["decision_required_documents"])
+		provided := map[string]bool{}
+		for _, item := range evidenceList(payload["decision_provided_documents"]) {
+			provided[strings.ToLower(item)] = true
+		}
+		require("decision_evidence_scope", "В Решении указан состав подтверждающих документов", len(required) > 0, blockDocuments)
+		for index, item := range required {
+			require(fmt.Sprintf("decision_evidence_%d", index+1), "Документ по Решению: "+item, provided[strings.ToLower(item)], false)
+		}
 	}
 	if pendingReview {
 		require("document_review", "Документы ожидают юридической проверки", false, false)
@@ -198,6 +210,21 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 		result.State, result.Ready, result.Eligible = "red", false, false
 	} else if len(result.Warnings) > 0 {
 		result.State, result.Ready, result.Eligible = "yellow", false, false
+	}
+	return result
+}
+
+func evidenceList(value interface{}) []string {
+	text, ok := value.(string)
+	if !ok {
+		return nil
+	}
+	text = strings.ReplaceAll(text, ";", "\n")
+	result := []string{}
+	for _, line := range strings.Split(text, "\n") {
+		if item := strings.Join(strings.Fields(line), " "); item != "" {
+			result = append(result, item)
+		}
 	}
 	return result
 }
