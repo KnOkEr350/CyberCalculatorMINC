@@ -80,10 +80,19 @@ func TestAuditorViewerIsReadOnly(t *testing.T) {
 	if canPrepareReports(auditor) {
 		t.Fatal("аудитор не готовит отчёты")
 	}
+	if canCreateAnyEntry(auditor) {
+		t.Fatal("аудитор не создаёт мероприятия")
+	}
+	if canEditAnyEntry(auditor) {
+		t.Fatal("аудитор не редактирует мероприятия")
+	}
 	if canUploadAnyDocument(auditor) {
 		t.Fatal("аудитор не загружает документы")
 	}
 	for _, category := range []string{"teachers", "ood_rpd", "internship", "employment_practice", "top_it", "minc_decision", "it_clubs", "teacher_training", "edu_content"} {
+		if canCreateEntryCategory(auditor, category) {
+			t.Fatalf("аудитор не должен создавать мероприятия вида %q", category)
+		}
 		if canEditEntryCategory(auditor, category) {
 			t.Fatalf("аудитор не должен редактировать мероприятия вида %q", category)
 		}
@@ -93,8 +102,23 @@ func TestAuditorViewerIsReadOnly(t *testing.T) {
 			}
 		}
 	}
+	if canReviewReport(auditor, string(models.PeriodPlan)) || canReviewReport(auditor, string(models.PeriodFact)) {
+		t.Fatal("аудитор не согласует и не возвращает отчёты контрагента")
+	}
+	if canApproveReports(auditor) {
+		t.Fatal("аудитор не утверждает отчёты")
+	}
+	if canManageITCompanies(auditor) || canManagePartnerStructure(auditor) || canProposeEducationDirectory(auditor) || canApproveEducationDirectory(auditor) {
+		t.Fatal("аудитор не выполняет административные изменения справочников")
+	}
 	// При этом читать данные своей организации аудитор вправе.
 	if !canReadTenantData(auditor) {
 		t.Fatal("аудитор должен иметь инспекционный доступ на чтение")
+	}
+	if !canViewITCompanies(auditor) {
+		t.Fatal("аудитор должен видеть справочник ИТ-компаний в режиме чтения")
+	}
+	if !canAccessPartner(auditor, "partner-id") {
+		t.Fatal("аудитор должен иметь чтение карточек партнёров в своём tenant scope")
 	}
 }

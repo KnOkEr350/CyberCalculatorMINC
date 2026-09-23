@@ -158,7 +158,7 @@ BASE-13 и утверждение production security profile в CRYPTO-00.
 | SEC-03 | SUPER_ADMIN / HOLDING_ADMIN | M | SEC-01, DATA-10, ADR-23 | Именованный SUPER_ADMIN создаётся/восстанавливается root-оператором; системные и холдинговые полномочия проверяются тестами |
 | SEC-04 | ORG_ADMIN / CURATOR и fallback | L | SEC-01, DATA-09, ADR-22 | Куратор видит закреплённый scope и получает бесхозные профильные задачи без автоматического расширения permissions |
 | SEC-05 | HR / FINANCE / LEGAL | L | SEC-01, ADR-17 | Полевая авторизация; юрист может `raise_dispute`, но не изменяет исходные/финансовые поля; запрещённые PATCH отклоняются |
-| SEC-06 | AUDITOR_VIEWER — **ЧАСТИЧНО** | S | SEC-01 | Полный read-only: аудитор не относится к сотрудникам, ведущим данные, не готовит отчёты, не редактирует мероприятия ни одного вида и не загружает документы, но сохраняет инспекционный доступ на чтение. Осталось: сквозная матрица роль × endpoint из SEC-09 |
+| SEC-06 | AUDITOR_VIEWER — **ВЫПОЛНЕНО** | S | SEC-01 | Полный read-only закреплён: аудитор не относится к сотрудникам, ведущим данные, не готовит отчёты, не создаёт и не редактирует мероприятия ни одного вида, не загружает документы, не согласует/утверждает отчёты и не выполняет административные изменения справочников, но сохраняет инспекционный доступ на чтение партнёров, tenant data и справочника ИТ-компаний. Сквозная матрица роль × endpoint остаётся отдельной задачей SEC-09 |
 | SEC-07 | MFA policy v4.4 | M | ADR-06, SEC-01 | Глобальный toggle только SUPER_ADMIN, grace period, enrollment, recovery/reset, replay protection и аудит |
 | SEC-08 | Политика сессий | M | SEC-01 | Idle/absolute timeout, отзыв, смена роли и деактивация немедленно закрывают доступ |
 | SEC-09 | Security contract tests | M | SEC-02–SEC-08 | Автоматически проверена матрица роль × endpoint × tenant × field |
@@ -313,7 +313,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | REPORT-09 | АНО АЦ: 6 листов | L | TOP-01–TOP-09, REPORT-02, ADR-14 | Паспорт, cash, in-kind, стипендии, кейсы, РИД; структура только из официальной формы АНО АЦ |
 | REPORT-10 | Конструктор срезов — **ВЫПОЛНЕНО** | L | REPORT-01 | План/факт/дельта с абсолютным и процентным значением реализованы, нулевые строки программно удаляются, при плане=0 и факте>0 «Дельта, %» выводит прочерк «—»; добавлены `risk_filter` (`green/yellow/red`) на том же readiness engine, CSV-выгрузка конструктора и отдельная CSV-плашка на экране 10 |
 | REPORT-11 | Реестр сформированных файлов — **ЧАСТИЧНО** | M | REPORT-03–REPORT-10 | Автор, hash, время и повторная загрузка зафиксированного файла реализованы; в JSONB-фильтрах реестра сохраняется полный набор применённых параметров (partner_id/agreement_id, а для конструктора срезов — ещё period_type/category_code/mentor_id) и, для Приложения №4, snapshot_id/snapshot_sha256 снимка-источника; пакет остаётся частично готовым только потому, что формально зависит от REPORT-03–REPORT-10, которые сами не закрыты |
-| REPORT-12 | Golden regression suite — **ЧАСТИЧНО** | L | REPORT-03–REPORT-10, BASE-13 | Добавлен golden-контроль структуры и заголовков новых форм; сравнение с официальными файлами конкретной редакции остаётся заблокировано до BASE-13 |
+| REPORT-12 | Golden regression suite — **ЧАСТИЧНО** | L | REPORT-03–REPORT-10, BASE-13 | Добавлен golden-контроль структуры и заголовков новых форм, отдельно закреплён общий подписной блок регламентных форм; сравнение с официальными файлами конкретной редакции остаётся заблокировано до BASE-13 |
 
 ## 11. CryptoEngine, `.pkg` и Diff Engine
 
@@ -372,12 +372,12 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | UIR-05 | ВЫПОЛНЕНО | Базовые поля, focus/error states, primary/secondary кнопки, toggle/switch, inline actions, составные поля и validation summary вынесены в `CyberCalcUI`; component tests закрепляют доступные подписи и состояния | При появлении новых предметных форм использовать этот контракт вместо локальных контролов |
 | UIR-06 | ВЫПОЛНЕНО | Собственная библиотека inline SVG line-icons вынесена в общий `CyberCalcUI.iconRegistry`, навигация и KPI дашборда используют registry; ADR-21 закрыт в UI собственным брендом «ИТ-Партнерство / Калькулятор Минцифры» без копирования товарного знака | При добавлении новых иконок регистрировать их в общей библиотеке |
 | UIR-07 | НЕ НАЧАТО | В репозитории есть референсные снимки | Добавить воспроизводимые эталонные снимки shell/table/drawer/form и автоматическое сравнение на 1366×768 и 1920×1080 |
-| UI-00 | ЧАСТИЧНО | Работают registry, lazy loading 11 маршрутов, отдельный shell, skip-link, `aria-current`, 100vh workspace, sidebar collapse и mobile drawer | Добавить permission-aware navigation и полный keyboard/focus сценарий |
+| UI-00 | ВЫПОЛНЕНО | Работают registry, lazy loading 11 маршрутов, отдельный shell, skip-link, `aria-current`, 100vh workspace, sidebar collapse и mobile drawer; добавлены permission-aware режимы пунктов меню и keyboard/focus сценарий sidebar на ArrowUp/ArrowDown/ArrowLeft/ArrowRight/Home/End | Поддерживать контракт при добавлении новых экранов и ролей |
 | UI-01 | ЧАСТИЧНО | Реализованы KPI, 3% прогресс и профицит, risk buckets, mandatory chips и таблица всех видов | Заменить оперативную UI-оценку рисков единым backend `ComplianceProjection` с раздельными readiness/eligibility/approval |
 | UI-02 | ЧАСТИЧНО | Существующие справочники учебных заведений и ИТ-компаний получили новый стиль | Собрать единый экран партнёров v4.4: ОО/РОИВ/школы и ИТ-компании группы/договора взаимодействия, фильтры, drawer, документы, соглашения, кураторы и бюджеты |
 | UI-03–UI-11 | ЧАСТИЧНО | [Девять отдельных маршрутов](FRONTEND_11_SCREENS.md) подключены к действующим API: категории изолированы, отчётность и настройки имеют собственные экраны | Достроить специализированные подреестры и операции после утверждения недостающих backend-контрактов |
-| UI-12 | ЧАСТИЧНО | Есть skip-link, семантическая nav, подписи и ARIA для основных shell-действий; добавлены smoke-проверки доступных имён/ролей общих компонентов и всех 11 screen descriptors, включая title/subtitle/icon | Остался полноценный ручной/визуальный WCAG pass по предметным экранам после стабилизации всех форм |
-| UI-13 | НЕ НАЧАТО | Автоматизированных screenshot/regression проверок не найдено | Добавить desktop/tablet эталоны, проверку переполнения и запрет общего page scroll |
+| UI-12 | ЧАСТИЧНО | Есть skip-link, семантическая nav, подписи и ARIA для основных shell-действий; добавлены smoke-проверки доступных имён/ролей общих компонентов и всех 11 screen descriptors, включая title/subtitle/icon; навигационные пункты получили role-aware `aria-label`, а focus-visible состояние и keyboard сценарий shell закреплены тестами | Остался полноценный ручной/визуальный WCAG pass по предметным экранам после стабилизации всех форм |
+| UI-13 | ЧАСТИЧНО | Добавлен автоматический guard против общего page scroll: shell фиксируется во viewport, прокрутка остаётся в рабочей `.container`, CSS-инварианты проверяются frontend architecture test | Остались desktop/tablet screenshot-эталоны и pixel-diff regression |
 
 `brandMarkup()` больше не выводит название «КИБЕРПРОТЕКТ»: интерфейс использует собственный бренд «ИТ-Партнерство / Калькулятор Минцифры», поэтому ADR-21 по копированию товарного знака закрыт на уровне UI-поставки.
 
@@ -395,7 +395,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 
 | ID | Экран | Размер | Backend-зависимости | Критерий готовности |
 |---|---|---:|---|---|
-| UI-00 | Shell/sidebar/layout | L | BASE-05, BASE-06 | 11 пунктов, 100vh, без общего scroll, keyboard navigation, responsive fallback |
+| UI-00 | Shell/sidebar/layout — **ВЫПОЛНЕНО** | L | BASE-05, BASE-06 | 11 пунктов, 100vh, без общего scroll, permission-aware navigation, keyboard navigation и responsive fallback закреплены кодом и frontend architecture tests |
 | UI-01 | Дашборд | L | DASH-01–DASH-06 | KPI, progress, risk buckets, mandatory chips, таблица видов |
 | UI-02 | Партнёры | L | DATA-01–DATA-03, DATA-09, DATA-10 | Фильтры по типу; ОО/РОИВ/школы и ИТ-компании; группа лиц/уполномоченное юрлицо; drawer, документы, бюджеты и назначения |
 | UI-03 | Преподаватели | L | TCH-01–TCH-07, RISK-02 | Grid, semester filters, risk flags, payout tab |
@@ -407,8 +407,8 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | UI-09 | Решение МЦ | M | MIN-01–MIN-04 | Динамическая метрика, план/факт, документы |
 | UI-10 | Отчётность | XL | REPORT-03–REPORT-11, CRYPTO-04–CRYPTO-09 | Конструктор, формы, `.pkg`, split diff и таймер |
 | UI-11 | Настройки | XL | SEC-01–SEC-10, DATA-05–DATA-11, WF-07, AUDIT-04 | Контекст, 3%, группы, пользователи, SUPER_ADMIN-only 2FA toggle, public certificates/keys, task fallback, audit и snapshots |
-| UI-12 | Accessibility pass — **ЧАСТИЧНО** | M | UI-00–UI-11 | Автоматические smoke checks по labels/roles/focus общих компонентов и nav descriptors 11 экранов добавлены; полноценный визуальный WCAG pass остаётся отдельным QA-этапом |
-| UI-13 | Visual regression | M | UI-00–UI-11 | Эталонные скриншоты desktop/tablet и отсутствие общего page scroll |
+| UI-12 | Accessibility pass — **ЧАСТИЧНО** | M | UI-00–UI-11 | Автоматические smoke checks по labels/roles/focus общих компонентов и nav descriptors 11 экранов добавлены; role-aware aria-label и keyboard/focus сценарий sidebar закреплены; полноценный визуальный WCAG pass остаётся отдельным QA-этапом |
+| UI-13 | Visual regression — **ЧАСТИЧНО** | M | UI-00–UI-11 | Запрет общего page scroll закреплён CSS и architecture test; эталонные скриншоты desktop/tablet и pixel-diff остаются следующим шагом |
 
 ## 14. Appliance, эксплуатация и офлайн-поставка
 

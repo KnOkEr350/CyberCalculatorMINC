@@ -1,5 +1,69 @@
 // Общая оболочка SPA. Предметные экраны подключаются через lazy loader и не
 // изменяют sidebar/router напрямую.
+function screenAccess(screen, user) {
+  const role = user?.role || "";
+  const entityType = user?.entity_type || "";
+  const itCompanyOperator = entityType === "organization";
+  const canAuthorReports = itCompanyOperator && ["super_admin", "holding_admin", "org_admin", "curator"].includes(role);
+  const canAdmin = itCompanyOperator && ["super_admin", "holding_admin", "org_admin"].includes(role);
+  const categories = Array.from(screen?.categoryCodes || []);
+  if (categories.length) {
+    const writable =
+      canAuthorReports ||
+      (itCompanyOperator && role === "hr_specialist" && categories.every((category) => ["internship", "employment_practice"].includes(category))) ||
+      (itCompanyOperator && role === "financial_specialist" && categories.every((category) => category === "teachers"));
+    return writable
+      ? { mode: "write", label: "доступно редактирование" }
+      : { mode: "read", label: "только просмотр по роли" };
+  }
+  if (screen?.id === "reports") {
+    return canAuthorReports
+      ? { mode: "write", label: "формирование и выгрузка отчётов" }
+      : { mode: "read", label: "просмотр доступной отчётности" };
+  }
+  if (screen?.id === "settings") {
+    return canAdmin
+      ? { mode: "admin", label: "администрирование доступно" }
+      : { mode: "read", label: "настройки в режиме просмотра" };
+  }
+  if (screen?.id === "partners") {
+    return (canAuthorReports || (entityType === "edu_institution" && role === "curator"))
+      ? { mode: "write", label: "ведение партнёров по роли" }
+      : { mode: "read", label: "просмотр партнёров" };
+  }
+  return { mode: "read", label: "просмотр раздела" };
+}
+
+function focusNavButton(buttons, index) {
+  const target = buttons[index];
+  if (!target) return;
+  target.focus();
+  target.scrollIntoView?.({ block: "nearest" });
+}
+
+function bindPrimaryNavKeyboard(nav) {
+  const buttons = Array.from(nav.querySelectorAll("button[data-view]"));
+  nav.addEventListener("keydown", (event) => {
+    const current = event.target.closest?.("button[data-view]");
+    if (!current) return;
+    const index = buttons.indexOf(current);
+    if (index < 0) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      focusNavButton(buttons, (index + 1) % buttons.length);
+    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusNavButton(buttons, (index - 1 + buttons.length) % buttons.length);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      focusNavButton(buttons, 0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      focusNavButton(buttons, buttons.length - 1);
+    }
+  });
+}
+
 function renderLayout() {
   const profileLabel =
     state.me.entity_type === "organization"
@@ -28,7 +92,11 @@ function renderLayout() {
         <div class="tenant-card"><span>Рабочее пространство</span><strong title="${escapeHTML(organizationName)}">${escapeHTML(organizationName)}</strong><small>${escapeHTML(profileLabel)}</small></div>
         <nav class="primary-nav" aria-label="Основная навигация">
           <span class="nav-section-title">11 экранов системы</span>
-          ${screens.map((screen) => `<button data-view="${screen.id}" title="Экран ${screen.number}. ${escapeHTML(screen.label)}">${navigationIcon(screen.icon)}<span><small>${screen.number}</small>${escapeHTML(screen.label)}</span>${screen.id === "partners" ? '<span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span>' : ""}</button>`).join("")}
+          ${screens.map((screen) => {
+            const access = screenAccess(screen, state.me);
+            const label = `Экран ${screen.number}. ${screen.label}: ${access.label}`;
+            return `<button data-view="${screen.id}" data-access-mode="${access.mode}" title="${escapeHTML(label)}" aria-label="${escapeHTML(label)}">${navigationIcon(screen.icon)}<span><small>${screen.number}</small>${escapeHTML(screen.label)}</span>${screen.id === "partners" ? '<span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span>' : ""}</button>`;
+          }).join("")}
         </nav>
         <div class="sidebar-footer"><span class="system-indicator"></span><div><b>Система доступна</b><small>Защищённое соединение</small></div></div>
       </aside>
@@ -42,6 +110,7 @@ function renderLayout() {
     }
     button.onclick = () => CyberCalcRouter.activate(button.dataset.view);
   });
+  bindPrimaryNavKeyboard(wrap.querySelector(".primary-nav"));
   wrap.querySelector("#sidebar-toggle").onclick = () => {
     if (window.matchMedia("(max-width: 680px)").matches) {
       wrap.classList.remove("sidebar-collapsed");

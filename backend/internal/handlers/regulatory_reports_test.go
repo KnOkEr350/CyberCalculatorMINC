@@ -25,6 +25,21 @@ func TestRegulatoryHeadersGolden(t *testing.T) {
 	}
 }
 
+func TestRegulatorySignatureBlockGolden(t *testing.T) {
+	rows := appendSignatureBlock([][]interface{}{{"", "ИТОГО", "", 100.0, "", ""}}, 6)
+	actual, err := json.Marshal(rows[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := os.ReadFile("testdata/regulatory_signature_block.golden.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual, bytes.TrimSpace(expected)) {
+		t.Fatalf("regulatory signature block differs from golden file\nactual: %s", actual)
+	}
+}
+
 // REPORT-07: Приложение № 3 должно содержать читаемую формулировку
 // «Соглашение с <ОО> от <дата> № <номер>», а не сырые UUID.
 func TestFormatRuDate(t *testing.T) {
