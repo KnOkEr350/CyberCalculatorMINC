@@ -2322,6 +2322,96 @@
           }
         }
       }
+    },
+    "/api/organizations": {
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedJSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/specialties": {
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "parameters": [
+          {
+            "name": "education_system",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "higher",
+                "secondary_vocational"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedJSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/specialty-catalogs/import": {
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/VersionedCSVImport"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3986,6 +4076,48 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/LegalDisputeRequest"
+            }
+          }
+        }
+      },
+      "VersionedCSVImport": {
+        "required": true,
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "version_code",
+                "title",
+                "effective_from",
+                "normative_source_id",
+                "file"
+              ],
+              "properties": {
+                "version_code": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 64
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 500
+                },
+                "effective_from": {
+                  "$ref": "#/components/schemas/Date"
+                },
+                "normative_source_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "file": {
+                  "type": "string",
+                  "format": "binary",
+                  "contentMediaType": "application/octet-stream",
+                  "maxLength": 4194304,
+                  "description": "UTF-8 CSV или XLSX"
+                }
+              }
             }
           }
         }
