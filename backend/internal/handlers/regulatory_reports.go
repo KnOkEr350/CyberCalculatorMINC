@@ -527,6 +527,14 @@ func payloadValue(p map[string]interface{}, key string) string {
 // стажировке или практической подготовке, а при их отсутствии —
 // специальность по Приказу № 27.
 func internshipProgramName(row regulatoryRow, payload map[string]interface{}) string {
+	if row.Category == "employment_practice" {
+		if number := payloadValue(payload, "practice_agreement_number"); number != "" {
+			if date := payloadValue(payload, "practice_agreement_date"); date != "" {
+				return fmt.Sprintf("Договор практической подготовки № %s от %s", number, formatRuDate(date))
+			}
+			return fmt.Sprintf("Договор практической подготовки № %s", number)
+		}
+	}
 	for _, key := range []string{"internship_agreement_reference", "practice_agreement_reference", "individual_program_reference", "specialty_code"} {
 		if value := payloadValue(payload, key); value != "" {
 			return value

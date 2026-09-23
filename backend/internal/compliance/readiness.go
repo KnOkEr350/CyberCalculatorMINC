@@ -154,7 +154,7 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 		require("certificates", "Входящая и итоговая справки", hasDoc("incoming_certificate", "incoming_certificate_reference") && hasDoc("outgoing_certificate", "outgoing_certificate_reference"), false)
 	case "employment_practice":
 		require("labor_contract", "Срочный трудовой договор", fmt.Sprint(payload["labor_contract_type"]) == "fixed_term" && has("labor_contract_number") && hasDoc("labor_contract", "labor_contract_reference"), blockDocuments)
-		require("practice_agreement", "Договор о практической подготовке", hasDoc("practice_agreement", "practice_agreement_reference"), blockDocuments)
+		require("practice_agreement", "Договор о практической подготовке с номером и датой", hasDoc("practice_agreement", "practice_agreement_reference") && has("practice_agreement_number") && has("practice_agreement_date"), blockDocuments)
 		require("mentor", "Наставник из справочника", has("mentor_id"), true)
 		require("mentor_order", "Приказ о наставнике", hasDoc("mentor_order", "mentor_order_reference"), false)
 		require("certificates", "Направление, программа и итоговые документы", hasDoc("individual_program", "individual_program_reference") && hasDoc("outgoing_certificate", "outgoing_certificate_reference"), false)

@@ -305,6 +305,8 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 		"student_full_name": "Петров Пётр Петрович", "duration_months": 2.0,
 		"student_load_hours_per_month": 10.0, "mentor_load_hours_per_month": 3.0,
 		"labor_contract_type": "fixed_term", "labor_contract_number": "ТД-42", "labor_contract_date": "2026-09-01",
+		"practice_agreement_number": "ПР-12", "practice_agreement_date": "2026-05-15",
+		"practice_agreement_start_date": "2026-06-01", "practice_agreement_end_date": "2026-07-31",
 		// PRA-04: практика подтверждается нормами ТК РФ, поэтому возраст и
 		// недельные часы обязательны.
 		"student_age": 19.0, "weekly_hours": 30.0,
@@ -321,6 +323,8 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 		{name: "missing number", key: "labor_contract_number", value: nil},
 		{name: "invalid date", key: "labor_contract_date", value: "2026-02-30"},
 		{name: "non fixed-term contract", key: "labor_contract_type", value: "other"},
+		{name: "missing practice agreement number", key: "practice_agreement_number", value: nil},
+		{name: "invalid practice agreement date", key: "practice_agreement_date", value: "2026-15-05"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -347,6 +351,8 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 	// подтверждения норм ТК РФ: они относятся только к практике.
 	practiceOnly := map[string]bool{
 		"labor_contract_type": true, "labor_contract_number": true, "labor_contract_date": true,
+		"practice_agreement_number": true, "practice_agreement_date": true,
+		"practice_agreement_start_date": true, "practice_agreement_end_date": true,
 		"student_age": true, "weekly_hours": true,
 	}
 	withoutContract := make(map[string]interface{}, len(valid)-len(practiceOnly))

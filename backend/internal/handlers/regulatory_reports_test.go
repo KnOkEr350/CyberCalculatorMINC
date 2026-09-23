@@ -194,6 +194,22 @@ func TestBuildAnnex2RowsGroupsByProgram(t *testing.T) {
 	}
 }
 
+func TestBuildAnnex2RowsUsesTypedPracticeAgreement(t *testing.T) {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"practice_agreement_number": "ПР-12",
+		"practice_agreement_date":   "2026-05-15",
+		"student_full_name":         "Громов А.М.",
+		"total_student_hours":       240,
+		"total_mentor_hours":        60,
+	})
+	rows := buildAnnex2Rows([]regulatoryRow{
+		{PartnerID: "p1", Partner: "Колледж связи № 54", Category: "employment_practice", CategoryName: "Практика", Period: "fact", Amount: money.Amount(33540000), Payload: payload},
+	})
+	if len(rows) == 0 || rows[0][1] != "Договор практической подготовки № ПР-12 от 15.05.2026" {
+		t.Fatalf("наименование практики должно строиться из типизированных реквизитов договора: %+v", rows)
+	}
+}
+
 // ТЗ, п. 9.2: специализированный «Отчёт по наставникам».
 func TestBuildMentorRowsAggregatesByMentor(t *testing.T) {
 	payload := func(mentor, student string) []byte {

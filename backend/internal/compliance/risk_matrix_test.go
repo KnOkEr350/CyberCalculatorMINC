@@ -127,6 +127,7 @@ func TestRiskMatrixInternship(t *testing.T) {
 func practicePayload() map[string]interface{} {
 	return map[string]interface{}{
 		"mentor_id": "mentor-1", "labor_contract_type": "fixed_term", "labor_contract_number": "88-ТД",
+		"practice_agreement_number": "ПР-12", "practice_agreement_date": "2026-05-15",
 	}
 }
 
@@ -148,6 +149,10 @@ func TestRiskMatrixEmploymentPractice(t *testing.T) {
 			nil, without(practiceDocuments(), "labor_contract"), "red"},
 		{"нет договора о практической подготовке — красная зона",
 			nil, without(practiceDocuments(), "practice_agreement"), "red"},
+		{"нет номера договора о практической подготовке — красная зона",
+			func(p map[string]interface{}) { delete(p, "practice_agreement_number") }, practiceDocuments(), "red"},
+		{"нет даты договора о практической подготовке — красная зона",
+			func(p map[string]interface{}) { delete(p, "practice_agreement_date") }, practiceDocuments(), "red"},
 		{"наставник не назначен — красная зона",
 			func(p map[string]interface{}) { delete(p, "mentor_id") }, practiceDocuments(), "red"},
 		{"нет приказа о наставнике — жёлтая зона",

@@ -65,6 +65,7 @@ func practicePayload() map[string]interface{} {
 		"duration_months": json.Number("2"), "student_load_hours_per_month": json.Number("120"),
 		"mentor_load_hours_per_month": json.Number("30"),
 		"labor_contract_type":         "fixed_term", "labor_contract_number": "88-ТД", "labor_contract_date": "2026-05-30",
+		"practice_agreement_number": "ПР-12", "practice_agreement_date": "2026-05-15",
 		"student_age": json.Number("19"), "weekly_hours": json.Number("30"),
 	}
 }
@@ -104,9 +105,10 @@ func TestEmploymentPracticeRequiresWorkingTimeFacts(t *testing.T) {
 	}
 }
 
-// Поля возраста и часов должны быть помечены обязательными и в описании
-// формы, иначе UI и XLSX-импорт не потребуют их заполнения.
-func TestEmploymentPracticeMarksWorkingTimeFieldsRequired(t *testing.T) {
+// Поля договора практической подготовки, возраста и часов должны быть
+// обязательными в описании формы, иначе UI и XLSX-импорт не потребуют их
+// заполнения.
+func TestEmploymentPracticeMarksComplianceFieldsRequired(t *testing.T) {
 	calc, err := Get("employment_practice")
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +117,7 @@ func TestEmploymentPracticeMarksWorkingTimeFieldsRequired(t *testing.T) {
 	for _, field := range calc.Fields() {
 		required[field.Key] = field.Required
 	}
-	for _, key := range []string{"student_age", "weekly_hours"} {
+	for _, key := range []string{"practice_agreement_number", "practice_agreement_date", "student_age", "weekly_hours"} {
 		if !required[key] {
 			t.Fatalf("поле %q должно быть обязательным для практики", key)
 		}

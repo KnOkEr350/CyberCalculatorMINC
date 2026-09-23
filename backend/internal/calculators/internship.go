@@ -71,7 +71,11 @@ func (internshipCalc) Fields() []FieldSpec {
 func (employmentPracticeCalc) Fields() []FieldSpec {
 	return append(internshipCalc{}.Fields(),
 		FieldSpec{Key: "labor_contract_type", Label: "Тип трудового договора", Type: "select", Required: true, Options: []string{"fixed_term", "other"}},
-		FieldSpec{Key: "practice_agreement_reference", Label: "Реквизиты договора о практической подготовке", Type: "text", MaxLength: 1000},
+		FieldSpec{Key: "practice_agreement_number", Label: "Номер договора о практической подготовке", Type: "text", Required: true, MaxLength: 100},
+		FieldSpec{Key: "practice_agreement_date", Label: "Дата договора о практической подготовке", Type: "date", Required: true},
+		FieldSpec{Key: "practice_agreement_start_date", Label: "Дата начала действия договора о практической подготовке", Type: "date"},
+		FieldSpec{Key: "practice_agreement_end_date", Label: "Дата окончания действия договора о практической подготовке", Type: "date"},
+		FieldSpec{Key: "practice_agreement_reference", Label: "Дополнительные реквизиты договора о практической подготовке", Type: "text", MaxLength: 1000},
 		// Возраст и недельные часы обязательны: без них нечем подтвердить
 		// соблюдение статей 63 и 92 ТК РФ, а практика без такого
 		// подтверждения к зачёту не принимается (ТЗ, п. 7.3).
@@ -92,6 +96,12 @@ func (employmentPracticeCalc) Validate(payload map[string]interface{}) error {
 		return err
 	}
 	if _, err := str(payload, "labor_contract_date"); err != nil {
+		return err
+	}
+	if _, err := str(payload, "practice_agreement_number"); err != nil {
+		return err
+	}
+	if _, err := str(payload, "practice_agreement_date"); err != nil {
 		return err
 	}
 	age, err := num(payload, "student_age")
