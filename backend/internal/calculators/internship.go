@@ -1,6 +1,7 @@
 package calculators
 
 import (
+	"cybercalc/internal/tariffs"
 	"fmt"
 	"math"
 	"strings"
@@ -20,9 +21,10 @@ type employmentPracticeCalc struct {
 	internshipCalc
 }
 
-const (
-	studentHourRate = 800.0
-	mentorHourRate  = 2390.0
+// Ставки читаются из редакции поставки (DATA-07).
+var (
+	studentHourRate = tariffs.Default().MustFloat(tariffs.InternshipStudentHour)
+	mentorHourRate  = tariffs.Default().MustFloat(tariffs.InternshipMentorHour)
 )
 
 func (internshipCalc) Calculate(_ models.Audience, payload map[string]interface{}) (float64, error) {
@@ -79,7 +81,17 @@ func (internshipCalc) Validate(payload map[string]interface{}) error {
 }
 
 func (employmentPracticeCalc) Fields() []FieldSpec {
-	return append(internshipCalc{}.Fields(),
+	fields := internshipCalc{}.Fields()
+	// PRA-01: у практики есть самостоятельная карточка. Для неё курс,
+	// специальность и точный период — не пояснения, а обязательные
+	// типизированные реквизиты, как и сведения о срочном ТД.
+	for index := range fields {
+		switch fields[index].Key {
+		case "course", "period_start", "period_end", "specialty_code", "labor_contract_number", "labor_contract_date":
+			fields[index].Required = true
+		}
+	}
+	return append(fields,
 		FieldSpec{Key: "labor_contract_type", Label: "Тип трудового договора", Type: "select", Required: true, Options: []string{"fixed_term", "other"}},
 		FieldSpec{Key: "practice_agreement_number", Label: "Номер договора о практической подготовке", Type: "text", Required: true, MaxLength: 100},
 		FieldSpec{Key: "practice_agreement_date", Label: "Дата договора о практической подготовке", Type: "date", Required: true},
@@ -97,6 +109,25 @@ func (employmentPracticeCalc) Fields() []FieldSpec {
 func (employmentPracticeCalc) Validate(payload map[string]interface{}) error {
 	if err := validateMentorAppointment(payload); err != nil {
 		return err
+	}
+	if _, err := str(payload, "course"); err != nil {
+		return fmt.Errorf("укажите курс практиканта")
+	}
+	if _, err := str(payload, "specialty_code"); err != nil {
+		return fmt.Errorf("укажите специальность практиканта по приказу № 27")
+	}
+	periodStartRaw, err := str(payload, "period_start")
+	if err != nil {
+		return fmt.Errorf("укажите дату начала практики")
+	}
+	periodEndRaw, err := str(payload, "period_end")
+	if err != nil {
+		return fmt.Errorf("укажите дату окончания практики")
+	}
+	periodStart, startErr := time.Parse("2006-01-02", periodStartRaw)
+	periodEnd, endErr := time.Parse("2006-01-02", periodEndRaw)
+	if startErr != nil || endErr != nil || periodEnd.Before(periodStart) {
+		return fmt.Errorf("период практики должен быть корректным и неотрицательным")
 	}
 	contractType, err := str(payload, "labor_contract_type")
 	if err != nil {

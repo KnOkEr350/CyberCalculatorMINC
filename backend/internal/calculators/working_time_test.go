@@ -62,6 +62,7 @@ func TestValidateWorkingTimeLimitBoundaries(t *testing.T) {
 func practicePayload() map[string]interface{} {
 	return map[string]interface{}{
 		"org_name": "МГУ", "mentor_id": "m-1", "mentor_full_name": "Ильин С.В.", "student_full_name": "Громов А.М.",
+		"course": "3", "specialty_code": "09.03.01", "period_start": "2026-06-01", "period_end": "2026-07-31",
 		"duration_months": json.Number("2"), "student_load_hours_per_month": json.Number("120"),
 		"mentor_load_hours_per_month": json.Number("30"),
 		"labor_contract_type":         "fixed_term", "labor_contract_number": "88-ТД", "labor_contract_date": "2026-05-30",
@@ -119,7 +120,7 @@ func TestEmploymentPracticeMarksComplianceFieldsRequired(t *testing.T) {
 	for _, field := range calc.Fields() {
 		required[field.Key] = field.Required
 	}
-	for _, key := range []string{"practice_agreement_number", "practice_agreement_date", "student_age", "weekly_hours"} {
+	for _, key := range []string{"course", "specialty_code", "period_start", "period_end", "labor_contract_number", "labor_contract_date", "practice_agreement_number", "practice_agreement_date", "student_age", "weekly_hours"} {
 		if !required[key] {
 			t.Fatalf("поле %q должно быть обязательным для практики", key)
 		}

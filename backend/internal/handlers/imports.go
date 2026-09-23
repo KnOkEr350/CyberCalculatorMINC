@@ -6,6 +6,7 @@ import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
 	"cybercalc/internal/money"
+	"cybercalc/internal/tariffs"
 	"cybercalc/internal/xlsx"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 func importFields(category string) ([]calculators.FieldSpec, error) {
@@ -125,13 +128,12 @@ func uploadedWorkbook(w http.ResponseWriter, r *http.Request) ([]byte, [][]strin
 }
 
 type importRow struct {
-	Row             int                    `json:"row"`
-	Payload         map[string]interface{} `json:"payload"`
-	Amount          money.Amount           `json:"amount_rub"`
-	FormulaAmount   money.Amount           `json:"formula_amount_rub"`
-	ActualAmount    *money.Amount          `json:"actual_amount_rub,omitempty"`
-	CostMethod      string                 `json:"cost_method"`
-	TariffVersionID *string                `json:"tariff_version_id,omitempty"`
+	Row           int                    `json:"row"`
+	Payload       map[string]interface{} `json:"payload"`
+	Amount        money.Amount           `json:"amount_rub"`
+	FormulaAmount money.Amount           `json:"formula_amount_rub"`
+	ActualAmount  *money.Amount          `json:"actual_amount_rub,omitempty"`
+	CostMethod    string                 `json:"cost_method"`
 }
 type importResult struct {
 	Rows      []importRow  `json:"rows"`
@@ -166,6 +168,13 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	if err := h.validateAgreementContext(r, agreementID, partner, category, year); err != nil {
 		middleware.WriteError(w, 400, err.Error())
+		return
+	}
+	// DATA-07: все строки файла считаются по одной редакции ставок — той, что
+	// действует на отчётный год импорта.
+	importTariffs, err := tariffs.Load(r.Context(), h.DB, year)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось определить тариф: "+err.Error())
 		return
 	}
 	data, table, err := uploadedWorkbook(w, r)
@@ -270,7 +279,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 			if err := calculators.ValidatePayload(calc, row.Payload); err != nil {
 				return err
 			}
-			formulaAmount, tariffVersionID, e := calculateEntryAmount(r.Context(), h.DB, category, models.Audience(audience), row.Payload, year)
+			formulaAmount, e := calculators.CalculateAmountWith(importTariffs, category, models.Audience(audience), row.Payload)
 			if e != nil {
 				return e
 			}
@@ -278,7 +287,6 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 				return e
 			}
 			row.FormulaAmount = formulaAmount
-			row.TariffVersionID = tariffVersionID
 			row.CostMethod, row.Amount, e = resolveEntryAmount(row.CostMethod, row.ActualAmount, formulaAmount)
 			if e != nil {
 				return e
@@ -339,16 +347,17 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		mentor := mentorColumns(category, row.Payload)
 		ministry := ministryCardColumns(category, row.Payload)
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,tariff_version_id,created_by,
+		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,created_by,
 			mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
 			ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
-			ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULLIF($15,'')::uuid,NULLIF($16,'')::date,NULLIF($17,'')::date,NULLIF($18,''),NULLIF($19,'')::date,NULLIF(lower($20),''),
-			NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,'')) RETURNING id`,
-			category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, row.TariffVersionID, u.ID,
+			ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status,formula_tariff_ids)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,'')::uuid,NULLIF($15,'')::date,NULLIF($16,'')::date,NULLIF($17,''),NULLIF($18,'')::date,NULLIF(lower($19),''),
+			NULLIF($20,''),NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,'')::date,NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,''),NULLIF($28,''),NULLIF($29,''),$30) RETURNING id`,
+			category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, u.ID,
 			mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
 			ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
-			ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status).Scan(&id) != nil {
+			ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
+			pq.Array(importTariffs.VersionIDs(category))).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}

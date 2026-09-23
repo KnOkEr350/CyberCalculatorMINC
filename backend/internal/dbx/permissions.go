@@ -23,6 +23,8 @@ var appendOnlyTables = map[string]bool{
 	"audit_log_archive":                  true,
 	"organization_budget_target_history": true,
 	"agreement_report_history":           true,
+	"regulatory_process_events":          true,
+	"workflow_task_events":               true,
 	"normative_sources":                  true,
 	"normative_revision_diffs":           true,
 }

@@ -117,3 +117,55 @@ test("enterprise shell keeps topbar/sidebar proportions and active hierarchy", (
   assert.match(shell, /navigationIcon\(screen\.icon\)/);
   assert.match(shell, /11 экранов системы/);
 });
+
+test("Ministry decision screen exposes plan, fact, dynamic metric and evidence", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function ministryDecisionTable/);
+  for (const label of ["Решение и поручение", "Динамический показатель", "План", "Факт", "Основание расчёта", "Документы"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /decision_evidence_/);
+  assert.match(workspace, /data-entry-filter="decision_number"/);
+});
+
+test("dashboard prioritizes operational indicators and moves analytics below", () => {
+  const app = source("./app.js");
+  for (const label of ["Партнёры", "Действующие соглашения", "Мероприятия по факту", "Требуют внимания"]) {
+    assert.match(app, new RegExp(label));
+  }
+  for (const removed of ["Обязательный минимум ВО", "Реализация плана", "Подтверждённые расходы", "Утверждённый план"]) {
+    assert.doesNotMatch(app, new RegExp(removed));
+  }
+  assert.ok(app.indexOf("dashboard-primary-kpis") < app.indexOf("dashboard-filter-card"));
+});
+
+test("partners page shows confirmed partners and lazy-loads details 4 through 6", () => {
+  const workspace = source("./workspace.js");
+  for (const label of ["Подтверждённые партнёры", "Юридические лица", "Добавить образовательную организацию", "Требуют решения", "4 · Соглашения", "5 · Учебная структура", "6 · Наставники"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /data-partner-expand/);
+  assert.match(workspace, /async \(\) => \{[\s\S]*Promise\.all\(\[/);
+  assert.doesNotMatch(workspace, /<h2>Состояние справочника<\/h2>/);
+  assert.doesNotMatch(workspace, /<h2>Поиск в официальном справочнике<\/h2>/);
+});
+
+test("teaching screen exposes semester, risk, hours and compensation registry", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function teachingWorkloadTable/);
+  for (const label of ["Преподаватель", "Дисциплина", "Программа и семестр", "Ак. часы", "Компенсация"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /data-entry-filter="semester"/);
+  assert.match(workspace, /teaching-payouts\?year=/);
+});
+
+test("OOP and RPD screen exposes permanent 2 by 3 matrix and document registry", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function oopMatrix/);
+  assert.match(workspace, /function oopRegistryTable/);
+  for (const label of ["Разработка", "Актуализация", "Экспертиза", "Краткая матричная выжимка", "Программа или дисциплина"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /\[\["rpd", "РПД"\], \["oop", "ООП"\]\]/);
+});

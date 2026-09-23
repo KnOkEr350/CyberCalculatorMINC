@@ -44,7 +44,10 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/attachments/{id}/metadata", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.attachments.UpdateMetadata(w, r, u, r.PathValue("id"))
 	}))
-	mux.HandleFunc("PATCH /api/attachments/{id}/dispute", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-		m.attachments.SetDispute(w, r, u, r.PathValue("id"))
+	mux.HandleFunc("GET /api/entries/{id}/legal-disputes", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.attachments.LegalDisputes(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("POST /api/entries/{id}/legal-disputes", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.attachments.ChangeLegalDispute(w, r, u, r.PathValue("id"))
 	}))
 }

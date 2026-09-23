@@ -1166,6 +1166,41 @@
         }
       }
     },
+    "/api/tariffs": {
+      "get": {
+        "tags": [
+          "planning"
+        ],
+        "summary": "Ставки Методики, действующие на отчётный год, с основанием",
+        "parameters": [
+          {
+            "name": "report_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Действующие ставки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/entries": {
       "get": {
         "tags": [
@@ -1477,119 +1512,6 @@
         }
       }
     },
-    "/api/attachments/{id}/metadata": {
-      "parameters": [{ "$ref": "#/components/parameters/ID" }],
-      "patch": {
-        "tags": ["documents"],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object",
-            "required": ["document_type", "version"],
-            "properties": {
-              "document_type": { "$ref": "#/components/schemas/DocumentType" },
-              "document_date": { "type": "string" },
-              "valid_from": { "type": "string" },
-              "valid_until": { "type": "string" },
-              "signer_name": { "type": "string" },
-              "signer_certificate_id": { "type": "string" },
-              "signer_key_id": { "type": "string" },
-              "signature_algorithm": { "type": "string" },
-              "version": { "type": "integer", "minimum": 1 }
-            },
-            "additionalProperties": false
-          } } }
-        },
-        "responses": {
-          "200": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/attachments/{id}/dispute": {
-      "parameters": [{ "$ref": "#/components/parameters/ID" }],
-      "patch": {
-        "tags": ["documents"],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object",
-            "required": ["active", "reason"],
-            "properties": {
-              "active": { "type": "boolean" },
-              "reason": { "type": "string", "maxLength": 2000 }
-            },
-            "additionalProperties": false
-          } } }
-        },
-        "responses": {
-          "200": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/organizations": {
-      "get": {
-        "tags": ["directories"],
-        "parameters": [
-          { "name": "kind", "in": "query", "schema": { "type": "string" } },
-          { "name": "q", "in": "query", "schema": { "type": "string" } },
-          { "$ref": "#/components/parameters/Offset" }
-        ],
-        "responses": {
-          "200": { "$ref": "#/components/responses/PaginatedJSON" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/specialties": {
-      "get": {
-        "tags": ["directories"],
-        "parameters": [
-          { "name": "education_system", "in": "query", "schema": { "type": "string", "enum": ["higher", "secondary_vocational"] } },
-          { "name": "q", "in": "query", "schema": { "type": "string" } },
-          { "$ref": "#/components/parameters/Offset" }
-        ],
-        "responses": {
-          "200": { "$ref": "#/components/responses/PaginatedJSON" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/specialty-catalogs/import": {
-      "post": {
-        "tags": ["directories"],
-        "requestBody": { "$ref": "#/components/requestBodies/VersionedCSVImport" },
-        "responses": {
-          "201": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/tariffs": {
-      "get": {
-        "tags": ["directories"],
-        "parameters": [
-          { "name": "report_year", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 2000, "maximum": 2100 } },
-          { "name": "activity_code", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "audience", "in": "query", "required": true, "schema": { "type": "string", "enum": ["vuz", "kolledj", "school"] } }
-        ],
-        "responses": {
-          "200": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/tariff-versions/import": {
-      "post": {
-        "tags": ["directories"],
-        "requestBody": { "$ref": "#/components/requestBodies/VersionedCSVImport" },
-        "responses": {
-          "201": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
     "/api/dashboard": {
       "get": {
         "tags": [
@@ -1733,6 +1655,161 @@
         }
       }
     },
+    "/api/regulatory/processes": {
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Завести регламентный процесс в черновике (идемпотентно)",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateRegulatoryProcessRequest"
+        },
+        "responses": {
+          "201": {
+            "description": "Процесс создан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Процесс уже существует",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Процессы соглашения: проект, предварительный и итоговый перечни",
+        "parameters": [
+          {
+            "name": "agreement_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "report_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Процессы соглашения",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/regulatory/processes/{id}": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Процесс с историей переходов",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Процесс",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/regulatory/processes/{id}/actions": {
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Действие над процессом: отправка, рассмотрение, согласование, доработка, оспаривание",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RegulatoryProcessActionRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "Процесс после действия",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/report-workflow": {
       "get": {
         "tags": [
@@ -1777,64 +1854,6 @@
           "default": {
             "$ref": "#/components/responses/Error"
           }
-        }
-      }
-    },
-    "/api/regulatory-workflows": {
-      "get": {
-        "tags": ["reporting"],
-        "parameters": [
-          { "name": "agreement_id", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/UUID" } },
-          { "name": "report_year", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 2000, "maximum": 2100 } },
-          { "name": "process_type", "in": "query", "required": true, "schema": { "type": "string", "enum": ["agreement", "preliminary", "final"] } }
-        ],
-        "responses": {
-          "200": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      },
-      "post": {
-        "tags": ["reporting"],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object",
-            "required": ["agreement_id", "report_year", "process_type"],
-            "properties": {
-              "agreement_id": { "$ref": "#/components/schemas/UUID" },
-              "report_year": { "type": "integer", "minimum": 2000, "maximum": 2100 },
-              "process_type": { "type": "string", "enum": ["agreement", "preliminary", "final"] }
-            },
-            "additionalProperties": false
-          } } }
-        },
-        "responses": {
-          "201": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
-        }
-      }
-    },
-    "/api/regulatory-workflows/{id}": {
-      "parameters": [{ "$ref": "#/components/parameters/ID" }],
-      "patch": {
-        "tags": ["reporting"],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object",
-            "required": ["status", "reason", "version"],
-            "properties": {
-              "status": { "type": "string", "enum": ["draft", "sent", "in_review", "rework", "resubmitted", "approved", "default_approved", "disputed"] },
-              "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
-              "review_due_on": { "type": "string" },
-              "version": { "type": "integer", "minimum": 1 }
-            },
-            "additionalProperties": false
-          } } }
-        },
-        "responses": {
-          "200": { "$ref": "#/components/responses/JSONSuccess" },
-          "default": { "$ref": "#/components/responses/Error" }
         }
       }
     },
@@ -2028,6 +2047,52 @@
         }
       }
     },
+    "/api/admin/legacy-findings": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "summary": "Записи, помеченные дозаполнением на ручное уточнение",
+        "parameters": [
+          {
+            "name": "category_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Открытые пометки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/admin/metrics": {
       "get": {
         "tags": [
@@ -2171,6 +2236,355 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      }
+    },
+    "/api/admin/tariffs": {
+      "post": {
+        "tags": [
+          "administration"
+        ],
+        "summary": "Ввод новой редакции ставки (только системный администратор)",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PublishTariffRequest"
+        },
+        "responses": {
+          "201": {
+            "description": "Редакция введена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/attachments/{id}/metadata": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "documents"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AttachmentMetadataRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/entries/{id}/legal-disputes": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LegalDisputeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/organizations": {
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedJSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/specialties": {
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "parameters": [
+          {
+            "name": "education_system",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "higher",
+                "secondary_vocational"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PaginatedJSON"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/specialty-catalogs/import": {
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/VersionedCSVImport"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/curator-assignments": {
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CuratorAssignmentRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/curator-assignments/{id}/end": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CuratorAssignmentEndRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/curator-assignments/{id}/revoke": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CuratorAssignmentRevokeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateTaskRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks/{id}/reassign": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReassignTaskRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks/{id}/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "reporting"
+        ]
       }
     }
   },
@@ -2607,7 +3021,8 @@
         "type": "object",
         "properties": {
           "status": true,
-          "comment": true
+          "comment": true,
+          "signature_verified": true
         },
         "additionalProperties": false
       },
@@ -3283,6 +3698,196 @@
           }
         },
         "additionalProperties": false
+      },
+      "PublishTariffRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/tariffs.go",
+          "name": "publishTariffRequest"
+        },
+        "type": "object",
+        "properties": {
+          "rate_code": {
+            "type": "string",
+            "description": "Код ставки из перечня редакции поставки"
+          },
+          "amount_rub": {
+            "type": "string",
+            "description": "Ставка в рублях, положительная"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "description": "Начало действия; всегда 1 января"
+          },
+          "source_reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Официальная редакция — основание ставки"
+          }
+        },
+        "required": [
+          "rate_code",
+          "amount_rub",
+          "valid_from",
+          "source_reference"
+        ],
+        "additionalProperties": false
+      },
+      "CreateRegulatoryProcessRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/regulatory_processes.go",
+          "name": "createProcessRequest"
+        },
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agreement",
+              "preliminary",
+              "final"
+            ]
+          },
+          "agreement_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "report_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          }
+        },
+        "required": [
+          "kind",
+          "agreement_id",
+          "report_year"
+        ],
+        "additionalProperties": false
+      },
+      "RegulatoryProcessActionRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/regulatory_processes.go",
+          "name": "processActionRequest"
+        },
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "send",
+              "start_review",
+              "approve",
+              "request_rework",
+              "resubmit",
+              "dispute"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Замечания, причина оспаривания или основание ответа за контрагента"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "AttachmentMetadataRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/document_metadata.go",
+          "name": "attachmentMetadataRequest"
+        },
+        "type": "object",
+        "properties": {
+          "document_number": true,
+          "document_date": true,
+          "signer_name": true,
+          "certificate_serial": true,
+          "certificate_valid_from": true,
+          "certificate_valid_until": true
+        },
+        "additionalProperties": false
+      },
+      "LegalDisputeRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/document_metadata.go",
+          "name": "legalDisputeRequest"
+        },
+        "type": "object",
+        "properties": {
+          "action": true,
+          "reason": true,
+          "attachment_id": true
+        },
+        "additionalProperties": false
+      },
+      "CuratorAssignmentRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/curator_assignments.go",
+          "name": "curatorAssignmentRequest"
+        },
+        "type": "object",
+        "properties": {
+          "curator_id": true,
+          "partner_id": true,
+          "valid_from": true,
+          "valid_until": true,
+          "reason": true
+        },
+        "additionalProperties": false
+      },
+      "CuratorAssignmentEndRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/curator_assignments.go",
+          "name": "curatorAssignmentEndRequest"
+        },
+        "type": "object",
+        "properties": {
+          "valid_until": true
+        },
+        "additionalProperties": false
+      },
+      "CuratorAssignmentRevokeRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/curator_assignments.go",
+          "name": "curatorAssignmentRevokeRequest"
+        },
+        "type": "object",
+        "properties": {
+          "reason": true
+        },
+        "additionalProperties": false
+      },
+      "CreateTaskRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/workflow_tasks.go",
+          "name": "createTaskRequest"
+        },
+        "type": "object",
+        "properties": {
+          "it_company_id": true,
+          "partner_id": true,
+          "kind": true,
+          "title": true,
+          "subject_type": true,
+          "subject_id": true,
+          "required_role": true,
+          "required_permission": true
+        },
+        "additionalProperties": false
+      },
+      "ReassignTaskRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/workflow_tasks.go",
+          "name": "reassignTaskRequest"
+        },
+        "type": "object",
+        "properties": {
+          "reason": true
+        },
+        "additionalProperties": false
       }
     },
     "requestBodies": {
@@ -3665,20 +4270,144 @@
           }
         }
       },
+      "PublishTariffRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PublishTariffRequest"
+            }
+          }
+        }
+      },
+      "CreateRegulatoryProcessRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateRegulatoryProcessRequest"
+            }
+          }
+        }
+      },
+      "RegulatoryProcessActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RegulatoryProcessActionRequest"
+            }
+          }
+        }
+      },
+      "AttachmentMetadataRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AttachmentMetadataRequest"
+            }
+          }
+        }
+      },
+      "LegalDisputeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LegalDisputeRequest"
+            }
+          }
+        }
+      },
       "VersionedCSVImport": {
         "required": true,
         "content": {
           "multipart/form-data": {
             "schema": {
               "type": "object",
-              "required": ["version_code", "title", "effective_from", "normative_source_id", "file"],
+              "required": [
+                "version_code",
+                "title",
+                "effective_from",
+                "normative_source_id",
+                "file"
+              ],
               "properties": {
-                "version_code": { "type": "string", "minLength": 3, "maxLength": 64 },
-                "title": { "type": "string", "minLength": 3, "maxLength": 500 },
-                "effective_from": { "$ref": "#/components/schemas/Date" },
-                "normative_source_id": { "$ref": "#/components/schemas/UUID" },
-                "file": { "type": "string", "format": "binary", "contentMediaType": "application/octet-stream", "maxLength": 4194304, "description": "UTF-8 CSV или XLSX" }
+                "version_code": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 64
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 500
+                },
+                "effective_from": {
+                  "$ref": "#/components/schemas/Date"
+                },
+                "normative_source_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "file": {
+                  "type": "string",
+                  "format": "binary",
+                  "contentMediaType": "application/octet-stream",
+                  "maxLength": 4194304,
+                  "description": "UTF-8 CSV или XLSX"
+                }
               }
+            }
+          }
+        }
+      },
+      "CuratorAssignmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CuratorAssignmentRequest"
+            }
+          }
+        }
+      },
+      "CuratorAssignmentEndRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CuratorAssignmentEndRequest"
+            }
+          }
+        }
+      },
+      "CuratorAssignmentRevokeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CuratorAssignmentRevokeRequest"
+            }
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateTaskRequest"
+            }
+          }
+        }
+      },
+      "ReassignTaskRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReassignTaskRequest"
             }
           }
         }

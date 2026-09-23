@@ -3,6 +3,7 @@ package handlers
 import (
 	"cybercalc/internal/compliance"
 	"cybercalc/internal/money"
+	"cybercalc/internal/tariffs"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,7 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 		"mentor_name":        "mentor_full_name",
 		"structural_unit":    "department",
 		"cost_type":          "cost_type",
+		"decision_number":    "decision_number",
 	}
 	for parameter, field := range likeFields {
 		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
@@ -46,8 +48,16 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 			}
 		}
 	}
-	exactFields := map[string]string{"doc_type": "doc_type", "activity_type": "activity_type", "mentor_id": "mentor_id", "cost_method": "cost_method"}
-	for parameter, field := range exactFields {
+	exactFields := []struct{ parameter, field string }{
+		{"doc_type", "doc_type"},
+		{"activity_type", "activity_type"},
+		{"mentor_id", "mentor_id"},
+		{"cost_method", "cost_method"},
+		{"instruction_authority", "instruction_authority"},
+		{"education_level", "education_level"},
+	}
+	for _, item := range exactFields {
+		parameter, field := item.parameter, item.field
 		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
 			if parameter == "cost_method" {
 				*conds = append(*conds, "cost_method="+arg(value))
@@ -57,6 +67,11 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 			} else {
 				*conds = append(*conds, "payload->>'"+field+"'="+arg(value))
 			}
+		}
+	}
+	if value := strings.TrimSpace(q.Get("semester")); value != "" {
+		if semester, err := strconv.Atoi(value); err == nil && semester >= 1 && semester <= 13 {
+			*conds = append(*conds, "payload->>'semester'="+arg(strconv.Itoa(semester)))
 		}
 	}
 	if value := strings.TrimSpace(q.Get("duration_months")); value != "" {
@@ -199,7 +214,13 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	formulaAmount, tariffVersionID, err := calculateEntryAmount(r.Context(), h.DB, req.CategoryCode, models.Audience(req.Audience), req.Payload, req.ReportYear)
+	// DATA-07: ставки берутся из версий, действующих на отчётный год записи.
+	tariffCard, err := tariffs.Load(r.Context(), h.DB, req.ReportYear)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось определить тариф: "+err.Error())
+		return
+	}
+	formulaAmount, err := calculators.CalculateAmountWith(tariffCard, req.CategoryCode, models.Audience(req.Audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
@@ -230,16 +251,17 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	mentor := mentorColumns(req.CategoryCode, req.Payload)
 	ministry := ministryCardColumns(req.CategoryCode, req.Payload)
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,tariff_version_id,created_by,
+		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,created_by,
 		 mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
 		 ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
-		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,$15,NULLIF($16,'')::uuid,NULLIF($17,'')::date,NULLIF($18,'')::date,NULLIF($19,''),NULLIF($20,'')::date,NULLIF(lower($21),''),
-		 NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,''),NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,'')::date,NULLIF($29,''),NULLIF($30,''),NULLIF($31,'')) RETURNING id`,
-		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, tariffVersionID, u.ID,
+		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status,formula_tariff_ids)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,NULLIF($15,'')::uuid,NULLIF($16,'')::date,NULLIF($17,'')::date,NULLIF($18,''),NULLIF($19,'')::date,NULLIF(lower($20),''),
+		 NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,''),$31) RETURNING id`,
+		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
 		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
 		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
+		pq.Array(tariffCard.VersionIDs(req.CategoryCode)),
 	).Scan(&id)
 	if err != nil {
 		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
@@ -434,7 +456,7 @@ func (h *EntryHandlers) Summary(w http.ResponseWriter, r *http.Request, u middle
 	matrix := []matrixItem{}
 	// where contains fixed SQL fragments and $N placeholders; request values are in args.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	matrixRows, err := h.DB.QueryContext(r.Context(), `SELECT payload->>'doc_type',payload->>'activity_type',count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='ood_rpd' GROUP BY 1,2 ORDER BY 1,2`, args...)
+	matrixRows, err := h.DB.QueryContext(r.Context(), `SELECT COALESCE(oop_doc_type,''),COALESCE(oop_activity,''),count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='ood_rpd' GROUP BY 1,2 ORDER BY 1,2`, args...)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка сводки ООП/РПД")
 		return
@@ -604,7 +626,12 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	formulaAmount, tariffVersionID, err := calculateEntryAmount(r.Context(), h.DB, categoryCode, models.Audience(audience), req.Payload, reportYear)
+	tariffCard, err := tariffs.Load(r.Context(), h.DB, reportYear)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось определить тариф: "+err.Error())
+		return
+	}
+	formulaAmount, err := calculators.CalculateAmountWith(tariffCard, categoryCode, models.Audience(audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
@@ -628,16 +655,18 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	mentor := mentorColumns(categoryCode, req.Payload)
 	ministry := ministryCardColumns(categoryCode, req.Payload)
 	_, err = tx.ExecContext(r.Context(),
-		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),tariff_version_id=$10,updated_by=$11,updated_at=now(),
-		 mentor_id=NULLIF($13,'')::uuid,mentor_assignment_start=NULLIF($14,'')::date,mentor_assignment_end=NULLIF($15,'')::date,mentor_order_number=NULLIF($16,''),mentor_order_date=NULLIF($17,'')::date,assigned_student_name=NULLIF(lower($18),''),
-		 ministry_instruction_type=NULLIF($19,''),ministry_instruction_authority=NULLIF($20,''),ministry_instruction_reference=NULLIF($21,''),ministry_decision_number=NULLIF($22,''),
-		 ministry_decision_date=NULLIF($23,'')::date,ministry_implementation_start=NULLIF($24,'')::date,ministry_implementation_deadline=NULLIF($25,'')::date,
-		 ministry_implementation_conditions=NULLIF($26,''),ministry_activity_description=NULLIF($27,''),ministry_card_backfill_status=NULLIF($28,'')
-		 WHERE id=$12`,
-		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, tariffVersionID, u.ID, entryID,
+		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),updated_by=$10,updated_at=now(),
+		 mentor_id=NULLIF($12,'')::uuid,mentor_assignment_start=NULLIF($13,'')::date,mentor_assignment_end=NULLIF($14,'')::date,mentor_order_number=NULLIF($15,''),mentor_order_date=NULLIF($16,'')::date,assigned_student_name=NULLIF(lower($17),''),
+		 ministry_instruction_type=NULLIF($18,''),ministry_instruction_authority=NULLIF($19,''),ministry_instruction_reference=NULLIF($20,''),ministry_decision_number=NULLIF($21,''),
+		 ministry_decision_date=NULLIF($22,'')::date,ministry_implementation_start=NULLIF($23,'')::date,ministry_implementation_deadline=NULLIF($24,'')::date,
+		 ministry_implementation_conditions=NULLIF($25,''),ministry_activity_description=NULLIF($26,''),ministry_card_backfill_status=NULLIF($27,''),
+		 formula_tariff_ids=$28
+		 WHERE id=$11`,
+		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, u.ID, entryID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
 		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
 		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
+		pq.Array(tariffCard.VersionIDs(categoryCode)),
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")

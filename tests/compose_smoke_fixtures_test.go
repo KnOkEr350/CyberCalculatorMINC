@@ -44,25 +44,6 @@ func (s *composeSmoke) seedTenant(t *testing.T) string {
 	FROM company WHERE email=:'admin_email' RETURNING company.id;`)
 }
 
-func (s *composeSmoke) seedVerifiedTariff(t *testing.T) {
-	t.Helper()
-	s.seedID(t, `WITH source AS (
-		INSERT INTO normative_sources(
-			act_code,title,revision,published_on,effective_on,source_url,source_host,content_sha256,
-			content_type,original_filename,size_bytes,content_bytes,imported_by
-		) VALUES (
-			'ORDER-270','CI test tariff source','compose-fixture',DATE '2026-01-01',DATE '2026-01-01',
-			'https://publication.pravo.gov.ru/document/compose-test','publication.pravo.gov.ru',repeat('e',64),
-			'text/plain','compose-order-270.txt',22,convert_to('compose tariff fixture','UTF8'),
-			(SELECT id FROM users WHERE email=:'admin_email')
-		) RETURNING id
-	), verified AS (
-		UPDATE tariff_versions SET normative_source_id=source.id,provenance_verified=TRUE
-		FROM source WHERE code='order-270-2026.legacy'
-	)
-	SELECT id FROM source;`)
-}
-
 func (s *composeSmoke) seedEducationDirectory(t *testing.T) string {
 	t.Helper()
 	return s.seedID(t, `INSERT INTO education_directory(

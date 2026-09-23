@@ -63,9 +63,9 @@ const VALUE_LABELS = {
   holding_admin: "Администратор холдинга",
   org_admin: "Администратор организации",
   curator: "Куратор",
-  hr_specialist: "HR-специалист",
-  financial_specialist: "Финансовый специалист",
-  legal_specialist: "Юрист",
+  hr_specialist: "Кадровая служба (HR)",
+  financial_specialist: "Финансовая служба",
+  legal_specialist: "Юридическое управление",
   auditor_viewer: "Аудитор (только чтение)",
   organization: "ИТ-организация",
   edu_institution: "Образовательная организация",
@@ -89,10 +89,63 @@ const VALUE_LABELS = {
   directory_proposal_reject: "Отклонение предложения",
   okz_catalog_version: "Версия ОКЗ",
   okz_import: "Импорт ОКЗ",
+  academic_group: "Академическая группа",
+  agreement: "Соглашение",
+  curator_assignment: "Закрепление куратора",
+  directory: "Справочник",
+  it_company: "ИТ-компания",
+  legal_dispute: "Юридическое сомнение",
+  legal_entity_group: "Группа юридических лиц",
+  mentor: "Наставник",
+  normative_source: "Нормативный источник",
+  org_unit: "Структурное подразделение",
+  regional_authority: "РОИВ",
+  regulatory_process: "Регламентный процесс",
+  report: "Отчёт",
+  report_snapshot: "Снимок отчёта",
+  specialty_catalog: "Справочник специальностей",
+  staff_member: "Сотрудник",
+  tariff: "Тариф",
+  teaching_payout: "Выплата преподавателю",
+  workflow_task: "Задача",
 };
 
 function valueLabel(value) {
   return VALUE_LABELS[value] || value;
+}
+
+const AUDIT_ACTION_LABELS = {
+  update: "Изменение",
+  metadata: "Изменение реквизитов документа",
+  review: "Проверка",
+  assign: "Закрепление",
+  end: "Завершение периода",
+  revoke: "Отзыв",
+  reassign: "Переназначение",
+  complete: "Выполнение",
+  import: "Импорт",
+  export: "Выгрузка",
+  status: "Смена статуса",
+  seal: "Формирование снимка",
+  tariff_publish: "Публикация тарифа",
+  mfa_enabled: "Включение двухфакторной защиты",
+  mfa_reset: "Сброс двухфакторной защиты",
+  password_change: "Смена пароля",
+  legal_dispute_raise: "Постановка под сомнение",
+  legal_dispute_lift: "Снятие сомнения",
+  normative_source_import: "Импорт нормативного источника",
+  process_send: "Отправка",
+  process_start_review: "Принятие к рассмотрению",
+  process_approve: "Согласование",
+  process_request_rework: "Возврат на доработку",
+  process_resubmit: "Повторная отправка",
+  process_dispute: "Оспаривание",
+  process_default_approve: "Согласование по молчанию",
+  process_rework_lapsed: "Пропуск срока доработки",
+};
+
+function actionLabel(value) {
+  return AUDIT_ACTION_LABELS[value] || valueLabel(value);
 }
 
 async function api(path, opts = {}, pageCount = 0) {
@@ -172,7 +225,7 @@ function validYear(value) {
 
 function brandMarkup(inverse = false) {
   return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
-    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
+    <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-shine" d="M20 2 5 8v10.4c0 9.1 6.1 16.5 15 19.6V2Z"/><path class="brand-rim" d="M20 4.2 33.2 9.3v9.1c0 8-5.3 14.6-13.2 17.5C12.1 33 6.8 26.4 6.8 18.4V9.3L20 4.2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
     <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong></span>
   </div>`;
 }
@@ -269,7 +322,7 @@ function renderLogin() {
       <form class="login-box" id="login-form">
         <span class="eyebrow">Личный кабинет</span>
         <h1>Вход</h1>
-        <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
+        <div class="field"><label for="login-email">Электронная почта</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
         <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Пароль"></div>
         <div class="field"><label for="login-code">Код подтверждения <span class="label-optional">необязательно</span></label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"></div>
         <div class="error form-message" id="login-error" style="display:none" role="alert"></div>
@@ -458,7 +511,7 @@ async function renderSettingsOverview(box) {
   }
   const canSealSnapshot = ["super_admin", "holding_admin", "org_admin"].includes(state.me.role) && state.me.entity_type === "organization" && state.me.it_company_id;
   const canDownloadSnapshot = ["super_admin", "holding_admin", "org_admin", "auditor_viewer"].includes(state.me.role);
-  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить CryptoEngine</button></div></div></div>`;
+  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "ИТ-организация" : "Образовательная организация"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить криптомодуль</button></div></div></div>`;
   box.querySelector("#settings-target")?.addEventListener("click", (event) => openBudgetTargetDialog(event.currentTarget));
   box.querySelector("#settings-password").onclick = openPasswordDialog;
   box.querySelector("#settings-mfa")?.addEventListener("click", () => app.replaceChildren(renderMFASetup()));
@@ -510,9 +563,9 @@ async function renderDashboard(root) {
   state.dashboard = d;
 
   const groupedChart = (plan, fact) => {
-    const amounts = (items) => (items || []).reduce((map, item) => map.set(item.category_code, (map.get(item.category_code) || 0) + Number(item.amount_rub || 0)), new Map());
-    const planMap = amounts(plan);
-    const factMap = amounts(fact);
+    const counts = (items) => (items || []).reduce((map, item) => map.set(item.category_code, (map.get(item.category_code) || 0) + Number(item.entry_count || 0)), new Map());
+    const planMap = counts(plan);
+    const factMap = counts(fact);
     const codes = [...new Set([...planMap.keys(), ...factMap.keys()])];
     if (!codes.length)
       return `<div class="chart-empty">Добавьте записи плана или факта — здесь появится сравнение.</div>`;
@@ -527,13 +580,13 @@ async function renderDashboard(root) {
       <div class="chart-legend"><span><i class="legend-plan"></i>План</span><span><i class="legend-fact"></i>Факт</span></div>
       ${codes
         .map((code) => {
-          const planAmount = planMap.get(code) || 0;
-          const factAmount = factMap.get(code) || 0;
+          const planCount = planMap.get(code) || 0;
+          const factCount = factMap.get(code) || 0;
           return `<div class="compare-row">
             <div class="compare-label" title="${escapeHTML(CATEGORY_LABELS[code] || code)}">${escapeHTML(CATEGORY_LABELS[code] || code)}</div>
             <div class="compare-bars">
-              <div class="compare-bar plan" style="width:${(planAmount / max) * 100}%"><span>${escapeHTML(fmtMoney(planAmount))}</span></div>
-              <div class="compare-bar fact" style="width:${(factAmount / max) * 100}%"><span>${escapeHTML(fmtMoney(factAmount))}</span></div>
+              <div class="compare-bar plan" style="width:${(planCount / max) * 100}%"><span>${planCount}</span></div>
+              <div class="compare-bar fact" style="width:${(factCount / max) * 100}%"><span>${factCount}</span></div>
             </div>
           </div>`;
         })
@@ -541,58 +594,44 @@ async function renderDashboard(root) {
     </div>`;
   };
 
-  const donutChart = (items, total, title) => {
-    if (!items || !items.length || !Number(total)) {
+  const donutChart = (items, title) => {
+    const total = (items || []).reduce((sum, item) => sum + Number(item.entry_count || 0), 0);
+    if (!items || !items.length || !total) {
       return `<div class="donut-panel"><div class="chart-empty">Нет данных для диаграммы «${escapeHTML(title)}»</div></div>`;
     }
     const grouped = [...(items || []).reduce((map, item) => {
-      const current = map.get(item.category_code) || { ...item, amount_rub: 0, share_percent: 0 };
-      current.amount_rub += Number(item.amount_rub || 0);
-      current.share_percent += Number(item.share_percent || 0);
+      const current = map.get(item.category_code) || { ...item, entry_count: 0 };
+      current.entry_count += Number(item.entry_count || 0);
       map.set(item.category_code, current);
       return map;
     }, new Map()).values()];
     let cursor = 0;
     const segments = grouped.map((item, index) => {
       const start = cursor;
-      cursor += clampPercent(item.share_percent);
+      cursor += clampPercent((item.entry_count / total) * 100);
       return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`;
     });
     return `<div class="donut-panel">
       <div class="donut" style="background:conic-gradient(${segments.join(",")})">
-        <div class="donut-hole"><span>${escapeHTML(title)}</span><strong>${escapeHTML(fmtMoney(total))}</strong></div>
+        <div class="donut-hole"><span>${escapeHTML(title)}</span><strong>${total}</strong></div>
       </div>
       <div class="donut-legend">${grouped
         .map(
           (item, index) =>
             `<div><i style="background:${CHART_COLORS[index % CHART_COLORS.length]}"></i><span>${escapeHTML(
               CATEGORY_LABELS[item.category_code] || item.category_code,
-            )}</span><b>${Number(item.share_percent || 0).toLocaleString("ru-RU")}%</b></div>`,
+            )}</span><b>${Math.round((item.entry_count / total) * 100)}%</b></div>`,
         )
         .join("")}</div>
     </div>`;
   };
 
-  const planPct = clampPercent(d.plan_completion_pct);
-  const targetAmount = d.target_amount_rub == null
-    ? null
-    : Number(d.target_amount_rub);
-  const confirmedAmount = Number(
-    d.target_confirmed_fact_rub ?? d.eligible_fact_total_rub ?? 0,
-  );
-  // DASH-01: нехватку, превышение и процент выполнения норматива считает
-  // сервер точной денежной арифметикой — здесь их только показываем.
-  const targetGap = targetAmount == null ? null : Number(d.target_deficit_rub ?? 0);
-  const targetSurplus = targetAmount == null ? null : Number(d.target_surplus_rub ?? 0);
-  const targetReached = targetAmount != null && targetGap === 0;
-  const targetCompletionPct = Number(d.target_completion_pct ?? 0);
-  const targetPct = clampPercent(targetCompletionPct);
-  const amountsByCategory = (items) => (items || []).reduce((result, item) => {
-    result[item.category_code] = (result[item.category_code] || 0) + Number(item.amount_rub || 0);
+  const countsByCategory = (items) => (items || []).reduce((result, item) => {
+    result[item.category_code] = (result[item.category_code] || 0) + Number(item.entry_count || 0);
     return result;
   }, {});
-  const planAmounts = amountsByCategory(d.plan_by_category);
-  const factAmounts = amountsByCategory(d.fact_by_category);
+  const planCounts = countsByCategory(d.plan_by_category);
+  const factCounts = countsByCategory(d.fact_by_category);
   const dashboardSlice = ["plan", "fact", "delta"].includes(state.dashboardSlice)
     ? state.dashboardSlice
     : "fact";
@@ -602,8 +641,8 @@ async function renderDashboard(root) {
     delta: "Дельта (Факт-План)",
   };
   const activityRows = state.categories.map((category) => {
-    const plan = planAmounts[category.code] || 0;
-    const fact = factAmounts[category.code] || 0;
+    const plan = planCounts[category.code] || 0;
+    const fact = factCounts[category.code] || 0;
     const delta = fact - plan;
     const risk = fact > 0 && (plan === 0 || fact >= plan)
       ? "green"
@@ -622,14 +661,9 @@ async function renderDashboard(root) {
     yellow: { entry_count: riskCounts.yellow, amount_rub: 0 },
     red: { entry_count: riskCounts.red, amount_rub: 0 },
   };
-  // DASH-03: обязательный минимум ВО считает сервер — только по аудитории
-  // высшего образования и с объяснением исключения по пункту 22 Порядка.
-  const mandatory = (d.mandatory_higher_education || []).map((chip) => ({
-    label: chip.label,
-    complete: Boolean(chip.complete),
-    optional: Boolean(chip.alternative),
-    explanation: chip.explanation || "",
-  }));
+  const factEntries = (d.fact_by_category || []).reduce((sum, item) => sum + Number(item.entry_count || 0), 0);
+  const activeAgreements = state.partners.reduce((sum, partner) => sum + Number(partner.active_agreements_count || 0), 0);
+  const attentionEntries = Number(riskBuckets.yellow?.entry_count || 0) + Number(riskBuckets.red?.entry_count || 0);
   const selectedPartner = state.partners.find(
     (partner) => partner.id === state.partnerID,
   );
@@ -642,64 +676,50 @@ async function renderDashboard(root) {
       <div><span class="eyebrow">Экран 1</span><h1>Пульс проекта</h1></div>
       <span class="year-badge">${state.year}</span>
     </section>
+    <div class="dashboard-primary-kpis" aria-label="Ключевые показатели">
+      <article class="dashboard-kpi target">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
+        <div class="dashboard-kpi-label">Партнёры</div>
+        <div class="dashboard-kpi-value">${state.partners.length}</div>
+      </article>
+      <article class="dashboard-kpi confirmed">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
+        <div class="dashboard-kpi-label">Действующие соглашения</div>
+        <div class="dashboard-kpi-value">${activeAgreements}</div>
+      </article>
+      <article class="dashboard-kpi gap reached">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
+        <div class="dashboard-kpi-label">Мероприятия по факту</div>
+        <div class="dashboard-kpi-value">${factEntries}</div>
+      </article>
+      <article class="dashboard-kpi date">
+        <div class="dashboard-kpi-icon">${dashboardKPIIcon("gap")}</div>
+        <div class="dashboard-kpi-label">Требуют внимания</div>
+        <div class="dashboard-kpi-value">${attentionEntries}</div>
+      </article>
+    </div>
+    ${partnerDistributionMarkup(state.partners)}
     <div class="card dashboard-filter-card">
       <div class="dashboard-toolbar">
-        <h2 style="margin:0">Фильтры аналитики</h2>
+        <h2 style="margin:0">Аналитика</h2>
         <div class="dashboard-filters">
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
-          <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта (Факт-План)</option></select></div>
+          <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта</option></select></div>
           <div class="field"><label class="check-row" for="dash-hide-zero"><input type="checkbox" id="dash-hide-zero" ${state.dashboardHideZero ? "checked" : ""}> Скрыть нулевые позиции</label></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
         </div>
       </div>
     </div>
-    <div class="dashboard-primary-kpis" aria-label="Ключевые показатели">
-      <article class="dashboard-kpi target">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
-        <div class="dashboard-kpi-label">Целевой показатель</div>
-        <div class="dashboard-kpi-value">${targetAmount == null ? "Не задан" : fmtMoney(targetAmount)}</div>
-      </article>
-      <article class="dashboard-kpi confirmed">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
-        <div class="dashboard-kpi-label">Подтверждённые расходы</div>
-        <div class="dashboard-kpi-value">${fmtMoney(confirmedAmount)}</div>
-      </article>
-      <article class="dashboard-kpi gap ${targetReached ? "reached" : ""}">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon(targetReached ? "confirmed" : "gap")}</div>
-        <div class="dashboard-kpi-label">${targetReached ? "Профицит" : "До выполнения цели"}</div>
-        <div class="dashboard-kpi-value">${targetGap == null ? "—" : fmtMoney(targetReached ? targetSurplus : targetGap)}</div>
-      </article>
-      <article class="dashboard-kpi date">
-        <div class="dashboard-kpi-icon">${dashboardKPIIcon("date")}</div>
-        <div class="dashboard-kpi-label">Дата формирования отчёта</div>
-        <div class="dashboard-kpi-value">${escapeHTML(fmtReportDate(d.generated_at))}</div>
-      </article>
-    </div>
-    <div class="dashboard-summary-strip" aria-label="Дополнительные показатели">
-      <div><span>План, всего</span><strong>${fmtMoney(d.plan_total_rub)}</strong></div>
-      <div><span>Факт, всего</span><strong>${fmtMoney(d.fact_total_rub)}</strong></div>
-      <div><span>Утверждённый план</span><strong>${fmtMoney(d.eligible_plan_total_rub)}</strong></div>
-      <div class="${Number(d.incomplete_entries || 0) ? "has-warning" : ""}"><span>Не учтено записей</span><strong>${Number(d.incomplete_entries || 0).toLocaleString("ru-RU")}</strong></div>
-    </div>
-    <div class="mandatory-strip" aria-label="Обязательный минимум высшего образования">
-      <div><span class="eyebrow">Обязательный минимум ВО</span><b>Пункт 22</b></div>
-      ${mandatory.map((item) => `<span class="mandatory-chip ${item.complete ? "complete" : "missing"}" title="${escapeHTML(item.explanation)}">${item.complete ? "✓" : "!"} ${escapeHTML(item.label)}${item.optional ? " · альтернатива" : ""}</span>`).join("")}
-    </div>
-    <div class="progress-card dashboard-progress">
-      <div class="progress-header"><span>Реализация плана</span><strong>${Number(d.plan_completion_pct || 0).toLocaleString("ru-RU")}%</strong></div>
-      <div class="progress-track"><div class="progress-fill" style="width:${planPct}%"></div></div>
-      ${targetAmount ? `<div class="progress-header target"><span>Подтверждённые расходы к минимальному объёму 3%</span><strong>${targetCompletionPct.toLocaleString("ru-RU")}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
-    </div>
     <div class="grid cols-2 dashboard-risk-grid">
-      <div class="card"><h2>Распределение документальных рисков</h2><div class="risk-buckets"><div class="green"><span>${fmtMoney(riskBuckets.green?.amount_rub || 0)}</span><b>Гарантировано · ${Number(riskBuckets.green?.entry_count || 0)}</b></div><div class="yellow"><span>${fmtMoney(riskBuckets.yellow?.amount_rub || 0)}</span><b>Прогноз · ${Number(riskBuckets.yellow?.entry_count || 0)}</b></div><div class="red"><span>${fmtMoney(riskBuckets.red?.amount_rub || 0)}</span><b>В зоне риска · ${Number(riskBuckets.red?.entry_count || 0)}</b></div></div></div>
-      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.selected)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets"><div class="green"><span>${Number(riskBuckets.green?.entry_count || 0)}</span><b>Готово</b></div><div class="yellow"><span>${Number(riskBuckets.yellow?.entry_count || 0)}</span><b>В работе</b></div><div class="red"><span>${Number(riskBuckets.red?.entry_count || 0)}</span><b>Требует внимания</b></div></div></div>
+      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Готовность</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${item.selected}</td><td>${item.plan}</td><td>${item.fact}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Готово" : item.risk === "yellow" ? "В работе" : "Нет данных"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
-    <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
+    <div class="card"><h2>Количество мероприятий по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
-      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, d.plan_total_rub, "План")}</div>
-      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, d.fact_total_rub, "Факт")}</div>
+      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, "План")}</div>
+      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, "Факт")}</div>
     </div>
   `;
   root.querySelector("#dash-year").onchange = (e) => {
@@ -1677,10 +1697,10 @@ async function renderAdminUsers(box) {
   box.innerHTML = `<div class="section-intro"><h2>Пользователи</h2></div><div class="card"><h2>Новый пользователь</h2>
     <form id="u-form" novalidate>
     <div class="grid cols-3">
-      <div class="field"><label>Email *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
+      <div class="field"><label>Электронная почта *</label><input id="u-email" type="email" maxlength="254" autocomplete="off" required><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>Пароль *</label><input id="u-password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><div class="field-hint">10–128 символов: A–Z, a–z, цифра и спецсимвол</div><div class="field-error" style="display:none"></div></div>
       <div class="field"><label>ФИО *</label><input id="u-name" minlength="2" maxlength="200" required><div class="field-error" style="display:none"></div></div>
-      <div class="field"><label>Роль</label><select id="u-role"><option value="super_admin">SUPER_ADMIN</option><option value="holding_admin">HOLDING_ADMIN</option><option value="org_admin">ORG_ADMIN</option><option value="curator" selected>CURATOR</option><option value="hr_specialist">HRD / HR_SPECIALIST</option><option value="financial_specialist">FINANCIAL_SPECIALIST</option><option value="legal_specialist">LEGAL_SPECIALIST</option><option value="auditor_viewer">AUDITOR_VIEWER</option></select><div class="field-hint">Права назначаются по матрице RBAC; аудитор работает только в режиме чтения.</div></div>
+      <div class="field"><label>Роль</label><select id="u-role"><option value="super_admin">Главный администратор</option><option value="holding_admin">Администратор холдинга</option><option value="org_admin">Администратор организации</option><option value="curator" selected>Куратор</option><option value="hr_specialist">Кадровая служба (HR)</option><option value="financial_specialist">Финансовая служба</option><option value="legal_specialist">Юридическое управление</option><option value="auditor_viewer">Аудитор (только чтение)</option></select><div class="field-hint">Права назначаются по матрице ролей; аудитор работает только в режиме чтения.</div></div>
       <div class="field"><label>Тип пользователя</label><select id="u-entity"><option value="organization">ИТ-компания</option><option value="edu_institution">Учебное заведение</option></select></div>
       <div class="field" id="u-partner-field" hidden><label id="u-partner-label">Учебное заведение *</label><select id="u-partner"><option value="">Выберите учебное заведение</option>${(Array.isArray(
         state.partners,
@@ -1836,7 +1856,7 @@ async function renderAdminUsers(box) {
         ? `Найдено пользователей: ${users.length}`
         : `Всего пользователей: ${users.length}`;
       listBox.innerHTML = users.length
-        ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>ФИО</th><th>Организация</th><th>Закреплённая ОО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
+        ? `<div class="table-wrap"><table><thead><tr><th>Электронная почта</th><th>ФИО</th><th>Организация</th><th>Закреплённая ОО</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
           <tbody>${users
             .map(
               (u) => `<tr>
@@ -1905,7 +1925,7 @@ async function renderAdminSettings(box) {
     <button class="btn" id="s-save">Сохранить</button>
     <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
   </div>
-  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2></div><span class="status-badge">Europe/Moscow</span></div>
+  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2></div><span class="status-badge">Москва (UTC+3)</span></div>
     <div class="grid cols-3">
       <div class="field"><label>ИТ-компания</label><select id="snapshot-company"><option value="">Выберите компанию</option>${companies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
       <div class="field"><label>Отчётный год</label><input id="snapshot-year" type="number" min="2000" max="2100" value="${state.year}"></div>
@@ -2035,7 +2055,7 @@ async function renderAdminLogs(box) {
       ? `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Кто</th><th>Объект и действие</th><th>Что изменено</th></tr></thead><tbody>${visible.map((log) => `<tr>
         <td>${new Date(log.created_at).toLocaleString("ru-RU")}</td>
 		<td>${escapeHTML(log.actor?.name || log.user_name || ((log.actor?.id || log.user_id) ? "Пользователь" : "Автоматический скрипт"))}${(log.actor?.email || log.user_email) ? `<br><small>${escapeHTML(log.actor?.email || log.user_email)}</small>` : ""}</td>
-		<td title="Request ID: ${escapeHTML(log.request_id || "—")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(valueLabel(log.action))}</b></td>
+		<td title="ID запроса: ${escapeHTML(log.request_id || "—")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(actionLabel(log.action))}</b></td>
         <td>${summarize(log)}</td>
       </tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Действий по выбранному фильтру пока нет.</p>';

@@ -231,7 +231,7 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	out := make([]map[string]interface{}, 0, len(staged))
 	for _, f := range staged {
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,owner_type,owner_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at,document_type,content_sha256,scan_status,scan_signature,scanned_at) VALUES($1,'entry',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),now()) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires, documentType, f.contentSHA256, f.scanStatus, f.scanSignature).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at,document_type,content_sha256,scan_status,scan_signature,scanned_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),now()) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires, documentType, f.contentSHA256, f.scanStatus, f.scanSignature).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка метаданных")
 			return
 		}
@@ -262,10 +262,10 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 		return
 	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at,document_type,review_status,
-		COALESCE(review_comment,''),COALESCE(content_sha256,''),scan_status,owner_type,owner_id::text,
-		COALESCE(document_date::text,''),COALESCE(valid_from::text,''),COALESCE(valid_until::text,''),
-		COALESCE(signer_name,''),COALESCE(signer_certificate_id,''),COALESCE(signer_key_id,''),
-		COALESCE(signature_algorithm,''),legal_dispute,COALESCE(dispute_reason,''),metadata_version
+		COALESCE(review_comment,''),COALESCE(content_sha256,''),scan_status,
+		owner_role,owner_entity_type,COALESCE(document_number,''),COALESCE(document_date::text,''),COALESCE(signer_name,''),
+		COALESCE(certificate_serial,''),COALESCE(certificate_valid_from::text,''),COALESCE(certificate_valid_until::text,''),
+		COALESCE(signature_verified_at::text,'')
 		FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id`+page, entryID)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка запроса")
@@ -275,24 +275,18 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 	list := []map[string]interface{}{}
 	for rows.Next() {
 		var id, name, documentType, reviewStatus, reviewComment, contentSHA256, scanStatus string
-		var ownerType, ownerID, documentDate, validFrom, validUntil, signerName, signerCertificateID, signerKeyID, signatureAlgorithm, disputeReason string
-		var legalDispute bool
-		var metadataVersion int64
+		var ownerRole, ownerEntity, number, docDate, signer, serial, certFrom, certUntil, verifiedAt string
 		var size int64
 		var uploaded, expires time.Time
 		if rows.Scan(&id, &name, &size, &uploaded, &expires, &documentType, &reviewStatus, &reviewComment, &contentSHA256, &scanStatus,
-			&ownerType, &ownerID, &documentDate, &validFrom, &validUntil, &signerName, &signerCertificateID, &signerKeyID,
-			&signatureAlgorithm, &legalDispute, &disputeReason, &metadataVersion) != nil {
+			&ownerRole, &ownerEntity, &number, &docDate, &signer, &serial, &certFrom, &certUntil, &verifiedAt) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
-		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "owner_type": ownerType, "owner_id": ownerID,
-			"file_name": name, "size_bytes": size, "content_sha256": contentSHA256, "uploaded_at": uploaded,
-			"retention_expires_at": expires, "document_type": documentType, "document_date": documentDate,
-			"valid_from": validFrom, "valid_until": validUntil, "signer_name": signerName,
-			"signer_certificate_id": signerCertificateID, "signer_key_id": signerKeyID,
-			"signature_algorithm": signatureAlgorithm, "review_status": reviewStatus, "review_comment": reviewComment,
-			"legal_dispute": legalDispute, "dispute_reason": disputeReason, "metadata_version": metadataVersion, "scan_status": scanStatus})
+		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "file_name": name, "size_bytes": size, "content_sha256": contentSHA256, "uploaded_at": uploaded, "retention_expires_at": expires, "document_type": documentType, "review_status": reviewStatus, "review_comment": reviewComment, "scan_status": scanStatus,
+			"owner_role": ownerRole, "owner_entity_type": ownerEntity, "document_number": number, "document_date": docDate,
+			"signer_name": signer, "certificate_serial": serial, "certificate_valid_from": certFrom,
+			"certificate_valid_until": certUntil, "signature_verified_at": verifiedAt})
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения")
@@ -304,6 +298,9 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 type attachmentReviewRequest struct {
 	Status  string `json:"status"`
 	Comment string `json:"comment"`
+	// SignatureVerified — проверяющий подтверждает, что подпись и сертификат,
+	// описанные в реквизитах, подлинны. Возможно только для описанной подписи.
+	SignatureVerified *bool `json:"signature_verified,omitempty"`
 }
 
 // Review records legal verification separately from the uploaded bytes. A
@@ -334,13 +331,33 @@ func (h *AttachmentHandlers) Review(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 400, "при отклонении укажите причину")
 		return
 	}
+	if req.SignatureVerified != nil && *req.SignatureVerified && req.Status != "approved" {
+		middleware.WriteError(w, 400, "подпись подтверждается вместе с одобрением документа")
+		return
+	}
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(r.Context(), `UPDATE attachments SET review_status=$1,reviewed_by=$2,reviewed_at=now(),review_comment=NULLIF($3,'') WHERE id::text=$4`, req.Status, u.ID, req.Comment, attachmentID); err != nil {
+	// Подтверждать нечего, если подпись не описана: проверяющий подтверждает
+	// сведения, а не собственное впечатление.
+	verifySignature := req.SignatureVerified != nil && *req.SignatureVerified
+	if verifySignature {
+		var signed bool
+		if err := tx.QueryRowContext(r.Context(), `SELECT signer_name IS NOT NULL FROM attachments WHERE id::text=$1`, attachmentID).Scan(&signed); err != nil {
+			middleware.WriteError(w, 500, "ошибка чтения документа")
+			return
+		}
+		if !signed {
+			middleware.WriteError(w, 400, "у документа не описана подпись: сначала укажите подписанта и сертификат")
+			return
+		}
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE attachments SET review_status=$1,reviewed_by=$2,reviewed_at=now(),review_comment=NULLIF($3,''),
+		signature_verified_at=CASE WHEN $5 THEN now() ELSE NULL END,signature_verified_by=CASE WHEN $5 THEN $2::uuid ELSE NULL END
+		WHERE id::text=$4`, req.Status, u.ID, req.Comment, attachmentID, verifySignature); err != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения проверки")
 		return
 	}
@@ -349,140 +366,6 @@ func (h *AttachmentHandlers) Review(w http.ResponseWriter, r *http.Request, u mi
 		return
 	}
 	middleware.WriteJSON(w, 200, map[string]string{"status": req.Status})
-}
-
-type attachmentMetadataInput struct {
-	DocumentType        string `json:"document_type"`
-	DocumentDate        string `json:"document_date"`
-	ValidFrom           string `json:"valid_from"`
-	ValidUntil          string `json:"valid_until"`
-	SignerName          string `json:"signer_name"`
-	SignerCertificateID string `json:"signer_certificate_id"`
-	SignerKeyID         string `json:"signer_key_id"`
-	SignatureAlgorithm  string `json:"signature_algorithm"`
-	Version             int64  `json:"version"`
-}
-
-func validOptionalDate(value string) bool {
-	if value == "" {
-		return true
-	}
-	_, err := time.Parse("2006-01-02", value)
-	return err == nil
-}
-
-// UpdateMetadata changes legal descriptors, never the immutable blob bytes.
-func (h *AttachmentHandlers) UpdateMetadata(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {
-	var entryID, category string
-	if err := h.DB.QueryRowContext(r.Context(), `SELECT attachment.entry_id::text,entry.category_code
-		FROM attachments attachment JOIN entries entry ON entry.id=attachment.entry_id
-		WHERE attachment.id::text=$1 AND attachment.retention_expires_at>now()`, attachmentID).Scan(&entryID, &category); err == sql.ErrNoRows {
-		middleware.WriteError(w, 404, "документ не найден")
-		return
-	} else if err != nil {
-		middleware.WriteError(w, 500, "ошибка чтения документа")
-		return
-	}
-	if !requireEntry(w, r, h.DB, u, entryID) {
-		return
-	}
-	var input attachmentMetadataInput
-	if decodeJSON(r, &input) != nil {
-		middleware.WriteError(w, 400, "некорректные метаданные документа")
-		return
-	}
-	input.DocumentType = strings.TrimSpace(input.DocumentType)
-	input.DocumentDate = strings.TrimSpace(input.DocumentDate)
-	input.ValidFrom = strings.TrimSpace(input.ValidFrom)
-	input.ValidUntil = strings.TrimSpace(input.ValidUntil)
-	if !compliance.ValidDocumentType(input.DocumentType) || !canUploadDocument(u, category, input.DocumentType) {
-		middleware.WriteError(w, 403, "роль не может назначить этот тип документа")
-		return
-	}
-	if input.Version < 1 || !validOptionalDate(input.DocumentDate) || !validOptionalDate(input.ValidFrom) || !validOptionalDate(input.ValidUntil) ||
-		(input.ValidFrom != "" && input.ValidUntil != "" && input.ValidUntil < input.ValidFrom) {
-		middleware.WriteError(w, 400, "проверьте версию и даты документа")
-		return
-	}
-	tx, err := h.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка транзакции")
-		return
-	}
-	defer tx.Rollback()
-	result, err := tx.ExecContext(r.Context(), `UPDATE attachments SET document_type=$1,document_date=NULLIF($2,'')::date,
-		valid_from=NULLIF($3,'')::date,valid_until=NULLIF($4,'')::date,signer_name=NULLIF($5,''),
-		signer_certificate_id=NULLIF($6,''),signer_key_id=NULLIF($7,''),signature_algorithm=NULLIF($8,''),
-		metadata_version=metadata_version+1 WHERE id::text=$9 AND metadata_version=$10`, input.DocumentType,
-		input.DocumentDate, input.ValidFrom, input.ValidUntil, strings.TrimSpace(input.SignerName),
-		strings.TrimSpace(input.SignerCertificateID), strings.TrimSpace(input.SignerKeyID), strings.TrimSpace(input.SignatureAlgorithm),
-		attachmentID, input.Version)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка сохранения метаданных")
-		return
-	}
-	changed, _ := result.RowsAffected()
-	if changed == 0 {
-		middleware.WriteError(w, 409, "метаданные документа уже изменены; обновите карточку")
-		return
-	}
-	if err := logAudit(r.Context(), tx, "attachment", attachmentID, "metadata_update", u.ID, "", nil, input); err != nil || tx.Commit() != nil {
-		middleware.WriteError(w, 500, "ошибка аудита метаданных")
-		return
-	}
-	middleware.WriteJSON(w, 200, map[string]interface{}{"id": attachmentID, "version": input.Version + 1})
-}
-
-type attachmentDisputeInput struct {
-	Active bool   `json:"active"`
-	Reason string `json:"reason"`
-}
-
-func (h *AttachmentHandlers) SetDispute(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {
-	if u.Role != models.RoleSuperAdmin && u.Role != models.RoleHoldingAdmin && u.Role != models.RoleOrgAdmin && u.Role != models.RoleLegalSpecialist {
-		middleware.WriteError(w, 403, "юридическое сомнение доступно уполномоченному проверяющему")
-		return
-	}
-	var entryID string
-	if err := h.DB.QueryRowContext(r.Context(), `SELECT entry_id::text FROM attachments WHERE id::text=$1`, attachmentID).Scan(&entryID); err == sql.ErrNoRows {
-		middleware.WriteError(w, 404, "документ не найден")
-		return
-	} else if err != nil {
-		middleware.WriteError(w, 500, "ошибка чтения документа")
-		return
-	}
-	if !requireEntry(w, r, h.DB, u, entryID) {
-		return
-	}
-	var input attachmentDisputeInput
-	if decodeJSON(r, &input) != nil {
-		middleware.WriteError(w, 400, "некорректный запрос")
-		return
-	}
-	input.Reason = strings.TrimSpace(input.Reason)
-	if input.Active && input.Reason == "" {
-		middleware.WriteError(w, 400, "укажите причину юридического сомнения")
-		return
-	}
-	tx, err := h.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка транзакции")
-		return
-	}
-	defer tx.Rollback()
-	_, err = tx.ExecContext(r.Context(), `UPDATE attachments SET legal_dispute=$1,
-		dispute_reason=CASE WHEN $1 THEN $2 ELSE NULL END,disputed_by=CASE WHEN $1 THEN $3::uuid ELSE NULL END,
-		disputed_at=CASE WHEN $1 THEN now() ELSE NULL END,metadata_version=metadata_version+1 WHERE id::text=$4`,
-		input.Active, input.Reason, u.ID, attachmentID)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка сохранения юридического сомнения")
-		return
-	}
-	if err := logAudit(r.Context(), tx, "attachment", attachmentID, "legal_dispute", u.ID, input.Reason, nil, input); err != nil || tx.Commit() != nil {
-		middleware.WriteError(w, 500, "ошибка аудита юридического сомнения")
-		return
-	}
-	middleware.WriteJSON(w, 200, map[string]interface{}{"id": attachmentID, "legal_dispute": input.Active})
 }
 
 func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {

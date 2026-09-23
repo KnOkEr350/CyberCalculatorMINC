@@ -210,11 +210,11 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		}
 		resp.RiskBuckets, err = riskBreakdownFromProjection(projected)
 	} else {
-		if err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2) AND ($3='' OR it_company_id::text=$3) AND ($4='' OR category_code=$4) AND ($5='' OR audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {
+		if err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(amount_rub) FILTER(WHERE period_type='plan'),0),COALESCE(SUM(amount_rub) FILTER(WHERE period_type='fact'),0) FROM entries WHERE report_year=$1 AND ($2='' OR partner_id::text=$2) AND ($3='' OR it_company_id=NULLIF($3,'')::uuid) AND ($4='' OR category_code=$4) AND ($5='' OR audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.PlanTotalRub, &resp.FactTotalRub); err != nil {
 			middleware.WriteError(w, 500, "ошибка расчёта дашборда")
 			return
 		}
-		if err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='plan' AND eligibility.eligible),0),COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='fact' AND eligibility.eligible),0),count(*) FILTER(WHERE NOT eligibility.eligible) FROM entry_eligibility eligibility JOIN entries e ON e.id=eligibility.id WHERE e.report_year=$1 AND ($2='' OR e.partner_id::text=$2) AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.EligiblePlanTotalRub, &resp.EligibleFactTotalRub, &resp.IncompleteEntries); err != nil {
+		if err = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='plan' AND eligibility.eligible),0),COALESCE(sum(e.amount_rub) FILTER(WHERE e.period_type='fact' AND eligibility.eligible),0),count(*) FILTER(WHERE NOT eligibility.eligible) FROM entry_eligibility eligibility JOIN entries e ON e.id=eligibility.id WHERE e.report_year=$1 AND ($2='' OR e.partner_id::text=$2) AND ($3='' OR e.it_company_id=NULLIF($3,'')::uuid) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter).Scan(&resp.EligiblePlanTotalRub, &resp.EligibleFactTotalRub, &resp.IncompleteEntries); err != nil {
 			middleware.WriteError(w, 500, "ошибка проверки обязательностей")
 			return
 		}
@@ -280,7 +280,7 @@ func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, comp
 		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=e.id AND a.retention_expires_at>now())
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id
 		WHERE e.period_type='fact' AND e.report_year=$1 AND ($2='' OR e.partner_id::text=$2)
-		AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter)
+		AND ($3='' OR e.it_company_id=NULLIF($3,'')::uuid) AND ($4='' OR e.category_code=$4) AND ($5='' OR e.audience=$5)`, year, scope, companyScope, categoryFilter, audienceFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +485,7 @@ func (h *DashboardHandlers) breakdown(r *http.Request, year int, period, scope, 
 		 COALESCE(SUM(e.amount_rub),0)
 		 FROM entries e JOIN activity_categories c ON c.code=e.category_code
 		 WHERE e.period_type=$1 AND e.report_year=$2 AND ($3='' OR e.partner_id::text=$3)
-		 AND ($4='' OR e.it_company_id::text=$4) AND ($5='' OR e.category_code=$5) AND ($6='' OR e.audience=$6)
+		 AND ($4='' OR e.it_company_id=NULLIF($4,'')::uuid) AND ($5='' OR e.category_code=$5) AND ($6='' OR e.audience=$6)
 		 GROUP BY e.category_code,e.audience,c.obligation ORDER BY e.category_code,e.audience`, period, year, scope, companyScope, categoryFilter, audienceFilter)
 	if err != nil {
 		return nil, err

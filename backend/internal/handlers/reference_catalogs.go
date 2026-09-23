@@ -3,21 +3,17 @@ package handlers
 import (
 	"database/sql"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
-	"cybercalc/internal/money"
-	"cybercalc/internal/tariffs"
 	"cybercalc/internal/xlsx"
 )
 
@@ -225,97 +221,6 @@ func (h *ReferenceCatalogHandlers) ImportSpecialties(w http.ResponseWriter, r *h
 	}
 	if err := logAudit(r.Context(), tx, "specialty_catalog", versionID, "import", u.ID, "", nil, map[string]interface{}{"code": versionCode, "rows": len(seen), "source_id": sourceID}); err != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения справочника")
-		return
-	}
-	middleware.WriteJSON(w, 201, map[string]interface{}{"id": versionID, "rows": len(seen)})
-}
-
-func (h *ReferenceCatalogHandlers) Tariffs(w http.ResponseWriter, r *http.Request, _ middleware.AuthUser) {
-	year, err := strconv.Atoi(r.URL.Query().Get("report_year"))
-	activity := strings.TrimSpace(r.URL.Query().Get("activity_code"))
-	audience := strings.TrimSpace(r.URL.Query().Get("audience"))
-	if err != nil || activity == "" || audience == "" {
-		middleware.WriteError(w, 400, "укажите report_year, activity_code и audience")
-		return
-	}
-	version, err := (tariffs.Repository{DB: h.DB}).Active(r.Context(), year, activity, audience)
-	if err != nil {
-		if errors.Is(err, tariffs.ErrNoActiveVersion) {
-			middleware.WriteError(w, 404, err.Error())
-		} else {
-			middleware.WriteError(w, 500, "ошибка чтения тарифов")
-		}
-		return
-	}
-	middleware.WriteJSON(w, 200, version)
-}
-
-func (h *ReferenceCatalogHandlers) ImportTariffs(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
-	if !catalogAdmin(u) {
-		middleware.WriteError(w, 403, "импорт тарифов доступен системному администратору")
-		return
-	}
-	records, err := multipartTable(w, r)
-	if err != nil {
-		middleware.WriteError(w, 400, err.Error())
-		return
-	}
-	positions, err := headerPositions(records[0], "activity_code", "audience", "component_code", "rate_rub", "unit_code")
-	if err != nil {
-		middleware.WriteError(w, 400, err.Error())
-		return
-	}
-	versionCode := strings.TrimSpace(r.FormValue("version_code"))
-	versionTitle := strings.TrimSpace(r.FormValue("title"))
-	effectiveFrom, err := time.Parse("2006-01-02", r.FormValue("effective_from"))
-	if err != nil || versionCode == "" || versionTitle == "" {
-		middleware.WriteError(w, 400, "укажите version_code, title и effective_from")
-		return
-	}
-	sourceID := strings.TrimSpace(r.FormValue("normative_source_id"))
-	tx, err := h.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		middleware.WriteError(w, 500, "ошибка транзакции")
-		return
-	}
-	defer tx.Rollback()
-	var sourceReference string
-	if sourceID == "" || tx.QueryRowContext(r.Context(), `SELECT title||', редакция '||revision||', SHA-256 '||content_sha256 FROM normative_sources WHERE id::text=$1`, sourceID).Scan(&sourceReference) != nil {
-		middleware.WriteError(w, 400, "выберите проверенный normative_source_id")
-		return
-	}
-	if _, err := tx.ExecContext(r.Context(), `UPDATE tariff_versions SET status='retired',effective_until=CASE WHEN effective_from<$1 THEN $1::date-1 ELSE effective_from END WHERE status='active'`, effectiveFrom); err != nil {
-		middleware.WriteError(w, 500, "ошибка переключения тарифов")
-		return
-	}
-	var versionID string
-	if err := tx.QueryRowContext(r.Context(), `INSERT INTO tariff_versions(code,title,effective_from,normative_source_id,source_reference,provenance_verified,status,created_by)
-		VALUES($1,$2,$3,$4,$5,TRUE,'active',$6) RETURNING id::text`, versionCode, versionTitle, effectiveFrom, sourceID, sourceReference, u.ID).Scan(&versionID); err != nil {
-		middleware.WriteError(w, 409, "версия тарифов конфликтует с существующей")
-		return
-	}
-	seen := map[string]bool{}
-	for index, row := range records[1:] {
-		activity := cell(row, positions, "activity_code")
-		audience := cell(row, positions, "audience")
-		component := cell(row, positions, "component_code")
-		rate := strings.ReplaceAll(cell(row, positions, "rate_rub"), ",", ".")
-		unit := cell(row, positions, "unit_code")
-		key := activity + "\x00" + audience + "\x00" + component
-		if _, err := money.Parse(rate); err != nil || activity == "" || component == "" || unit == "" || seen[key] ||
-			(audience != "vuz" && audience != "kolledj" && audience != "school" && audience != "all") {
-			middleware.WriteError(w, 400, fmt.Sprintf("некорректная или повторная тарифная строка %d", index+2))
-			return
-		}
-		seen[key] = true
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO tariff_rules(tariff_version_id,activity_code,audience,component_code,rate_rub,unit_code)
-			VALUES($1,$2,$3,$4,$5,$6)`, versionID, activity, audience, component, rate, unit); err != nil {
-			middleware.WriteError(w, 400, fmt.Sprintf("не удалось сохранить тарифную строку %d", index+2))
-			return
-		}
-	}
-	if err := logAudit(r.Context(), tx, "tariff_version", versionID, "import", u.ID, "", nil, map[string]interface{}{"code": versionCode, "rows": len(seen), "source_id": sourceID}); err != nil || tx.Commit() != nil {
-		middleware.WriteError(w, 500, "ошибка сохранения тарифов")
 		return
 	}
 	middleware.WriteJSON(w, 201, map[string]interface{}{"id": versionID, "rows": len(seen)})

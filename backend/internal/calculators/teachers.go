@@ -3,6 +3,7 @@ package calculators
 import (
 	"cybercalc/internal/models"
 	teachingdomain "cybercalc/internal/modules/teaching/domain"
+	"cybercalc/internal/tariffs"
 	"fmt"
 )
 
@@ -10,9 +11,10 @@ import (
 // Ставка из ТЗ: "Для вузов: Ак.ч. х 4 140 руб.; Для колледжей: Ак.ч. х 3900 руб."
 type teachersCalc struct{}
 
-const (
-	teacherRateVuz     = 4140.0
-	teacherRateKolledj = 3900.0
+// Ставки читаются из редакции поставки (DATA-07): одно значение в одном месте.
+var (
+	teacherRateVuz     = tariffs.Default().MustFloat(tariffs.TeacherHourVuz)
+	teacherRateKolledj = tariffs.Default().MustFloat(tariffs.TeacherHourKolledj)
 )
 
 func (teachersCalc) Calculate(audience models.Audience, payload map[string]interface{}) (float64, error) {

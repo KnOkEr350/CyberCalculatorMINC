@@ -198,7 +198,7 @@ func Inspect(ctx context.Context, address, path string, roots ...string) (ScanRe
 	return ScanResult{Verdict: VerdictInfected, Signature: strings.TrimSpace(signature)}, nil
 }
 
-func openForInspection(path string, roots []string) (*os.File, error) {
+func openForInspection(path string, roots []string) (ReadSeekFile, error) {
 	if len(roots) > 0 {
 		return Open(roots[0], path)
 	}

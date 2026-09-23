@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"cybercalc/internal/auth"
+	"cybercalc/internal/curators"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
 )
@@ -82,23 +84,42 @@ func (h *AdminHandlers) CreateUser(w http.ResponseWriter, r *http.Request, admin
 		return
 	}
 	defer tx.Rollback()
+	pinnedCurator := req.EntityType == string(models.EntityOrganization) && req.Role == string(models.RoleCurator) && req.PartnerID != nil
+	if pinnedCurator {
+		var belongs bool
+		if req.ITCompanyID == nil {
+			middleware.WriteError(w, 400, "закреплённая ОО должна относиться к выбранной ИТ-компании")
+			return
+		}
+		if err := tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1 AND it_company_id::text=$2)`, *req.PartnerID, *req.ITCompanyID).Scan(&belongs); err != nil || !belongs {
+			middleware.WriteError(w, 400, "закреплённая ОО должна относиться к выбранной ИТ-компании")
+			return
+		}
+	}
+	// Закрепление куратора создаётся отдельно, от имени администратора:
+	// прямая запись partner_id не сохранила бы, кто и когда закрепил.
+	insertedPartner := req.PartnerID
+	if pinnedCurator {
+		insertedPartner = nil
+	}
 	err = tx.QueryRowContext(r.Context(),
 		`INSERT INTO users (email, password_hash, full_name, role, entity_type, partner_id, it_company_id)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-		req.Email, hash, req.FullName, req.Role, entityType, req.PartnerID, req.ITCompanyID,
+		req.Email, hash, req.FullName, req.Role, entityType, insertedPartner, req.ITCompanyID,
 	).Scan(&id)
 	if err != nil {
 		middleware.WriteError(w, http.StatusConflict, "не удалось создать пользователя; возможно, email уже занят")
 		return
 	}
-	if req.EntityType == string(models.EntityOrganization) && req.Role == string(models.RoleCurator) && req.PartnerID != nil {
-		var belongs bool
-		if err := tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM partners WHERE id::text=$1 AND it_company_id::text=$2)`, *req.PartnerID, *req.ITCompanyID).Scan(&belongs); err != nil || !belongs {
-			middleware.WriteError(w, 400, "закреплённая ОО должна относиться к выбранной ИТ-компании")
+	if pinnedCurator {
+		if _, err := curators.Assign(r.Context(), tx, curators.NewInput{CuratorID: id, PartnerID: *req.PartnerID,
+			From: curators.Today(time.Now()), AssignedBy: admin.ID, Reason: "создание профиля"}, time.Now()); err != nil {
+			middleware.WriteError(w, 500, "не удалось закрепить ОО за куратором")
 			return
 		}
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO user_partner_assignments(user_id,partner_id,assigned_by) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, id, *req.PartnerID, admin.ID); err != nil {
-			middleware.WriteError(w, 500, "не удалось закрепить ОО за куратором")
+	} else if req.PartnerID != nil && req.EntityType == string(models.EntityEduInst) {
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO user_partner_assignments(user_id,partner_id,assigned_by) VALUES($1,$2,$3)`, id, *req.PartnerID, admin.ID); err != nil {
+			middleware.WriteError(w, 500, "не удалось закрепить ОО за пользователем")
 			return
 		}
 	}
@@ -291,13 +312,14 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request, admin
 		middleware.WriteError(w, 500, "ошибка сохранения")
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(), `DELETE FROM user_partner_assignments WHERE user_id::text=$1`, userID); err != nil {
-		middleware.WriteError(w, 500, "ошибка обновления закреплённых ОО")
-		return
-	}
-	if entity == "organization" && role == string(models.RoleCurator) && partner != "" {
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO user_partner_assignments(user_id,partner_id,assigned_by) VALUES($1,$2,$3)`, userID, partner, admin.ID); err != nil {
-			middleware.WriteError(w, 500, "ошибка закрепления ОО")
+	// Закрепление куратора ведёт триггер БД: смена ОО заменяет действующее
+	// закрепление (прежнее отзывается с причиной, а не стирается), снятие
+	// отзывает его. Если куратор перестал быть куратором, закрепления тоже
+	// отзываются.
+	if !(entity == string(models.EntityOrganization) && role == string(models.RoleCurator)) {
+		if _, err := tx.ExecContext(r.Context(), `UPDATE user_partner_assignments SET revoked_at=now(),revoked_by=$2::uuid,revoke_reason='профиль больше не куратор организации'
+			WHERE user_id::text=$1 AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>=moscow_today()) AND $3`, userID, admin.ID, old["role"] == string(models.RoleCurator)); err != nil {
+			middleware.WriteError(w, 500, "ошибка обновления закреплённых ОО")
 			return
 		}
 	}
