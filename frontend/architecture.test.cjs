@@ -127,3 +127,23 @@ test("Ministry decision screen exposes plan, fact, dynamic metric and evidence",
   assert.match(workspace, /decision_evidence_/);
   assert.match(workspace, /data-entry-filter="decision_number"/);
 });
+
+test("teaching screen exposes semester, risk, hours and compensation registry", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function teachingWorkloadTable/);
+  for (const label of ["Преподаватель", "Дисциплина", "Программа и семестр", "Ак. часы", "Компенсация"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /data-entry-filter="semester"/);
+  assert.match(workspace, /teaching-payouts\?year=/);
+});
+
+test("OOP and RPD screen exposes permanent 2 by 3 matrix and document registry", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function oopMatrix/);
+  assert.match(workspace, /function oopRegistryTable/);
+  for (const label of ["Разработка", "Актуализация", "Экспертиза", "Краткая матричная выжимка", "Программа или дисциплина"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /\[\["rpd", "РПД"\], \["oop", "ООП"\]\]/);
+});

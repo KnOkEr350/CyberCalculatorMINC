@@ -332,7 +332,7 @@ function entryFiltersMarkup(category) {
   const value = (key) => escapeHTML(state.entryFilters?.[key] || "");
   const common = `<div class="field"><label>Поиск по реквизитам и ФИО</label><input data-entry-filter="q" value="${value("q")}" placeholder="Введите текст"></div><div class="field"><label>Метод стоимости</label><select data-entry-filter="cost_method"><option value="">Все методы</option><option value="average" ${value("cost_method") === "average" ? "selected" : ""}>Средние значения</option><option value="actual" ${value("cost_method") === "actual" ? "selected" : ""}>Фактические затраты</option></select></div>`;
   const byCategory = {
-    teachers: `<div class="field"><label>ФИО преподавателя</label><input data-entry-filter="teacher_full_name" value="${value("teacher_full_name")}"></div><div class="field"><label>Направление подготовки</label><input data-entry-filter="training_direction" value="${value("training_direction")}"></div><div class="field"><label>Кафедра / институт / факультет</label><input data-entry-filter="structural_unit" value="${value("structural_unit")}"></div>`,
+    teachers: `<div class="field"><label>ФИО преподавателя</label><input data-entry-filter="teacher_full_name" value="${value("teacher_full_name")}"></div><div class="field"><label>Уровень программы</label><select data-entry-filter="education_level"><option value="">Все уровни</option>${[["bachelor", "Бакалавриат"], ["master", "Магистратура"], ["specialist", "Специалитет"], ["spo", "СПО"]].map(([key, label]) => `<option value="${key}" ${value("education_level") === key ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Семестр</label><select data-entry-filter="semester"><option value="">Все семестры</option>${Array.from({ length: 13 }, (_, index) => index + 1).map((semester) => `<option value="${semester}" ${value("semester") === String(semester) ? "selected" : ""}>${semester}</option>`).join("")}</select></div><div class="field"><label>Направление подготовки</label><input data-entry-filter="training_direction" value="${value("training_direction")}"></div><div class="field"><label>Кафедра / институт / факультет</label><input data-entry-filter="structural_unit" value="${value("structural_unit")}"></div>`,
     ood_rpd: `<div class="field"><label>Вид документа</label><select data-entry-filter="doc_type"><option value="">Все</option><option value="rpd" ${value("doc_type") === "rpd" ? "selected" : ""}>РПД</option><option value="oop" ${value("doc_type") === "oop" ? "selected" : ""}>ООП</option></select></div><div class="field"><label>Вид активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="development" ${value("activity_type") === "development" ? "selected" : ""}>Разработка</option><option value="update" ${value("activity_type") === "update" ? "selected" : ""}>Актуализация</option><option value="expertise" ${value("activity_type") === "expertise" ? "selected" : ""}>Экспертиза</option></select></div>`,
     internship: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
     employment_practice: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
@@ -369,6 +369,74 @@ function ministryDecisionTable(entries, writable, canCreate) {
     </tr>`;
   }).join("");
   return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="ministry-decision-grid"><thead><tr><th>Риск</th><th>Решение и поручение</th><th>Мероприятие и условия</th><th>Срок</th><th>Динамический показатель</th><th>План</th><th>Факт</th><th>Подтверждённая стоимость</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Решения ещё не зарегистрированы. Добавьте карточку мероприятия." : "ИТ-организация ещё не добавила мероприятия по Решению Минцифры."}</p>` : ""}`;
+}
+
+function entryRisk(entry) {
+  return CyberCalcUI.riskBadge({
+    state: entry.compliance?.state || "red",
+    label: entry.compliance?.state === "green" ? "Готово" : entry.compliance?.state === "yellow" ? "Доработать" : "Риск",
+    reasons: [...(entry.compliance?.blocking_reasons || []), ...(entry.compliance?.warnings || [])],
+  });
+}
+
+function teachingWorkloadTable(entries, payouts, writable, canCreate) {
+  const payoutsByEntry = new Map();
+  payouts.forEach((payout) => {
+    const list = payoutsByEntry.get(payout.teaching_activity_id) || [];
+    list.push(payout);
+    payoutsByEntry.set(payout.teaching_activity_id, list);
+  });
+  const rows = entries.map((entry) => {
+    const payload = entry.payload || {};
+    const entryPayouts = payoutsByEntry.get(entry.id) || [];
+    const paid = entryPayouts.filter((payout) => payout.is_fully_paid).length;
+    const compensation = !entryPayouts.length
+      ? '<span class="status-badge inactive">Не запланирована</span>'
+      : `<span class="status-badge ${paid === entryPayouts.length ? "active" : "pending"}">${paid === entryPayouts.length ? "Выплачено" : "По графику"} ${paid}/${entryPayouts.length}</span><br><small>${entryPayouts.map((payout) => `${escapeHTML(payout.target_quarter)} ${payout.target_year}: ${fmtMoney(payout.planned_compensation_rub)}`).join("<br>")}</small>`;
+    const unit = [payload.institute, payload.faculty, payload.department].filter(Boolean).map(escapeHTML).join(" / ") || "—";
+    const education = `${escapeHTML(valueLabel(payload.education_level || "—"))}<br><small>семестр ${escapeHTML(payload.semester ?? "—")} · ${escapeHTML(payload.academic_group || "группа не указана")}</small>`;
+    const checks = entry.compliance?.checks || [];
+    const complete = checks.filter((check) => check.complete).length;
+    return `<tr>
+      <td>${entryRisk(entry)}</td>
+      <td><b>${escapeHTML(payload.teacher_full_name || "—")}</b><br><small>${escapeHTML(payload.employee_position || "должность не указана")} · ОКЗ ${escapeHTML(payload.okz_code || "—")}</small></td>
+      <td><b>${escapeHTML(payload.course_name || "—")}</b><br><small>${escapeHTML(payload.training_direction || payload.specialty_code || "направление не указано")}</small></td>
+      <td>${unit}</td><td>${education}</td>
+      <td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td>
+      <td><b>${Number(payload.academic_hours || 0).toLocaleString("ru-RU")}</b></td>
+      <td><b>${fmtMoney(entry.amount_rub)}</b><br><small>${entry.cost_method === "actual" ? "Фактические затраты" : "Нормативный тариф"}</small></td>
+      <td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td>
+      <td>${compensation}</td>
+      <td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td>
+    </tr>`;
+  }).join("");
+  return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="teaching-workload-grid"><thead><tr><th>Риск</th><th>Преподаватель</th><th>Дисциплина</th><th>Подразделение</th><th>Программа и семестр</th><th>Охват</th><th>Ак. часы</th><th>Затраты</th><th>Документы</th><th>Компенсация</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Нагрузка ещё не добавлена." : "ИТ-организация ещё не добавила педагогическую нагрузку."}</p>` : ""}`;
+}
+
+function oopMatrix(summary) {
+  const docs = [["rpd", "РПД"], ["oop", "ООП"]];
+  const actions = [["development", "Разработка"], ["update", "Актуализация"], ["expertise", "Экспертиза"]];
+  const items = new Map((summary.ood_rpd_matrix || []).map((item) => [`${item.document_type}:${item.activity_type}`, item]));
+  const cell = (doc, action) => items.get(`${doc}:${action}`) || { count: 0, amount_rub: 0 };
+  const total = (values) => values.reduce((result, item) => ({ count: result.count + Number(item.count || 0), amount: result.amount + Number(item.amount_rub || 0) }), { count: 0, amount: 0 });
+  const body = docs.map(([doc, label]) => {
+    const values = actions.map(([action]) => cell(doc, action));
+    const rowTotal = total(values);
+    return `<tr><th>${label}</th>${values.map((item) => `<td><b>${fmtMoney(item.amount_rub)}</b><br><small>${item.count} шт.</small></td>`).join("")}<td><b>${fmtMoney(rowTotal.amount)}</b><br><small>${rowTotal.count} шт.</small></td></tr>`;
+  }).join("");
+  const columnTotals = actions.map(([action]) => total(docs.map(([doc]) => cell(doc, action))));
+  const grandTotal = total([...items.values()]);
+  return `<div class="oop-matrix" aria-label="Матрица ООП и РПД"><div class="flex between"><h2>Краткая матричная выжимка</h2><span class="status-badge ${grandTotal.count ? "active" : "inactive"}">${grandTotal.count} документов</span></div><div class="table-wrap"><table><thead><tr><th>Вид документа</th>${actions.map(([, label]) => `<th>${label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${body}<tr class="total-row"><th>Итого</th>${columnTotals.map((item) => `<td><b>${fmtMoney(item.amount)}</b><br><small>${item.count} шт.</small></td>`).join("")}<td><b>${fmtMoney(grandTotal.amount)}</b><br><small>${grandTotal.count} шт.</small></td></tr></tbody></table></div></div>`;
+}
+
+function oopRegistryTable(entries, writable, canCreate) {
+  const rows = entries.map((entry) => {
+    const payload = entry.payload || {};
+    const checks = entry.compliance?.checks || [];
+    const complete = checks.filter((check) => check.complete).length;
+    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "—").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "—"))}</small></td><td><b>${escapeHTML(payload.program_name || "—")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "—"))}</td><td>${escapeHTML(payload.expert_full_name || "—")}</td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><b>${fmtMoney(entry.amount_rub)}</b></td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
+  }).join("");
+  return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт</th><th>Охват</th><th>Затраты</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
 }
 async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(state.view)) {
   const generation = (root.workspaceGeneration || 0) + 1;
@@ -560,10 +628,11 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     return;
   }
   const chosen = state.partnerID;
-  const [entries, workflow, summary] = await Promise.all([
+  const [entries, workflow, summary, payoutItems] = await Promise.all([
     api(`/entries?${query}&offset=${state.entryPageOffset || 0}`),
     api(`/report-workflow?${new URLSearchParams({ agreement_id: state.agreementID, report_year: state.year, period_type: state.period })}`),
     api(`/entries/summary?${query}`),
+    screen?.id === "teachers" ? api(`/teaching-payouts?year=${state.year}`) : Promise.resolve([]),
   ]);
   if (
     chosen !== state.partnerID ||
@@ -580,7 +649,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     employment_practice: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · практиканты: ${summary.students_count}`,
     minc_decision: `Решений: ${summary.count} · подтверждено: ${fmtMoney(summary.amount_rub)}`,
   }[state.categoryCode] || `Партнёры: ${summary.partners_count}`;
-  const matrix = summary.ood_rpd_matrix?.length ? `<details><summary>Выжимка ООП/РПД</summary><div class="table-wrap"><table><thead><tr><th>Документ</th><th>Активность</th><th>Количество</th><th>Сумма</th></tr></thead><tbody>${summary.ood_rpd_matrix.map((item) => `<tr><td>${escapeHTML(valueLabel(item.document_type))}</td><td>${escapeHTML(valueLabel(item.activity_type))}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
+  const matrix = state.categoryCode === "ood_rpd" ? oopMatrix(summary) : "";
   const units = summary.structural_units?.length ? `<details><summary>Структурные подразделения</summary><div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Записи</th><th>Сумма</th></tr></thead><tbody>${summary.structural_units.map((item) => `<tr><td>${escapeHTML(item.unit)}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
   summaryBox.innerHTML = `<div class="grid cols-3"><div class="stat"><div class="label">Всего записей</div><div class="value">${Number(summary.count || 0).toLocaleString("ru-RU")}</div></div><div class="stat"><div class="label">Общая сумма</div><div class="value">${fmtMoney(summary.amount_rub)}</div></div><div class="stat"><div class="label">Итоговые показатели</div><div class="value" style="font-size:16px">${escapeHTML(categoryTotals)}</div></div></div>${matrix}${units}`;
   const obligation = root.querySelector("#obligation-box");
@@ -653,7 +722,11 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
       ) || [];
     root.querySelector("#entries-table").innerHTML = state.categoryCode === "minc_decision"
       ? ministryDecisionTable(list, writable, canCreate)
-      : `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${CyberCalcUI.riskBadge({ state: e.compliance?.state || "red", label: e.compliance?.state === "green" ? "Готово" : e.compliance?.state === "yellow" ? "Доработать" : "Риск", reasons: [...(e.compliance?.blocking_reasons || []), ...(e.compliance?.warnings || [])] })}</td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+      : state.categoryCode === "teachers"
+        ? teachingWorkloadTable(list, payoutItems, writable, canCreate)
+        : state.categoryCode === "ood_rpd"
+          ? oopRegistryTable(list, writable, canCreate)
+          : `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${entryRisk(e)}</td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(

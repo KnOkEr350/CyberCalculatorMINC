@@ -282,6 +282,15 @@ table { background: #fff; font-size: 11px; }
 .ministry-decision-grid { min-width: 1500px; }
 .ministry-decision-grid td { vertical-align: top; }
 .ministry-decision-grid small { color: var(--muted); line-height: 1.35; }
+.teaching-workload-grid { min-width: 1540px; }
+.oop-registry-grid { min-width: 1180px; }
+.teaching-workload-grid td, .oop-registry-grid td { vertical-align: top; }
+.teaching-workload-grid small, .oop-registry-grid small, .oop-matrix small { color: var(--muted); line-height: 1.35; }
+.oop-matrix { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.oop-matrix h2 { margin: 0; }
+.oop-matrix table { min-width: 760px; }
+.oop-matrix td:not(:first-child), .oop-matrix th:not(:first-child) { text-align: right; }
+.oop-matrix .total-row { background: #edf4fa; }
 th, td { padding: 10px 12px; border-bottom: 1px solid #e5e9ef; vertical-align: middle; }
 th { background: #f3f5f8; color: #5d6c7c; font-size: 9px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
 tbody tr:last-child td, tfoot tr:last-child td { border-bottom: 0; }

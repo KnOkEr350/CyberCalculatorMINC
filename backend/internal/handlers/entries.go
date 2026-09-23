@@ -48,8 +48,16 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 			}
 		}
 	}
-	exactFields := map[string]string{"doc_type": "doc_type", "activity_type": "activity_type", "mentor_id": "mentor_id", "cost_method": "cost_method", "instruction_authority": "instruction_authority"}
-	for parameter, field := range exactFields {
+	exactFields := []struct{ parameter, field string }{
+		{"doc_type", "doc_type"},
+		{"activity_type", "activity_type"},
+		{"mentor_id", "mentor_id"},
+		{"cost_method", "cost_method"},
+		{"instruction_authority", "instruction_authority"},
+		{"education_level", "education_level"},
+	}
+	for _, item := range exactFields {
+		parameter, field := item.parameter, item.field
 		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
 			if parameter == "cost_method" {
 				*conds = append(*conds, "cost_method="+arg(value))
@@ -59,6 +67,11 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 			} else {
 				*conds = append(*conds, "payload->>'"+field+"'="+arg(value))
 			}
+		}
+	}
+	if value := strings.TrimSpace(q.Get("semester")); value != "" {
+		if semester, err := strconv.Atoi(value); err == nil && semester >= 1 && semester <= 13 {
+			*conds = append(*conds, "payload->>'semester'="+arg(strconv.Itoa(semester)))
 		}
 	}
 	if value := strings.TrimSpace(q.Get("duration_months")); value != "" {
