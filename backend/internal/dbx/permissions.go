@@ -24,6 +24,7 @@ var appendOnlyTables = map[string]bool{
 	"organization_budget_target_history": true,
 	"agreement_report_history":           true,
 	"regulatory_process_events":          true,
+	"workflow_task_events":               true,
 	"normative_sources":                  true,
 	"normative_revision_diffs":           true,
 }

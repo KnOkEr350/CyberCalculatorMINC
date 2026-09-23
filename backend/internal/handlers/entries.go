@@ -442,7 +442,7 @@ func (h *EntryHandlers) Summary(w http.ResponseWriter, r *http.Request, u middle
 	matrix := []matrixItem{}
 	// where contains fixed SQL fragments and $N placeholders; request values are in args.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	matrixRows, err := h.DB.QueryContext(r.Context(), `SELECT payload->>'doc_type',payload->>'activity_type',count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='ood_rpd' GROUP BY 1,2 ORDER BY 1,2`, args...)
+	matrixRows, err := h.DB.QueryContext(r.Context(), `SELECT COALESCE(oop_doc_type,''),COALESCE(oop_activity,''),count(*),COALESCE(sum(amount_rub),0) FROM entries WHERE `+where+` AND category_code='ood_rpd' GROUP BY 1,2 ORDER BY 1,2`, args...)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка сводки ООП/РПД")
 		return

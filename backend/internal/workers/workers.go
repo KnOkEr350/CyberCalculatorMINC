@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"cybercalc/internal/config"
+	"cybercalc/internal/curators"
 	"cybercalc/internal/handlers"
 	"cybercalc/internal/regulatory"
 	"cybercalc/internal/retention"
+	"cybercalc/internal/tasks"
 )
 
 // Run starts all background loops and blocks until ctx is cancelled. Database
@@ -40,6 +42,12 @@ func Run(ctx context.Context, db *sql.DB, cfg config.Config) error {
 	// Согласование по молчанию: срок истекает в полночь по Москве, поэтому
 	// проверка идёт каждые 15 минут, и переход не опаздывает больше чем на них.
 	start(func() { regulatory.RunExpiry(db, 15*time.Minute, stop) })
+	// Закрепления кураторов начинаются и кончаются по датам: кэш users.partner_id
+	// догоняет их раз в 15 минут (доступ при этом проверяется по датам сразу).
+	start(func() { curators.RunSync(db, 15*time.Minute, stop) })
+	// Задачи, ушедшие по fallback, возвращаются к специалисту, когда он
+	// появился, и уходят выше, когда куратор перестал быть закреплённым.
+	start(func() { tasks.RunRedispatch(db, 15*time.Minute, stop) })
 	start(func() {
 		handlers.RunDirectorySync(db, cfg.DirectorySyncURL, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
 	})

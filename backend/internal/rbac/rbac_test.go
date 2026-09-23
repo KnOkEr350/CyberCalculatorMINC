@@ -138,7 +138,7 @@ func TestLegalSpecialistIsReadOnly(t *testing.T) {
 func TestAuditorIsStrictlyReadOnly(t *testing.T) {
 	writing := []Permission{PrepareReports, ApproveReports, EditAnyEntry, CreateAnyEntry,
 		EditInternshipEntries, EditTeacherEntries, ProposeEducationDirectory,
-		ApproveEducationDirectory, ManagePartnerStructure, ManageITCompanies, SealSnapshot}
+		ApproveEducationDirectory, ManagePartnerStructure, ManageCuratorAssignments, DispatchTasks, ManageITCompanies, SealSnapshot}
 	for _, permission := range writing {
 		if Allows(models.RoleAuditorViewer, permission) {
 			t.Errorf("аудитор получил изменяющее полномочие %s", permission)
@@ -151,12 +151,7 @@ func TestAuditorIsStrictlyReadOnly(t *testing.T) {
 	}
 }
 
-func everyPermission() []Permission {
-	return []Permission{PrepareReports, ApproveReports, EditAnyEntry, CreateAnyEntry,
-		EditInternshipEntries, EditTeacherEntries, ProposeEducationDirectory,
-		ApproveEducationDirectory, ManagePartnerStructure, ManageITCompanies,
-		SealSnapshot, DownloadSnapshot, ReadTenantData}
-}
+func everyPermission() []Permission { return Permissions() }
 
 // Каждое объявленное полномочие кому-то принадлежит: неиспользуемое
 // полномочие — признак, что проверка потерялась.
@@ -171,6 +166,31 @@ func TestEveryPermissionIsGrantedToSomeone(t *testing.T) {
 		}
 		if !granted {
 			t.Errorf("полномочие %s не принадлежит ни одной роли", permission)
+		}
+	}
+}
+
+// Закреплять кураторов может только администрация: куратор, получивший это
+// полномочие, мог бы сам расширять свою область видимости.
+func TestOnlyAdministrationManagesCuratorAssignments(t *testing.T) {
+	for _, role := range All() {
+		want := role == models.RoleSuperAdmin || role == models.RoleHoldingAdmin || role == models.RoleOrgAdmin
+		if Allows(role, ManageCuratorAssignments) != want {
+			t.Errorf("роль %s: закрепление кураторов = %v, ожидалось %v", role, !want, want)
+		}
+	}
+	if Delegates(models.RoleCurator, ManageCuratorAssignments) {
+		t.Error("закрепление кураторов не делегируется куратору")
+	}
+}
+
+// Задачи назначает администрация; куратор, которому задача досталась как
+// fallback, исполняет её, но не перенаправляет.
+func TestOnlyAdministrationDispatchesTasks(t *testing.T) {
+	for _, role := range All() {
+		want := role == models.RoleSuperAdmin || role == models.RoleHoldingAdmin || role == models.RoleOrgAdmin
+		if Allows(role, DispatchTasks) != want {
+			t.Errorf("роль %s: постановка задач = %v, ожидалось %v", role, !want, want)
 		}
 	}
 }

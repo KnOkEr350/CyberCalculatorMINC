@@ -17,6 +17,7 @@ type Module struct {
 	workflow  *handlers.ReportWorkflowHandlers
 	snapshots *handlers.SnapshotHandlers
 	calendar  handlers.ReportCalendarHandlers
+	tasks     *handlers.WorkflowTaskHandlers
 	processes *handlers.RegulatoryHandlers
 	options   Options
 }
@@ -29,7 +30,7 @@ type Options struct {
 
 func New(db *sql.DB, options Options) *Module {
 	projection := repository.NewActivityProjection(db)
-	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, processes: &handlers.RegulatoryHandlers{DB: db}, options: options}
+	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, processes: &handlers.RegulatoryHandlers{DB: db}, tasks: &handlers.WorkflowTaskHandlers{DB: db}, options: options}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -64,6 +65,17 @@ func (m *Module) registerReportRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("POST /api/regulatory/processes/{id}/actions", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.processes.Act(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/workflow-tasks", middleware.RequireAuth(m.db, m.tasks.List))
+	mux.HandleFunc("POST /api/workflow-tasks", middleware.RequireAuth(m.db, m.tasks.Create))
+	mux.HandleFunc("GET /api/workflow-tasks/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.tasks.Get(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("POST /api/workflow-tasks/{id}/reassign", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.tasks.Reassign(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("POST /api/workflow-tasks/{id}/complete", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.tasks.Complete(w, r, u, r.PathValue("id"))
 	}))
 	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(m.db, m.workflow.Get))
 	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(m.db, m.workflow.Transition))

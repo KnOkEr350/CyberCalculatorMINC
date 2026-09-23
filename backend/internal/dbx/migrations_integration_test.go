@@ -53,6 +53,14 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('internship',$1,'fact',2026,'vuz','{"mentor_full_name":"Иванов Иван Иванович"}',30340,$2) RETURNING id`, partner, user).Scan(&entry); e != nil {
 		t.Fatal(e)
 	}
+	// OOP-06: старые записи «ООП и РПД» — полная и с недостающими сведениями.
+	var oopComplete, oopIncomplete string
+	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('ood_rpd',$1,'fact',2026,'vuz','{"doc_type":"RPD","level":"vo","activity_type":"development","program_name":"Базы данных","expert_full_name":"Петров П.П."}',300000,$2) RETURNING id`, partner, user).Scan(&oopComplete); e != nil {
+		t.Fatal(e)
+	}
+	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('ood_rpd',$1,'fact',2026,'vuz','{"program_name":"Без вида документа"}',1,$2) RETURNING id`, partner, user).Scan(&oopIncomplete); e != nil {
+		t.Fatal(e)
+	}
 	if _, e := db.Exec(`INSERT INTO budget_targets(report_year,target_amount_rub,updated_by) VALUES(2026,12345,$1)`, user); e != nil {
 		t.Fatal(e)
 	}
@@ -67,6 +75,19 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	}
 	if e := RunMigrations(db, dir); e != nil {
 		t.Fatal("second migration run must be harmless:", e)
+	}
+	var docType, activity string
+	var legacyFlag bool
+	if e := db.QueryRow(`SELECT oop_doc_type,oop_activity,oop_incomplete FROM entries WHERE id=$1`, oopComplete).Scan(&docType, &activity, &legacyFlag); e != nil ||
+		docType != "rpd" || activity != "development" || legacyFlag {
+		t.Fatalf("полная старая запись ООП/РПД должна получить типизированные поля: %q %q %v %v", docType, activity, legacyFlag, e)
+	}
+	var findings int
+	if e := db.QueryRow(`SELECT count(*) FROM legacy_backfill_findings WHERE entry_id=$1 AND rule_code='oop.model_incomplete'`, oopIncomplete).Scan(&findings); e != nil || findings != 1 {
+		t.Fatalf("неполная запись ООП/РПД должна попасть в находки: %d %v", findings, e)
+	}
+	if e := db.QueryRow(`SELECT oop_incomplete FROM entries WHERE id=$1`, oopIncomplete).Scan(&legacyFlag); e != nil || !legacyFlag {
+		t.Fatalf("неполная запись должна быть помечена: %v %v", legacyFlag, e)
 	}
 	var normativeHostCount int
 	if e := db.QueryRow(`SELECT count(*) FROM normative_trusted_hosts`).Scan(&normativeHostCount); e != nil || normativeHostCount != 4 {

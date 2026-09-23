@@ -23,6 +23,12 @@ const (
 	ProposeEducationDirectory Permission = "directory.propose"
 	ApproveEducationDirectory Permission = "directory.approve"
 	ManagePartnerStructure    Permission = "partner.manage_structure"
+	// Закрепление кураторов за партнёрами (DATA-09): кто закрепляет — тот не
+	// куратор, иначе куратор расширял бы собственную область видимости.
+	ManageCuratorAssignments Permission = "curators.manage_assignments"
+	// Постановка и переназначение задач workflow (SEC-10). Исполнять задачу
+	// может её исполнитель; назначать и перенаправлять — только администрация.
+	DispatchTasks Permission = "tasks.dispatch"
 	// Справочник аккредитованных ИТ-компаний.
 	ManageITCompanies Permission = "it_companies.manage"
 	// Неизменяемые снимки на 1 мая.
@@ -59,19 +65,19 @@ var Roles = map[models.Role]Definition{
 		Title: "Системный администратор", Scope: ScopeTenant,
 		Permissions: []Permission{PrepareReports, ApproveReports, EditAnyEntry, CreateAnyEntry,
 			EditInternshipEntries, EditTeacherEntries, ApproveEducationDirectory,
-			ManagePartnerStructure, ManageITCompanies, SealSnapshot, DownloadSnapshot, ReadTenantData},
+			ManagePartnerStructure, ManageCuratorAssignments, DispatchTasks, ManageITCompanies, SealSnapshot, DownloadSnapshot, ReadTenantData},
 	},
 	models.RoleHoldingAdmin: {
 		Title: "Администратор холдинга", Scope: ScopeTenant,
 		Permissions: []Permission{PrepareReports, ApproveReports, EditAnyEntry, CreateAnyEntry,
-			EditInternshipEntries, EditTeacherEntries, ManagePartnerStructure, ManageITCompanies,
+			EditInternshipEntries, EditTeacherEntries, ManagePartnerStructure, ManageCuratorAssignments, DispatchTasks, ManageITCompanies,
 			SealSnapshot, DownloadSnapshot, ReadTenantData},
 	},
 	models.RoleOrgAdmin: {
 		Title: "Администратор организации", Scope: ScopeTenant,
 		Permissions: []Permission{PrepareReports, ApproveReports, EditAnyEntry, CreateAnyEntry,
 			EditInternshipEntries, EditTeacherEntries, ProposeEducationDirectory,
-			ManagePartnerStructure, SealSnapshot, DownloadSnapshot, ReadTenantData},
+			ManagePartnerStructure, ManageCuratorAssignments, DispatchTasks, SealSnapshot, DownloadSnapshot, ReadTenantData},
 	},
 	models.RoleCurator: {
 		Title: "Куратор направления", Scope: ScopePartner,
@@ -98,6 +104,25 @@ var Roles = map[models.Role]Definition{
 		Title: "Аудитор", Scope: ScopeTenant,
 		Permissions: []Permission{DownloadSnapshot, ReadTenantData},
 	},
+}
+
+// Permissions перечисляет все объявленные полномочия.
+func Permissions() []Permission {
+	return []Permission{PrepareReports, ApproveReports, EditAnyEntry, CreateAnyEntry,
+		EditInternshipEntries, EditTeacherEntries, ProposeEducationDirectory,
+		ApproveEducationDirectory, ManagePartnerStructure, ManageCuratorAssignments, DispatchTasks, ManageITCompanies,
+		SealSnapshot, DownloadSnapshot, ReadTenantData}
+}
+
+// Known сообщает, объявлено ли полномочие: задача не может требовать того, чего
+// в модели нет.
+func Known(permission Permission) bool {
+	for _, declared := range Permissions() {
+		if declared == permission {
+			return true
+		}
+	}
+	return false
 }
 
 // All перечисляет роли модели в порядке ТЗ.

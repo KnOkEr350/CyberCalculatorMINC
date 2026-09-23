@@ -59,7 +59,10 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 		var partnerID, itCompanyID sql.NullString
 		var role string
 		var mfaEnabled bool
-		err := db.QueryRowContext(r.Context(), `SELECT id, role, entity_type, partner_id,it_company_id,mfa_secret IS NOT NULL FROM users WHERE id = $1 AND is_active`, userID).
+		err := db.QueryRowContext(r.Context(), `SELECT id, role, entity_type,
+			-- Закрепление куратора действует по датам: срок кончается сам, без записи в БД.
+			CASE WHEN role='curator' AND entity_type='organization' THEN current_partner_of(id) ELSE partner_id END,
+			it_company_id,mfa_secret IS NOT NULL FROM users WHERE id = $1 AND is_active`, userID).
 			Scan(&u.ID, &role, &entityType, &partnerID, &itCompanyID, &mfaEnabled)
 		if err != nil {
 			WriteError(w, http.StatusUnauthorized, "пользователь не найден или деактивирован")

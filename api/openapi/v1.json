@@ -2412,6 +2412,180 @@
           }
         }
       }
+    },
+    "/api/curator-assignments": {
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CuratorAssignmentRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/curator-assignments/{id}/end": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CuratorAssignmentEndRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/curator-assignments/{id}/revoke": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CuratorAssignmentRevokeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateTaskRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks/{id}/reassign": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReassignTaskRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workflow-tasks/{id}/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "reporting"
+        ]
+      }
     }
   },
   "components": {
@@ -3648,6 +3822,72 @@
           "attachment_id": true
         },
         "additionalProperties": false
+      },
+      "CuratorAssignmentRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/curator_assignments.go",
+          "name": "curatorAssignmentRequest"
+        },
+        "type": "object",
+        "properties": {
+          "curator_id": true,
+          "partner_id": true,
+          "valid_from": true,
+          "valid_until": true,
+          "reason": true
+        },
+        "additionalProperties": false
+      },
+      "CuratorAssignmentEndRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/curator_assignments.go",
+          "name": "curatorAssignmentEndRequest"
+        },
+        "type": "object",
+        "properties": {
+          "valid_until": true
+        },
+        "additionalProperties": false
+      },
+      "CuratorAssignmentRevokeRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/curator_assignments.go",
+          "name": "curatorAssignmentRevokeRequest"
+        },
+        "type": "object",
+        "properties": {
+          "reason": true
+        },
+        "additionalProperties": false
+      },
+      "CreateTaskRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/workflow_tasks.go",
+          "name": "createTaskRequest"
+        },
+        "type": "object",
+        "properties": {
+          "it_company_id": true,
+          "partner_id": true,
+          "kind": true,
+          "title": true,
+          "subject_type": true,
+          "subject_id": true,
+          "required_role": true,
+          "required_permission": true
+        },
+        "additionalProperties": false
+      },
+      "ReassignTaskRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/workflow_tasks.go",
+          "name": "reassignTaskRequest"
+        },
+        "type": "object",
+        "properties": {
+          "reason": true
+        },
+        "additionalProperties": false
       }
     },
     "requestBodies": {
@@ -4118,6 +4358,56 @@
                   "description": "UTF-8 CSV или XLSX"
                 }
               }
+            }
+          }
+        }
+      },
+      "CuratorAssignmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CuratorAssignmentRequest"
+            }
+          }
+        }
+      },
+      "CuratorAssignmentEndRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CuratorAssignmentEndRequest"
+            }
+          }
+        }
+      },
+      "CuratorAssignmentRevokeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CuratorAssignmentRevokeRequest"
+            }
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateTaskRequest"
+            }
+          }
+        }
+      },
+      "ReassignTaskRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReassignTaskRequest"
             }
           }
         }

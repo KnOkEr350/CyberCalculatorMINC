@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -105,7 +106,22 @@ func TestProjectLegacyActivityExcludesDisputedEntryFromCountedAmount(t *testing.
 		len(disputed.LegalDispute.Reasons) != 1 {
 		t.Fatalf("запись под сомнением не должна попадать в зачёт: %#v", disputed)
 	}
+	if disputed.Risk.State != "red" || disputed.Risk.Passed || !containsReason(disputed.Risk.Reasons, "Юридическое сомнение") {
+		t.Fatalf("сомнение поднимает риск до HIGH и объясняется причиной: %#v", disputed.Risk)
+	}
+	if clear.Risk.State != "green" || !clear.Risk.Passed {
+		t.Fatalf("без сомнения запись READY: %#v", clear.Risk)
+	}
 	if disputed.ConfirmedFact != row.amount {
 		t.Fatalf("подтверждённый факт от сомнения не зависит: %#v", disputed)
 	}
+}
+
+func containsReason(reasons []string, part string) bool {
+	for _, reason := range reasons {
+		if strings.Contains(reason, part) {
+			return true
+		}
+	}
+	return false
 }

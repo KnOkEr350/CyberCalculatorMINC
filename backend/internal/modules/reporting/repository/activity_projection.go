@@ -13,6 +13,7 @@ import (
 	"cybercalc/internal/compliance"
 	"cybercalc/internal/money"
 	"cybercalc/internal/platform/activityprojection"
+	"cybercalc/internal/risk"
 	"github.com/lib/pq"
 )
 
@@ -111,16 +112,15 @@ func projectLegacyActivity(row legacyActivityRow, evaluatedAt time.Time) (activi
 	// dashboards and exports. Keep that axis distinct from document readiness
 	// and from the explicit workflow approval state exposed below.
 	eligible := row.accountEligible
-	riskState := readiness.State
-	if riskState == "green" && !row.accountEligible {
-		riskState = "yellow"
-	}
-
-	reasons := append([]string(nil), readiness.Blocking...)
-	reasons = append(reasons, readiness.Warnings...)
-	if !row.accountEligible {
-		reasons = append(reasons, "Мероприятие не прошло нормативное согласование")
-	}
+	// Риск считает общий движок (RISK-01) над независимыми осями: он не хранится
+	// и пересчитывается при каждом чтении, поэтому любое событие видно сразу.
+	assessment := risk.Evaluate(risk.Inputs{
+		ReadinessState: readiness.State, ReadinessBlocking: readiness.Blocking, ReadinessWarnings: readiness.Warnings,
+		Eligible: row.accountEligible, Approved: approved,
+		Disputed: row.disputeReason != "", DisputeReason: row.disputeReason,
+	})
+	riskState := assessment.State()
+	reasons := assessment.Reasons()
 
 	projection := activityprojection.Contribution{
 		ActivityID:     row.activityID,
@@ -136,7 +136,7 @@ func projectLegacyActivity(row legacyActivityRow, evaluatedAt time.Time) (activi
 		Eligibility:    activityprojection.Assessment{State: eligibilityState(eligible), Passed: eligible, Reasons: reasonsIfFalse(eligible, "Мероприятие не допущено к зачёту")},
 		Approval:       activityprojection.Assessment{State: row.reportStatus, Passed: approved, Reasons: reasonsIfFalse(approved, "Отчётный комплект не утверждён")},
 		LegalDispute:   legalDisputeAssessment(row.disputeReason),
-		Risk:           activityprojection.Assessment{State: riskState, Passed: riskState == "green", Reasons: reasons},
+		Risk:           activityprojection.Assessment{State: riskState, Passed: assessment.Level == risk.Ready, Reasons: reasons},
 		RulesetVersion: readiness.RulesetVersion,
 		EvaluatedAt:    evaluatedAt,
 	}
