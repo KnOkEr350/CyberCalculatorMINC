@@ -302,7 +302,8 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 	}
 	valid := map[string]interface{}{
 		"org_name": "partner-id", "mentor_id": "mentor-id", "mentor_full_name": "Иванов Иван Иванович",
-		"student_full_name": "Петров Пётр Петрович", "duration_months": 2.0,
+		"student_full_name": "Петров Пётр Петрович", "course": "3", "specialty_code": "09.03.01",
+		"period_start": "2026-06-01", "period_end": "2026-07-31", "duration_months": 2.0,
 		"student_load_hours_per_month": 10.0, "mentor_load_hours_per_month": 3.0,
 		"labor_contract_type": "fixed_term", "labor_contract_number": "ТД-42", "labor_contract_date": "2026-09-01",
 		"practice_agreement_number": "ПР-12", "practice_agreement_date": "2026-05-15",
@@ -327,6 +328,8 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 		{name: "non fixed-term contract", key: "labor_contract_type", value: "other"},
 		{name: "missing practice agreement number", key: "practice_agreement_number", value: nil},
 		{name: "invalid practice agreement date", key: "practice_agreement_date", value: "2026-15-05"},
+		{name: "missing specialty", key: "specialty_code", value: nil},
+		{name: "invalid practice period", key: "period_end", value: "2026-05-31"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
