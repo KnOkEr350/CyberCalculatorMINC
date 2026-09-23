@@ -27,11 +27,47 @@ test("risk badge validates state and escapes reasons", () => {
   assert.match(html, /Документ &lt;проверен&gt;/);
 });
 
+test("icon registry returns own accessible SVG icons with fallback", () => {
+  const dashboard = ui.icon("dashboard", { title: "Дашборд" });
+  assert.match(dashboard, /aria-label="Дашборд"/);
+  assert.match(dashboard, /<title>Дашборд<\/title>/);
+  assert.match(ui.icon("missing"), /aria-hidden="true"/);
+});
+
 test("filters connect labels and controls", () => {
   const html = ui.filters({ fields: [{ name: "q", label: "Поиск" }, { name: "status", label: "Статус", type: "select", options: ["all", "active"], value: "active" }] });
   assert.match(html, /fieldset/);
   assert.match(html, /label for="q"/);
   assert.match(html, /value="active" selected/);
+});
+
+test("toggle, compound fields and inline actions expose accessible controls", () => {
+  const toggle = ui.toggle({ id: "hide-zero", label: "Скрыть нули", checked: true, hint: "Не показывать пустые строки" });
+  assert.match(toggle, /role="switch"/);
+  assert.match(toggle, /checked/);
+  assert.match(toggle, /aria-describedby="hide-zero-hint"/);
+
+  const compound = ui.compoundField({ id: "contract", label: "Договор", required: true, parts: [
+    { name: "number", label: "Номер", value: "ПР-12" },
+    { name: "date", label: "Дата", type: "date" },
+  ] });
+  assert.match(compound, /<fieldset class="ui-compound-field"/);
+  assert.match(compound, /<legend>Договор \*<\/legend>/);
+  assert.match(compound, /label for="contract-number"/);
+
+  const actions = ui.inlineActions({ label: "Операции строки", actions: [{ name: "download", label: "Скачать", icon: "download" }] });
+  assert.match(actions, /role="group"/);
+  assert.match(actions, /aria-label="Операции строки"/);
+  assert.match(actions, /data-action="download"/);
+});
+
+test("validation summary distinguishes blocking errors and warnings", () => {
+  const error = ui.validationSummary({ errors: ["Нет договора"] });
+  assert.match(error, /role="alert"/);
+  assert.match(error, /Нет договора/);
+  const warning = ui.validationSummary({ warnings: ["Нет справки"] });
+  assert.match(warning, /role="status"/);
+  assert.equal(ui.validationSummary({}), "");
 });
 
 test("table renders sort semantics, selected row and empty state", () => {

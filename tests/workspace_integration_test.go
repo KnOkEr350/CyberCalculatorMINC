@@ -385,6 +385,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practiceHeaders := []string{
 		"mentor_full_name", "student_full_name", "duration_months", "student_load_hours_per_month", "mentor_load_hours_per_month",
 		"labor_contract_type", "labor_contract_number", "labor_contract_date",
+		"Номер договора о практической подготовке", "Дата договора о практической подготовке",
 		// PRA-04: возраст и недельные часы обязательны — без них нечем
 		// подтвердить нормы ТК РФ (ст. 63, 92), и практика к зачёту не
 		// принимается.
@@ -393,7 +394,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practiceWorkbook := func(contractType string) []byte {
 		wb := xlsx.New()
 		wb.AddSheet("Данные", practiceHeaders, [][]interface{}{{
-			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01", 19, 30,
+			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01",
+			"ПР-12", "2026-05-15", 19, 30,
 		}})
 		book, err := wb.Bytes()
 		if err != nil {
@@ -422,6 +424,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practice["labor_contract_date"] = "2026-09-01"
 	create(companyClient, p1, agreement1, "employment_practice", "fact", practice, 400)
 	practice["labor_contract_type"] = "fixed_term"
+	practice["practice_agreement_number"] = "ПР-12"
+	practice["practice_agreement_date"] = "2026-05-15"
 	createdPractice := object(create(companyClient, p1, agreement1, "employment_practice", "fact", practice, 201))
 	if money(createdPractice["amount_rub"]) != "15170.00" {
 		t.Fatal("wrong employment practice formula")

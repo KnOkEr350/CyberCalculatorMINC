@@ -25,7 +25,9 @@
     dashboardCategory: "",
     dashboardAudience: "",
     dashboardHideZero: false,
+    dashboardSlice: "fact",
     reportCategory: "",
+    reportRiskFilter: "",
     legalEntityGroups: [],
     entryFilters: {},
   };

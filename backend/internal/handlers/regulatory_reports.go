@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -13,16 +15,21 @@ import (
 	"strings"
 	"time"
 
+	"cybercalc/internal/compliance"
 	"cybercalc/internal/docx"
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/money"
 	"cybercalc/internal/xlsx"
+	"github.com/lib/pq"
 )
 
 type regulatoryRow struct {
 	PartnerID, Partner, AgreementID, Agreement, Category, CategoryName, Period, Audience string
 	Amount                                                                               money.Amount
 	Payload                                                                              []byte
+	Eligible                                                                             bool
+	Documents                                                                            []string
+	RiskState                                                                            string
 }
 
 var regulatoryHeaders = map[string][]string{
@@ -80,6 +87,22 @@ func reportFilters(pairs ...string) map[string]string {
 	return filters
 }
 
+func regulatoryRiskState(row regulatoryRow) string {
+	payload := map[string]interface{}{}
+	_ = json.Unmarshal(row.Payload, &payload)
+	return riskBucketState(compliance.Evaluate(row.Category, row.Period, payload, row.Documents).State, row.Eligible)
+}
+
+func filterRegulatoryRowsByRisk(rows []regulatoryRow, state string) []regulatoryRow {
+	out := make([]regulatoryRow, 0, len(rows))
+	for _, row := range rows {
+		if row.RiskState == state {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // writeGenerated регистрирует сформированный файл в неизменяемом реестре
 // generated_reports (REPORT-11): автор, полный набор применённых
 // параметров (partner_id/agreement_id уходят в отдельные FK-колонки для
@@ -97,6 +120,8 @@ func (h *ReportHandlers) writeGenerated(w http.ResponseWriter, r *http.Request, 
 	}
 	if format == "docx" {
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	} else if format == "csv" {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	} else {
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	}
@@ -119,6 +144,8 @@ func (h *ReportHandlers) DownloadGenerated(w http.ResponseWriter, r *http.Reques
 	}
 	if format == "docx" {
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	} else if format == "csv" {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	} else {
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	}
@@ -131,8 +158,17 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	company := itCompanyScope(u)
 	partner := strings.TrimSpace(r.URL.Query().Get("partner_id"))
 	agreement := strings.TrimSpace(r.URL.Query().Get("agreement_id"))
+	riskFilter := strings.TrimSpace(r.URL.Query().Get("risk_filter"))
 	if company == "" {
 		middleware.WriteError(w, 400, "для отчёта назначьте ИТ-компанию")
+		return
+	}
+	if riskFilter != "" && riskFilter != "green" && riskFilter != "yellow" && riskFilter != "red" {
+		middleware.WriteError(w, 400, "risk_filter должен быть green, yellow или red")
+		return
+	}
+	if riskFilter != "" && kind != "plan_fact" {
+		middleware.WriteError(w, 400, "risk_filter доступен только для конструктора план-факт-дельта")
 		return
 	}
 	if kind == "agreement2" || kind == "agreement3" {
@@ -169,7 +205,8 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	}
 	// conds contains only fixed SQL fragments and $N placeholders; request values are in args.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	query := `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(e.agreement_id::text,''),COALESCE(a.number,''),e.category_code,c.name,e.period_type,e.audience,e.amount_rub,e.payload
+	query := `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(e.agreement_id::text,''),COALESCE(a.number,''),e.category_code,c.name,e.period_type,e.audience,e.amount_rub,e.payload,eligibility.eligible,
+		ARRAY(SELECT DISTINCT att.document_type||':'||att.review_status FROM attachments att WHERE att.entry_id=e.id AND att.retention_expires_at>now())
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id LEFT JOIN agreements a ON a.id=e.agreement_id JOIN activity_categories c ON c.code=e.category_code WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY p.name,c.name,e.period_type,e.id`
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
@@ -180,11 +217,17 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	data := []regulatoryRow{}
 	for rows.Next() {
 		var item regulatoryRow
-		if rows.Scan(&item.PartnerID, &item.Partner, &item.AgreementID, &item.Agreement, &item.Category, &item.CategoryName, &item.Period, &item.Audience, &item.Amount, &item.Payload) != nil {
+		var documents pq.StringArray
+		if rows.Scan(&item.PartnerID, &item.Partner, &item.AgreementID, &item.Agreement, &item.Category, &item.CategoryName, &item.Period, &item.Audience, &item.Amount, &item.Payload, &item.Eligible, &documents) != nil {
 			middleware.WriteError(w, 500, "не удалось прочитать отчёт")
 			return
 		}
+		item.Documents = []string(documents)
+		item.RiskState = regulatoryRiskState(item)
 		data = append(data, item)
+	}
+	if riskFilter != "" {
+		data = filterRegulatoryRowsByRisk(data, riskFilter)
 	}
 	if kind == "annex3" {
 		if len(data) > 0 {
@@ -216,6 +259,18 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, 409, "нет утверждённых данных для формы")
 		return
 	}
+	outputFormat := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	if outputFormat == "" {
+		outputFormat = "xlsx"
+	}
+	if outputFormat != "xlsx" && outputFormat != "csv" {
+		middleware.WriteError(w, 400, "format должен быть xlsx или csv")
+		return
+	}
+	if outputFormat == "csv" && kind != "plan_fact" {
+		middleware.WriteError(w, 400, "CSV доступен только для конструктора план-факт-дельта")
+		return
+	}
 	wb := xlsx.New()
 	filename := ""
 	switch kind {
@@ -244,6 +299,16 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		filename = fmt.Sprintf("приложение_5_%d.xlsx", year)
 	case "plan_fact":
 		out := buildPlanFactRows(data)
+		if outputFormat == "csv" {
+			body, err := tableCSV(regulatoryHeaders["plan_fact"], out)
+			if err != nil {
+				middleware.WriteError(w, 500, "не удалось сформировать CSV")
+				return
+			}
+			h.writeGenerated(w, r, u, kind, "csv", fmt.Sprintf("план_факт_дельта_%d.csv", year), company,
+				reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter, "format", "csv"), year, body)
+			return
+		}
 		wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], out)
 		filename = fmt.Sprintf("план_факт_дельта_%d.xlsx", year)
 	default:
@@ -256,7 +321,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.writeGenerated(w, r, u, kind, "xlsx", filename, company,
-		reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode"))), year, body)
+		reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter), year, body)
 }
 
 func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, kind, company, partner, agreement string) {
@@ -428,6 +493,34 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 // формы Приказа № 270.
 func thousandRub(amount money.Amount) float64 {
 	return math.Round(float64(amount)/1000) / 100
+}
+
+func tableCSV(headers []string, rows [][]interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0xEF, 0xBB, 0xBF}) // Excel-friendly UTF-8 BOM.
+	writer := csv.NewWriter(&buf)
+	writer.Comma = ';'
+	if err := writer.Write(headers); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		record := make([]string, len(row))
+		for i, value := range row {
+			switch v := value.(type) {
+			case money.Amount:
+				record[i] = v.String()
+			case float64:
+				record[i] = fmt.Sprintf("%.2f", v)
+			default:
+				record[i] = fmt.Sprint(v)
+			}
+		}
+		if err := writer.Write(record); err != nil {
+			return nil, err
+		}
+	}
+	writer.Flush()
+	return buf.Bytes(), writer.Error()
 }
 
 // annex1Sheet — один лист Приложения № 1: форма заполняется отдельно по

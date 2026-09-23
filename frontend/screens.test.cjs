@@ -84,3 +84,12 @@ test("every registered screen owns a lazy entrypoint", () => {
     assert.match(source, /export (async function render|const render = renderActivity)/);
   }
 });
+
+test("all eleven screens expose accessible navigation text", () => {
+  for (const screen of registry().all) {
+    assert.match(screen.title, /\S/, `${screen.id}: title is required for h1 and nav label`);
+    assert.match(screen.subtitle, /\S/, `${screen.id}: subtitle is required for screen intro`);
+    assert.match(screen.icon, /^[a-z][a-z0-9-]*$/, `${screen.id}: icon key must map to shared registry`);
+    assert.ok(Number.isInteger(screen.number) && screen.number >= 1 && screen.number <= 11);
+  }
+});

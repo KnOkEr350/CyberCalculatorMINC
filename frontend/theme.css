@@ -404,6 +404,25 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 .ui-table-sort { padding: 0; border: 0; background: transparent; color: inherit; text-transform: inherit; cursor: pointer; }
 .ui-table tr.selected td { background: var(--selection, #e9f2fb); }
 .ui-table-empty { padding: 24px; text-align: center; color: var(--muted); }
+.ui-toggle { display: grid; gap: 4px; margin-bottom: 11px; }
+.ui-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.ui-toggle label { display: inline-flex; align-items: center; gap: 9px; min-height: 32px; margin: 0; cursor: pointer; }
+.ui-toggle-track { display: inline-flex; align-items: center; width: 38px; height: 20px; padding: 2px; border: 1px solid #8fa0b2; border-radius: 999px; background: #dce3ea; transition: background .14s ease, border-color .14s ease; }
+.ui-toggle-track span { width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(20,43,65,.22); transition: transform .14s ease; }
+.ui-toggle input:checked + label .ui-toggle-track { border-color: var(--accent-2); background: var(--accent-2); }
+.ui-toggle input:checked + label .ui-toggle-track span { transform: translateX(18px); }
+.ui-toggle input:focus-visible + label .ui-toggle-track { outline: 3px solid rgba(57,126,196,.28); outline-offset: 2px; }
+.ui-inline-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ui-inline-action { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 2px; background: #fff; color: var(--accent-2); font-size: 10px; font-weight: 620; text-decoration: none; cursor: pointer; }
+.ui-inline-action svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.ui-inline-action:hover { border-color: #9fb1c4; background: #f5f8fb; }
+.ui-compound-field { margin: 0 0 11px; padding: 10px; border: 1px solid var(--border); border-radius: 2px; background: var(--surface-alt); }
+.ui-compound-field legend { padding: 0 5px; color: #4e5e70; font-size: 10px; font-weight: 620; }
+.ui-compound-parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
+.ui-compound-parts .field { margin-bottom: 0; }
+.ui-validation-summary { margin: 0 0 13px; padding: 10px 12px; border: 1px solid #edcf91; border-radius: 2px; background: #fff7e4; color: #8b5b12; }
+.ui-validation-summary.error { border-color: #ebb8bd; background: #fff3f4; color: var(--bad); }
+.ui-validation-summary ul { margin: 6px 0 0; padding-left: 17px; }
 .ui-drawer-backdrop { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; background: rgba(20,43,65,.5); }
 .ui-drawer { width: min(620px, 94vw); height: 100%; overflow: auto; background: var(--surface, #fff); box-shadow: -12px 0 30px rgba(20,43,65,.2); outline: none; }
 .ui-drawer.ui-drawer-wide { width: min(1040px, 96vw); }

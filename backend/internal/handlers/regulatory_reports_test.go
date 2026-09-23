@@ -142,6 +142,32 @@ func TestBuildPlanFactRowsShowsDashPercentWithoutPlan(t *testing.T) {
 	}
 }
 
+func TestFilterRegulatoryRowsByRisk(t *testing.T) {
+	rows := []regulatoryRow{
+		{Partner: "МГУ", RiskState: "green"},
+		{Partner: "МФТИ", RiskState: "yellow"},
+		{Partner: "Колледж", RiskState: "red"},
+	}
+	got := filterRegulatoryRowsByRisk(rows, "yellow")
+	if len(got) != 1 || got[0].Partner != "МФТИ" {
+		t.Fatalf("risk filter returned %+v", got)
+	}
+}
+
+func TestTableCSVUsesSemicolonAndMoneyString(t *testing.T) {
+	body, err := tableCSV(regulatoryHeaders["plan_fact"], [][]interface{}{{"МГУ", "Преподаватели", money.Amount(100_50), money.Amount(200_00), 99.5, "—"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.HasPrefix(text, "\uFEFFПартнёр;Вид мероприятия") {
+		t.Fatalf("CSV header/BOM mismatch: %q", text)
+	}
+	if !strings.Contains(text, "100.50;200.00;99.50;—") {
+		t.Fatalf("CSV row does not contain formatted money and delta: %q", text)
+	}
+}
+
 // Регрессия: fmt.Sprint(p[key]) на отсутствующем ключе печатает буквальное
 // "<nil>" в ячейку регламентной формы вместо пустой строки.
 func TestPayloadValueMissingKeyIsEmptyNotNilString(t *testing.T) {

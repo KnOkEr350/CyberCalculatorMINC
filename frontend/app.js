@@ -141,13 +141,7 @@ function fmtReportDate(value) {
 }
 
 function dashboardKPIIcon(kind) {
-  const icons = {
-    target: '<circle cx="12" cy="12" r="7.5"></circle><circle cx="12" cy="12" r="3.5"></circle><path d="M12 12 20 4m-3 0h3v3"></path>',
-    confirmed: '<path d="M7.5 11.5 10.5 14.5 17 8"></path><circle cx="12" cy="12" r="9"></circle>',
-    gap: '<path d="m3 6 5 5 4-4 7 7"></path><path d="M15 14h4v-4"></path>',
-    date: '<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4m8-4v4M3 10h18M7 14h2m3 0h2m3 0h1M7 17h2m3 0h2"></path>',
-  };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[kind]}</svg>`;
+  return CyberCalcUI.icon(`dashboard-${kind}`);
 }
 
 function escapeHTML(value) {
@@ -169,30 +163,14 @@ function validYear(value) {
 }
 
 function brandMarkup(inverse = false) {
-  return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
+  return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="ИТ-Партнерство">
     <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
-    <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong><small>Корпоративные сервисы</small></span>
+    <span class="brand-copy"><strong>ИТ-ПАРТНЕРСТВО</strong><small>Калькулятор Минцифры</small></span>
   </div>`;
 }
 
 function navigationIcon(kind) {
-  const icons = {
-    dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect>',
-    entries: '<path d="M9 5h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"></path><path d="M9 3h6v4H9zM9 12h8M9 16h8"></path>',
-    partners: '<path d="M3 21h18M5 21V8l7-4 7 4v13M9 12h2m2 0h2m-6 4h2m2 0h2"></path>',
-    companies: '<path d="M4 21V7h9v14M13 11h7v10M7 10h2m-2 4h2m-2 4h2m9-3h-2m2 3h-2"></path>',
-    admin: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
-    teachers: '<circle cx="9" cy="8" r="3"></circle><path d="M3.5 20v-2.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V20M15 5h6v10h-4"></path>',
-    documents: '<path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7"></path>',
-    internship: '<path d="M4 7h16v13H4zM8 7V4h8v3M4 12h16M10 12v2h4v-2"></path>',
-    practice: '<path d="M12 3 4 7v5c0 5 3.4 8.2 8 9.8 4.6-1.6 8-4.8 8-9.8V7zM8.5 12l2.2 2.2 4.8-5"></path>',
-    top: '<path d="M4 20h16M6 17l4-5 3 2 5-7M15 7h3v3"></path>',
-    schools: '<path d="m3 9 9-5 9 5-9 5zM6 11v6c3 2 9 2 12 0v-6M21 9v7"></path>',
-    ministry: '<path d="m3 9 9-5 9 5M5 10h14M6 10v8m4-8v8m4-8v8m4-8v8M3 20h18"></path>',
-    reports: '<path d="M5 3h14v18H5zM9 16v-3m3 3V8m3 8v-5M8 6h8"></path>',
-    settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
-  };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[kind] || icons.entries}</svg>`;
+  return CyberCalcUI.icon(kind);
 }
 
 function initials(name) {
@@ -425,6 +403,12 @@ async function renderReportsScreen(root) {
   const base = new URLSearchParams({ partner_id: state.partnerID, agreement_id: state.agreementID, period_type: state.period, report_year: state.year });
   const categoryQuery = new URLSearchParams(base);
   if (state.reportCategory) categoryQuery.set("category_code", state.reportCategory);
+  const constructorQuery = new URLSearchParams(base);
+  if (state.reportRiskFilter) constructorQuery.set("risk_filter", state.reportRiskFilter);
+  const planFactQuery = new URLSearchParams(constructorQuery);
+  planFactQuery.set("report_type", "plan_fact");
+  const planFactCSVQuery = new URLSearchParams(planFactQuery);
+  planFactCSVQuery.set("format", "csv");
   const reportHint = !agreement
     ? "Можно формировать общие рабочие выгрузки; выберите партнёра и соглашение для справок и типовых соглашений."
     : approved
@@ -433,9 +417,9 @@ async function renderReportsScreen(root) {
 
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div><span class="year-badge">${state.year}</span></section>
     <div class="card report-builder"><div class="flex between"><div><h2>Конструктор среза</h2><p class="muted">Выберите контекст отчёта; пустые строки сервер удалит при формировании документа.</p></div><span class="status-badge ${approved ? "active" : "pending"}">${escapeHTML(statusLabels[workflow?.status] || "Контекст не выбран")}</span></div>
-      <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">— Выберите —</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">— Выберите —</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
+      <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div><div class="field"><label>Риск для конструктора</label><select id="report-risk"><option value="" ${!state.reportRiskFilter ? "selected" : ""}>Все зоны риска</option><option value="green" ${state.reportRiskFilter === "green" ? "selected" : ""}>🟢 Гарантировано</option><option value="yellow" ${state.reportRiskFilter === "yellow" ? "selected" : ""}>🟡 В процессе</option><option value="red" ${state.reportRiskFilter === "red" ? "selected" : ""}>🔴 В зоне риска</option></select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">— Выберите —</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">— Выберите —</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
     </div>
-    <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", true)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "plan_fact" })}`, "План–факт–дельта", "Абсолютная и процентная дельта по партнёрам и видам.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex1" })}`, "Приложение № 1", "Детализированный перечень мероприятий.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2" })}`, "Приложение № 2", "Реестр стажировок, часов и трудовых договоров.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2", mode: "mentors" })}`, "Отчёт по наставникам", "Часы сопровождения и закреплённые стажёры по каждому наставнику.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex3" })}`, "Приложение № 3", "DOCX-справка при отсутствии мероприятий.", hasCompanyContext && hasAgreementContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex5" })}`, "Приложение № 5", "Сводный отчёт и выполнение норматива 3%.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ report_type: "annex4", report_year: state.year, ...(state.partnerID ? { partner_id: state.partnerID } : {}) })}`, "Приложение № 4", hasMaySnapshot ? "13 граф формы приказа № 270; факт читается из неизменяемого снимка на 1 мая." : "Сначала сформируйте снимок на 1 мая в настройках.", hasCompanyContext && hasMaySnapshot)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement2" })}`, "Типовое соглашение № 2", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement3" })}`, "Типовое соглашение № 3", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
+    <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", true)}${reportLink(`/api/reports/export?${planFactQuery}`, "План–факт–дельта", "Абсолютная и процентная дельта по партнёрам и видам с учётом фильтра риска.", hasCompanyContext)}${reportLink(`/api/reports/export?${planFactCSVQuery}`, "План–факт–дельта CSV", "Тот же конструктор в CSV для быстрой сверки.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex1" })}`, "Приложение № 1", "Детализированный перечень мероприятий.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2" })}`, "Приложение № 2", "Реестр стажировок, часов и трудовых договоров.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2", mode: "mentors" })}`, "Отчёт по наставникам", "Часы сопровождения и закреплённые стажёры по каждому наставнику.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex3" })}`, "Приложение № 3", "DOCX-справка при отсутствии мероприятий.", hasCompanyContext && hasAgreementContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex5" })}`, "Приложение № 5", "Сводный отчёт и выполнение норматива 3%.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ report_type: "annex4", report_year: state.year, ...(state.partnerID ? { partner_id: state.partnerID } : {}) })}`, "Приложение № 4", hasMaySnapshot ? "13 граф формы приказа № 270; факт читается из неизменяемого снимка на 1 мая." : "Сначала сформируйте снимок на 1 мая в настройках.", hasCompanyContext && hasMaySnapshot)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement2" })}`, "Типовое соглашение № 2", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement3" })}`, "Типовое соглашение № 3", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
     <div class="card"><h2>Реестр сформированных файлов</h2>${generatedReports.length ? `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Форма</th><th>Год</th><th>Файл</th><th>SHA-256</th><th>Размер</th><th></th></tr></thead><tbody>${generatedReports.map((item) => `<tr><td>${new Date(item.generated_at).toLocaleString("ru-RU")}</td><td>${escapeHTML(item.report_type)}</td><td>${item.report_year}</td><td>${escapeHTML(item.file_name)}</td><td><code>${escapeHTML(item.content_sha256.slice(0, 16))}…</code></td><td>${Number(item.size_bytes).toLocaleString("ru-RU")} Б</td><td><a class="btn secondary" href="/api/reports/generated/${encodeURIComponent(item.id)}">Скачать</a></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Файлы ещё не формировались.</p>'}</div>
     ${regulatoryTimelineMarkup(milestones)}
     <div class="grid cols-2"><div class="card"><h2>Комплектность и согласование</h2>${workflow ? `<div class="readiness-list">${workflow.automatic_checks.map((check) => `<div><span class="risk-dot ${check.complete ? "green" : "red"}"></span><span>${escapeHTML(check.label)}</span><b>${check.complete ? "Готово" : "Не выполнено"}</b></div>`).join("")}</div>${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : '<p class="notice">Автоматические проверки пройдены.</p>'}` : '<p class="muted">После выбора соглашения здесь появится готовность комплекта.</p>'}</div><div class="card"><h2>Обменные пакеты .pkg</h2><p>Шифрованный обмен и Diff Engine предусмотрены ТЗ, но требуют серверного CryptoEngine и API сверки.</p><div class="field"><label>Пакет для сверки</label><input type="file" accept=".pkg" disabled></div><div class="flex"><button class="btn" disabled>Сформировать .pkg</button><button class="btn secondary" disabled>Сверить пакет</button></div><p class="field-hint">Контролы заранее размещены в отдельном контуре и не имитируют ещё не реализованную серверную операцию.</p></div></div>`;
@@ -444,6 +428,7 @@ async function renderReportsScreen(root) {
   root.querySelector("#report-year").onchange = (event) => { const year = Number(event.target.value); if (!validYear(year)) return event.target.reportValidity(); state.year = year; rerender(); };
   root.querySelector("#report-period").onchange = (event) => { state.period = event.target.value; rerender(); };
   root.querySelector("#report-category").onchange = (event) => { state.reportCategory = event.target.value; rerender(); };
+  root.querySelector("#report-risk").onchange = (event) => { state.reportRiskFilter = event.target.value; rerender(); };
   root.querySelector("#report-partner")?.addEventListener("change", (event) => { state.partnerID = event.target.value; state.agreementID = ""; state.agreementPartnerID = ""; rerender(); });
   root.querySelector("#report-agreement").onchange = (event) => { state.agreementID = event.target.value; rerender(); };
 }
@@ -592,15 +577,25 @@ async function renderDashboard(root) {
   }, {});
   const planAmounts = amountsByCategory(d.plan_by_category);
   const factAmounts = amountsByCategory(d.fact_by_category);
+  const dashboardSlice = ["plan", "fact", "delta"].includes(state.dashboardSlice)
+    ? state.dashboardSlice
+    : "fact";
+  const sliceLabels = {
+    plan: "План",
+    fact: "Факт",
+    delta: "Дельта (Факт-План)",
+  };
   const activityRows = state.categories.map((category) => {
     const plan = planAmounts[category.code] || 0;
     const fact = factAmounts[category.code] || 0;
+    const delta = fact - plan;
     const risk = fact > 0 && (plan === 0 || fact >= plan)
       ? "green"
       : plan > 0 || fact > 0
         ? "yellow"
         : "red";
-    return { ...category, plan, fact, risk };
+    const selected = dashboardSlice === "plan" ? plan : dashboardSlice === "delta" ? delta : fact;
+    return { ...category, plan, fact, delta, selected, risk };
   });
   const riskCounts = activityRows.reduce((counts, item) => {
     counts[item.risk] += 1;
@@ -638,6 +633,7 @@ async function renderDashboard(root) {
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
+          <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта (Факт-План)</option></select></div>
           <div class="field"><label class="check-row" for="dash-hide-zero"><input type="checkbox" id="dash-hide-zero" ${state.dashboardHideZero ? "checked" : ""}> Скрыть нулевые позиции</label></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
         </div>
@@ -686,7 +682,7 @@ async function renderDashboard(root) {
     </div>
     <div class="grid cols-2 dashboard-risk-grid">
       <div class="card"><h2>Распределение документальных рисков</h2><div class="risk-buckets"><div class="green"><span>${fmtMoney(riskBuckets.green?.amount_rub || 0)}</span><b>Гарантировано · ${Number(riskBuckets.green?.entry_count || 0)}</b><small>Комплект зелёный и отчёт утверждён</small></div><div class="yellow"><span>${fmtMoney(riskBuckets.yellow?.amount_rub || 0)}</span><b>Прогноз · ${Number(riskBuckets.yellow?.entry_count || 0)}</b><small>Нужна проверка или часть документов</small></div><div class="red"><span>${fmtMoney(riskBuckets.red?.amount_rub || 0)}</span><b>В зоне риска · ${Number(riskBuckets.red?.entry_count || 0)}</b><small>Есть объективные блокирующие причины</small></div></div><p class="field-hint">Расчёт по документам и правилам ${escapeHTML("mincifry-270-2026.1")}; ручной чекбокс не снимает объективную блокировку.</p></div>
-      <div class="card"><h2>Все виды мероприятий</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.selected)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div><p class="field-hint">Переключатель среза меняет основную колонку таблицы; дельта считается как факт минус план.</p></div>
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
@@ -712,6 +708,10 @@ async function renderDashboard(root) {
     };
   root.querySelector("#dash-category").onchange = (event) => {
     state.dashboardCategory = event.target.value;
+    renderDashboard(root);
+  };
+  root.querySelector("#dash-slice").onchange = (event) => {
+    state.dashboardSlice = event.target.value;
     renderDashboard(root);
   };
   root.querySelector("#dash-audience").onchange = (event) => {

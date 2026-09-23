@@ -54,6 +54,42 @@
     return `<span class="risk-label ui-risk-badge ${state}"${attributes({ title: reasons || undefined, "data-risk": state })}><i aria-hidden="true"></i>${escapeHTML(options.label || riskLabels[state])}</span>`;
   }
 
+  const iconRegistry = Object.freeze({
+    "dashboard-target": '<circle cx="12" cy="12" r="7.5"></circle><circle cx="12" cy="12" r="3.5"></circle><path d="M12 12 20 4m-3 0h3v3"></path>',
+    "dashboard-confirmed": '<path d="M7.5 11.5 10.5 14.5 17 8"></path><circle cx="12" cy="12" r="9"></circle>',
+    "dashboard-gap": '<path d="m3 6 5 5 4-4 7 7"></path><path d="M15 14h4v-4"></path>',
+    "dashboard-date": '<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4m8-4v4M3 10h18M7 14h2m3 0h2m3 0h1M7 17h2m3 0h2"></path>',
+    dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect>',
+    entries: '<path d="M9 5h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"></path><path d="M9 3h6v4H9zM9 12h8M9 16h8"></path>',
+    partners: '<path d="M3 21h18M5 21V8l7-4 7 4v13M9 12h2m2 0h2m-6 4h2m2 0h2"></path>',
+    companies: '<path d="M4 21V7h9v14M13 11h7v10M7 10h2m-2 4h2m-2 4h2m9-3h-2m2 3h-2"></path>',
+    admin: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
+    teachers: '<circle cx="9" cy="8" r="3"></circle><path d="M3.5 20v-2.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V20M15 5h6v10h-4"></path>',
+    documents: '<path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7"></path>',
+    internship: '<path d="M4 7h16v13H4zM8 7V4h8v3M4 12h16M10 12v2h4v-2"></path>',
+    practice: '<path d="M12 3 4 7v5c0 5 3.4 8.2 8 9.8 4.6-1.6 8-4.8 8-9.8V7zM8.5 12l2.2 2.2 4.8-5"></path>',
+    top: '<path d="M4 20h16M6 17l4-5 3 2 5-7M15 7h3v3"></path>',
+    schools: '<path d="m3 9 9-5 9 5-9 5zM6 11v6c3 2 9 2 12 0v-6M21 9v7"></path>',
+    ministry: '<path d="m3 9 9-5 9 5M5 10h14M6 10v8m4-8v8m4-8v8m4-8v8M3 20h18"></path>',
+    reports: '<path d="M5 3h14v18H5zM9 16v-3m3 3V8m3 8v-5M8 6h8"></path>',
+    settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>',
+    download: '<path d="M12 3v11m0 0 4-4m-4 4-4-4M5 21h14"></path>',
+    edit: '<path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"></path>',
+    close: '<path d="m6 6 12 12M18 6 6 18"></path>',
+  });
+
+  function icon(name, options = {}) {
+    const path = iconRegistry[name] || iconRegistry.entries;
+    const title = options.title ? `<title>${escapeHTML(options.title)}</title>` : "";
+    return `<svg${attributes({
+      class: options.className || undefined,
+      viewBox: "0 0 24 24",
+      "aria-hidden": options.title ? undefined : "true",
+      "aria-label": options.title || undefined,
+      focusable: "false",
+    })}>${title}${path}</svg>`;
+  }
+
   function filters(options = {}) {
     const fields = (options.fields || []).map((field) => {
       const id = field.id || field.name;
@@ -71,6 +107,49 @@
       return `<div class="field"><label for="${escapeHTML(id)}">${escapeHTML(field.label)}</label>${control}</div>`;
     }).join("");
     return `<fieldset class="ui-filters"><legend>${escapeHTML(options.legend || "Фильтры")}</legend><div class="grid cols-${options.columns === 2 ? 2 : 3}">${fields}</div></fieldset>`;
+  }
+
+  function toggle(options = {}) {
+    const id = options.id || options.name || "toggle";
+    const checked = Boolean(options.checked);
+    return `<div class="ui-toggle"><input${attributes({
+      id, name: options.name || id, type: "checkbox", role: "switch", checked,
+      disabled: options.disabled, "aria-describedby": options.hint ? `${id}-hint` : undefined,
+    })}><label for="${escapeHTML(id)}"><span class="ui-toggle-track" aria-hidden="true"><span></span></span><span>${escapeHTML(options.label || "Переключатель")}</span></label>${options.hint ? `<div class="field-hint" id="${escapeHTML(id)}-hint">${escapeHTML(options.hint)}</div>` : ""}</div>`;
+  }
+
+  function inlineActions(options = {}) {
+    return `<div class="ui-inline-actions" role="group"${attributes({ "aria-label": options.label || "Действия" })}>${(options.actions || []).map((action) => {
+      const iconHTML = action.icon ? icon(action.icon) : "";
+      if (action.href) {
+        return `<a class="ui-inline-action"${attributes({ href: action.href, "data-action": action.name, "aria-disabled": action.disabled ? "true" : undefined, tabindex: action.disabled ? "-1" : undefined })}>${iconHTML}<span>${escapeHTML(action.label || action.name || "Действие")}</span></a>`;
+      }
+      return `<button type="button" class="ui-inline-action"${attributes({ "data-action": action.name, disabled: action.disabled, "aria-label": action.ariaLabel || action.label })}>${iconHTML}<span>${escapeHTML(action.label || action.name || "Действие")}</span></button>`;
+    }).join("")}</div>`;
+  }
+
+  function compoundField(options = {}) {
+    const id = options.id || options.name || "compound";
+    const label = escapeHTML(options.label || "Составное поле");
+    return `<fieldset class="ui-compound-field"${attributes({ "aria-describedby": options.hint ? `${id}-hint` : undefined })}><legend>${label}${options.required ? " *" : ""}</legend><div class="ui-compound-parts">${(options.parts || []).map((part, index) => {
+      const partID = part.id || `${id}-${part.name || index}`;
+      const labelHTML = part.label ? `<label for="${escapeHTML(partID)}">${escapeHTML(part.label)}</label>` : "";
+      if (part.type === "select") {
+        return `<div class="field">${labelHTML}<select${attributes({ id: partID, name: part.name || partID, required: part.required, disabled: part.disabled })}>${(part.options || []).map((item) => {
+          const value = typeof item === "object" ? item.value : item;
+          const itemLabel = typeof item === "object" ? item.label : item;
+          return `<option value="${escapeHTML(value)}"${String(value) === String(part.value ?? "") ? " selected" : ""}>${escapeHTML(itemLabel)}</option>`;
+        }).join("")}</select></div>`;
+      }
+      return `<div class="field">${labelHTML}<input${attributes({ id: partID, name: part.name || partID, type: part.type || "text", value: part.value ?? "", placeholder: part.placeholder, required: part.required, disabled: part.disabled })}></div>`;
+    }).join("")}</div>${options.hint ? `<div class="field-hint" id="${escapeHTML(id)}-hint">${escapeHTML(options.hint)}</div>` : ""}</fieldset>`;
+  }
+
+  function validationSummary(options = {}) {
+    const errors = (options.errors || []).filter(Boolean);
+    const warnings = (options.warnings || []).filter(Boolean);
+    if (!errors.length && !warnings.length) return "";
+    return `<div class="ui-validation-summary ${errors.length ? "error" : "warning"}"${attributes({ role: errors.length ? "alert" : "status", tabindex: "-1" })}><strong>${escapeHTML(errors.length ? options.errorTitle || "Исправьте ошибки" : options.warningTitle || "Проверьте предупреждения")}</strong><ul>${errors.concat(warnings).map((item) => `<li>${escapeHTML(item)}</li>`).join("")}</ul></div>`;
   }
 
   function table(options = {}) {
@@ -225,7 +304,8 @@
   }
 
   global.CyberCalcUI = Object.freeze({
-    escapeHTML, formatMoney, moneyInput, parseMoney, dateInput, riskBadge, filters, table,
+    escapeHTML, formatMoney, moneyInput, parseMoney, dateInput, riskBadge, icon, iconRegistry,
+    filters, toggle, inlineActions, compoundField, validationSummary, table,
     drawerMarkup, trapFocus, openDrawer, uploadField, bindUpload, moveItem, bindReorder, toast,
   });
 })(globalThis);
