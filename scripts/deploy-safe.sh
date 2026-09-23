@@ -8,7 +8,7 @@ deploy_state="$(mktemp -d)"
 rollback_file="$deploy_state/rollback.json"
 printf '{"services":{}}\n' > "$rollback_file"
 previous=false
-runtime_services=(backend worker frontend nginx)
+runtime_services=(backend worker nginx)
 previous_services=()
 for service in "${runtime_services[@]}"; do
   container="$(docker compose ps -q "$service" | head -n 1)"

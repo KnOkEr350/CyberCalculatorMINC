@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 mkdir -p security-artifacts
 # Trivy must already be installed by the pinned CI setup action.
-for service in backend frontend nginx db; do
+for service in backend nginx db; do
   container="$(docker compose ps -q "$service" | head -n 1)"
   [[ -n "$container" ]] || { echo "Missing running service: $service" >&2; exit 1; }
   image="$(docker inspect --format '{{.Image}}' "$container")"
