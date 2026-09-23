@@ -43,6 +43,7 @@
 | [ADR-21](ADR-21-product-brand.md) | Название и эмблема продукта | PROPOSED | Владелец продукта + юрист | Product/Legal |
 | [ADR-22](ADR-22-curator-fallback.md) | Fallback задач на куратора | ACCEPTED | Владелец продукта | — |
 | [ADR-23](ADR-23-server-root-and-super-admin.md) | Root сервера и SUPER_ADMIN | ACCEPTED | Security owner | — |
+| [ADR-24](ADR-24-no-gph-surcharge.md) | Доплата по ГПХ не реализуется | ACCEPTED | Владелец продукта | — |
 
 ## Backlog решений
 

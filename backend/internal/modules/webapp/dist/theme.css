@@ -589,3 +589,18 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Строка активных действий на дашборде */
+.dashboard-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 13px; padding: 12px 16px; }
+.dashboard-actions-row { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.action-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-alt); color: var(--navy); font-size: 12px; }
+.action-chip .action-count { min-width: 22px; font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: center; }
+.action-chip.warn { border-color: var(--warn); }
+.action-chip.warn .action-count { color: var(--warn); }
+.action-chip.bad { border-color: var(--bad); }
+.action-chip.bad .action-count { color: var(--bad); }
+.action-chip.good { border-color: var(--good); color: var(--good); }
+.dashboard-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dashboard-quick > span { margin-right: 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.dashboard-quick .btn { min-height: 32px; padding: 4px 12px; font-size: 12px; }
+@media (max-width: 720px) { .dashboard-actions { padding: 10px 12px; } .dashboard-quick { width: 100%; } }

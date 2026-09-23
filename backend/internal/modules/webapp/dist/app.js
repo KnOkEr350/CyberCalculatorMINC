@@ -416,6 +416,35 @@ function regulatoryTimelineMarkup(milestones) {
   return `<div class="card"><h2>Регламентный календарь приказа № 270</h2><div class="readiness-list">${rows || '<p class="muted">Контрольные даты недоступны.</p>'}</div></div>`;
 }
 
+// Строка активных действий (экран 1): то, что требует шага прямо сейчас — задачи
+// в работе, записи с замечаниями, ближайший регламентный срок — и быстрые
+// переходы к вводу данных. Числа берутся из тех же ответов сервера, что и
+// остальной экран, и сами ничего не считают.
+function activeActionsMarkup({ tasks, attention, milestones, quickScreens }) {
+  const items = [];
+  const open = Array.isArray(tasks) ? tasks : [];
+  if (open.length) {
+    const escalated = open.filter((task) => task.unassigned_escalated).length;
+    items.push(`<div class="action-chip ${escalated ? "warn" : ""}"><span class="action-count">${open.length}</span><span>Задач в работе${escalated ? `, из них эскалировано: ${escalated}` : ""}</span></div>`);
+  }
+  if (attention > 0) {
+    items.push(`<div class="action-chip warn"><span class="action-count">${attention}</span><span>Мероприятий требуют внимания</span></div>`);
+  }
+  const overdue = (milestones || []).filter((milestone) => milestone.overdue);
+  const upcoming = (milestones || []).find((milestone) => !milestone.overdue);
+  if (overdue.length) {
+    items.push(`<div class="action-chip bad"><span class="action-count">${overdue.length}</span><span>Просроченных контрольных сроков</span></div>`);
+  }
+  if (upcoming) {
+    const days = Number(upcoming.days_left);
+    const date = String(upcoming.date || "").split("-").reverse().join(".");
+    items.push(`<div class="action-chip ${days <= 14 ? "warn" : ""}"><span class="action-count">${days === 0 ? "0" : days}</span><span>дн. до срока: ${escapeHTML(upcoming.label)} · ${escapeHTML(date)}</span></div>`);
+  }
+  if (!items.length) items.push(`<div class="action-chip good"><span>Срочных действий нет</span></div>`);
+  const quick = (quickScreens || []).map((screen) => `<button class="btn secondary" type="button" data-quick-view="${escapeHTML(screen.id)}">${escapeHTML(screen.label)}</button>`).join("");
+  return `<section class="dashboard-actions card" aria-label="Активные действия"><div class="dashboard-actions-row">${items.join("")}</div>${quick ? `<div class="dashboard-quick"><span>Внести данные</span>${quick}</div>` : ""}</section>`;
+}
+
 async function renderReportsScreen(root) {
   const screen = CyberCalcScreens.get("reports");
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div><span class="year-badge">${state.year}</span></section><div class="card loading-state"><span class="spinner"></span>Загрузка отчётного контура…</div>`;
@@ -561,6 +590,13 @@ async function renderDashboard(root) {
     return;
   }
   state.dashboard = d;
+  // Календарь и задачи — дополнение экрана: их недоступность не должна лишать
+  // пользователя самого дашборда.
+  let milestones = [];
+  try { milestones = await api(`/report-calendar?report_year=${encodeURIComponent(state.year)}`); } catch (_) { milestones = []; }
+  let openTasks = [];
+  try { openTasks = await api("/workflow-tasks?status=open"); } catch (_) { openTasks = []; }
+  const quickScreens = (CyberCalcScreens.available?.() || []).filter((screen) => CyberCalcScreens.activity?.(screen.id) && screen.id !== "dashboard");
 
   const groupedChart = (plan, fact) => {
     const counts = (items) => (items || []).reduce((map, item) => map.set(item.category_code, (map.get(item.category_code) || 0) + Number(item.entry_count || 0)), new Map());
@@ -676,6 +712,7 @@ async function renderDashboard(root) {
       <div><span class="eyebrow">Экран 1</span><h1>Пульс проекта</h1></div>
       <span class="year-badge">${state.year}</span>
     </section>
+    ${activeActionsMarkup({ tasks: openTasks, attention: attentionEntries, milestones, quickScreens })}
     <div class="dashboard-primary-kpis" aria-label="Ключевые показатели">
       <article class="dashboard-kpi target">
         <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
@@ -716,12 +753,16 @@ async function renderDashboard(root) {
       <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets"><div class="green"><span>${Number(riskBuckets.green?.entry_count || 0)}</span><b>Готово</b></div><div class="yellow"><span>${Number(riskBuckets.yellow?.entry_count || 0)}</span><b>В работе</b></div><div class="red"><span>${Number(riskBuckets.red?.entry_count || 0)}</span><b>Требует внимания</b></div></div></div>
       <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Готовность</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${item.selected}</td><td>${item.plan}</td><td>${item.fact}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Готово" : item.risk === "yellow" ? "В работе" : "Нет данных"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
+    ${regulatoryTimelineMarkup(milestones)}
     <div class="card"><h2>Количество мероприятий по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
       <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, "План")}</div>
       <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, "Факт")}</div>
     </div>
   `;
+  root.querySelectorAll("[data-quick-view]").forEach((button) => {
+    button.onclick = () => CyberCalcRouter.activate(button.dataset.quickView);
+  });
   root.querySelector("#dash-year").onchange = (e) => {
     const year = Number(e.target.value);
     if (validYear(year)) {
