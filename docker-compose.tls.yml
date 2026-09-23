@@ -1,0 +1,76 @@
+# TLS внутри Docker (OPS-02). Подключается поверх основного файла:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+#
+# Нужны TLS_HOST (имя или адрес, по которому открывают систему) и TLS_CA_DIR
+# (каталог с ca.pem и ca.key локального центра, см. docs/RUNBOOK.md). Порт 80
+# остаётся: по нему выдаются перенаправление на HTTPS и проверки живости. Для
+# перенаправления без номера порта публикуйте HTTP на 80 (HTTP_PORT=80).
+services:
+  tls-init:
+    image: alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /tls && chown 101:101 /tls && chmod 700 /tls"]
+    restart: "no"
+    volumes:
+      - tls_data:/tls
+
+  tls-issue:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    user: "101:101"
+    entrypoint: ["/app/tlsbootstrap"]
+    command: ["renew", "/ca", "/tls", "30", "${TLS_HOST:?задайте TLS_HOST}"]
+    restart: "no"
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+    volumes:
+      - tls_data:/tls
+      - ${TLS_CA_DIR:?задайте TLS_CA_DIR}:/ca:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    pids_limit: 32
+
+  tls-renew:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    user: "101:101"
+    entrypoint: ["/app/tlsbootstrap"]
+    command: ["renew-loop", "/ca", "/tls", "30", "6h", "${TLS_HOST:?задайте TLS_HOST}"]
+    restart: unless-stopped
+    depends_on:
+      tls-issue:
+        condition: service_completed_successfully
+    volumes:
+      - tls_data:/tls
+      - ${TLS_CA_DIR:?задайте TLS_CA_DIR}:/ca:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    pids_limit: 32
+
+  nginx:
+    depends_on:
+      tls-issue:
+        condition: service_completed_successfully
+    # Перезагрузка раз в 6 часов подхватывает продлённую пару без остановки.
+    command: ["sh", "-c", "(while sleep 21600; do nginx -s reload; done) & exec nginx -g 'daemon off;'"]
+    ports:
+      - "${TLS_BIND:-0.0.0.0}:${TLS_PORT:-443}:443"
+    volumes:
+      - ./nginx/tls/http.conf:/etc/nginx/tls-http/tls.conf:ro
+      - ./nginx/tls/server.conf:/etc/nginx/tls-server/tls.conf:ro
+      - tls_data:/etc/nginx/tls:ro
+
+volumes:
+  tls_data:

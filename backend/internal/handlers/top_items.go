@@ -41,6 +41,11 @@ type topItemRequest struct {
 	ImplementationStatus string `json:"implementation_status,omitempty"`
 	ImplementedOn        string `json:"implemented_on,omitempty"`
 	Description          string `json:"description,omitempty"`
+	// РИД.
+	RIDType            string   `json:"rid_type,omitempty"`
+	Authors            string   `json:"authors,omitempty"`
+	UniversitySharePct *float64 `json:"university_share_pct,omitempty"`
+	CompanySharePct    *float64 `json:"company_share_pct,omitempty"`
 	// DocumentIDs — вложения записи, подтверждающие строку.
 	DocumentIDs []string `json:"document_ids,omitempty"`
 }
@@ -100,7 +105,36 @@ func (h *TopItemHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		writeTopError(w, err)
 		return
 	}
-	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"items": items, "summary": summary})
+	progress, err := h.progress(r, entryID)
+	if err != nil {
+		writeTopError(w, err)
+		return
+	}
+	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"items": items, "summary": summary, "progress": progress})
+}
+
+// progress — шкала софинансирования (ADR-14) и норма вуза от гранта.
+func (h *TopItemHandlers) progress(r *http.Request, entryID string) (map[string]interface{}, error) {
+	var planned, grant sql.NullString
+	var spent string
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT top_planned_cofinancing_rub::text,top_grant_rub::text,
+		COALESCE(NULLIF(payload->>'actual_spent_amount_rub',''),'0') FROM entries WHERE id::text=$1`, entryID).Scan(&planned, &grant, &spent); err != nil {
+		return nil, err
+	}
+	parse := func(raw string) money.Amount {
+		value, err := money.Parse(raw)
+		if err != nil {
+			return 0
+		}
+		return value
+	}
+	out := map[string]interface{}{"scale": topit.Scale(parse(planned.String), parse(spent))}
+	if grant.Valid {
+		out["grant_rub"] = parse(grant.String)
+		out["university_norm_rub"] = topit.UniversityNorm(parse(grant.String))
+		out["university_norm_percent"] = topit.UniversityNormPercent
+	}
+	return out, nil
 }
 
 // Create добавляет строку.

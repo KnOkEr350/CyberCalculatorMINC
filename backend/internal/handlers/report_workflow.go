@@ -610,6 +610,10 @@ func (h *ReportWorkflowHandlers) Transition(w http.ResponseWriter, r *http.Reque
 		middleware.WriteError(w, 500, "ошибка аудита")
 		return
 	}
+	if err = syncReportTasks(r.Context(), tx, u, id, year, period, req.Status); err != nil {
+		middleware.WriteError(w, 500, "ошибка задач по отчёту")
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения статуса")
 		return

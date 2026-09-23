@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"cybercalc/internal/backup"
+
+	"github.com/lib/pq"
 )
 
 // Migration — миграция с контрольной суммой (SHA-256 содержимого файла, как в
@@ -118,6 +120,17 @@ func ReadApplied(ctx context.Context, db *sql.DB) ([]Migration, error) {
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// ReadAppliedOrEmpty отличается от ReadApplied тем, что отсутствие таблицы
+// миграций (первая установка, база ещё пуста) даёт пустой список, а не ошибку.
+func ReadAppliedOrEmpty(ctx context.Context, db *sql.DB) ([]Migration, error) {
+	applied, err := ReadApplied(ctx, db)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == "42P01" {
+		return nil, nil
+	}
+	return applied, err
 }
 
 // Plan — что произойдёт при обновлении.

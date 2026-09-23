@@ -4,6 +4,9 @@
 //	tlsbootstrap issue   <каталог центра> <каталог TLS> <хост>...    # выпуск и установка серверного сертификата
 //	tlsbootstrap import  <fullchain.pem> <privkey.pem> <каталог TLS> <хост> [корни.pem]
 //	tlsbootstrap rollback <каталог TLS> <хост> <корни.pem>
+//	tlsbootstrap renew   <каталог центра> <каталог TLS> <дней до конца> <хост>...   # продлить, если нужно
+//	tlsbootstrap renew-loop <каталог центра> <каталог TLS> <дней до конца> <период> <хост>...
+//	tlsbootstrap status  <каталог TLS> <дней до конца> <хост> [корни.pem]           # код 3 — срок близок
 //	tlsbootstrap nginx   <хост> <каталог TLS> <адрес приложения>     # конфигурация хост-nginx
 //
 // Пара устанавливается только после проверки; действующая пара при отказе не
@@ -15,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"cybercalc/internal/tlsboot"
@@ -31,6 +35,20 @@ func read(path string) []byte {
 		fail(1, "%v", err)
 	}
 	return data
+}
+
+func renewOnce(caDir, tlsDir string, before time.Duration, hosts []string) error {
+	ca := tlsboot.PEM{Cert: read(filepath.Join(caDir, "ca.pem")), Key: read(filepath.Join(caDir, "ca.key"))}
+	renewed, info, err := tlsboot.Store{Dir: tlsDir}.Renew(ca, hosts, before, time.Now())
+	if err != nil {
+		return err
+	}
+	if renewed {
+		fmt.Printf("сертификат выпущен: %v, действует до %s\n", info.Hosts, info.NotAfter.Format("2006-01-02"))
+	} else {
+		fmt.Printf("сертификат действует до %s, продление не требуется\n", info.NotAfter.Format("2006-01-02"))
+	}
+	return nil
 }
 
 func main() {
@@ -107,6 +125,59 @@ func main() {
 			fail(3, "%v", err)
 		}
 		fmt.Printf("возвращена предыдущая пара, действует до %s\n", info.NotAfter.Format("2006-01-02"))
+	case "renew":
+		if len(args) < 4 {
+			fail(2, "использование: tlsbootstrap renew <каталог центра> <каталог TLS> <дней до конца> <хост>...")
+		}
+		days, err := strconv.Atoi(args[2])
+		if err != nil || days < 1 || days > 365 {
+			fail(2, "дней до конца — целое от 1 до 365")
+		}
+		if err := renewOnce(args[0], args[1], time.Duration(days)*24*time.Hour, args[3:]); err != nil {
+			fail(3, "%v", err)
+		}
+	case "renew-loop":
+		if len(args) < 5 {
+			fail(2, "использование: tlsbootstrap renew-loop <каталог центра> <каталог TLS> <дней до конца> <период> <хост>...")
+		}
+		days, err := strconv.Atoi(args[2])
+		if err != nil || days < 1 || days > 365 {
+			fail(2, "дней до конца — целое от 1 до 365")
+		}
+		every, err := time.ParseDuration(args[3])
+		if err != nil || every < time.Minute {
+			fail(2, "период — длительность не короче минуты, например 6h")
+		}
+		// Сбой одного прохода не должен останавливать продление: следующий
+		// проход повторит попытку, а ошибка остаётся в журнале контейнера.
+		for {
+			if err := renewOnce(args[0], args[1], time.Duration(days)*24*time.Hour, args[4:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tlsbootstrap: продление не удалось: %v\n", err)
+			}
+			time.Sleep(every)
+		}
+	case "status":
+		if len(args) < 3 || len(args) > 4 {
+			fail(2, "использование: tlsbootstrap status <каталог TLS> <дней до конца> <хост> [корни.pem]")
+		}
+		days, err := strconv.Atoi(args[1])
+		if err != nil || days < 1 || days > 365 {
+			fail(2, "дней до конца — целое от 1 до 365")
+		}
+		var pool *x509.CertPool
+		if len(args) == 4 {
+			if pool, err = tlsboot.Pool(read(args[3])); err != nil {
+				fail(1, "%v", err)
+			}
+		}
+		info, expiring, err := tlsboot.Store{Dir: args[0]}.Status(args[2], pool, time.Duration(days)*24*time.Hour, now)
+		if err != nil {
+			fail(3, "%v", err)
+		}
+		fmt.Printf("действует до %s (осталось %d дн.)\n", info.NotAfter.Format("2006-01-02"), int(info.NotAfter.Sub(now).Hours()/24))
+		if expiring {
+			fail(3, "до конца срока меньше %d дн.: замените сертификат", days)
+		}
 	case "nginx":
 		if len(args) != 3 {
 			fail(2, "использование: tlsbootstrap nginx <хост> <каталог TLS> <адрес приложения>")

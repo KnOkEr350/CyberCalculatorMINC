@@ -616,3 +616,9 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .tab-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .status-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.top-scale { margin: 6px 0 8px; font-size: 12px; }
+.top-scale-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin-bottom: 4px; }
+.top-scale-bar i { display: block; height: 100%; background: #b83c47; }
+.top-scale.yellow .top-scale-bar i { background: #d9a520; }
+.top-scale.green .top-scale-bar i { background: #267a55; }
+.top-scale.unknown .top-scale-bar i { background: transparent; }

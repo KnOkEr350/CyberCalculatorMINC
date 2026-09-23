@@ -247,3 +247,54 @@ func TestOfflineBundleTreeMustMatchTheSignedList(t *testing.T) {
 		}
 	}
 }
+
+// Первая установка: таблицы миграций ещё нет, проверка схемы не должна падать,
+// а любая другая ошибка чтения не должна проглатываться.
+func TestReadAppliedOrEmptyOnAFreshDatabase(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_DSN")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_DSN not set")
+	}
+	if !strings.Contains(dsn, "dbname=workspace_test") {
+		t.Fatal("isolated workspace_test database required")
+	}
+	ctx := context.Background()
+	admin, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	const name = "upgrade_fresh_probe"
+	if _, err := admin.ExecContext(ctx, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); err != nil {
+		t.Skip("нет права создавать базы:", err)
+	}
+	if _, err := admin.ExecContext(ctx, `CREATE DATABASE `+name); err != nil {
+		t.Skip("нет права создавать базы:", err)
+	}
+	t.Cleanup(func() {
+		_, _ = admin.ExecContext(context.Background(), `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`)
+	})
+	fresh, err := sql.Open("postgres", strings.Replace(dsn, "dbname=workspace_test", "dbname="+name, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	applied, err := ReadAppliedOrEmpty(ctx, fresh)
+	if err != nil || len(applied) != 0 {
+		t.Fatalf("пустая база должна дать пустой список: %v %v", applied, err)
+	}
+	if _, err := ReadApplied(ctx, fresh); err == nil {
+		t.Fatal("строгое чтение обязано сообщать об отсутствии таблицы")
+	}
+	closed, err := sql.Open("postgres", "host=127.0.0.1 port=1 user=x dbname=x sslmode=disable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadAppliedOrEmpty(ctx, closed); err == nil {
+		t.Fatal("недоступная база не должна выглядеть пустой")
+	}
+	plan := PlanUpgrade([]Migration{{Name: "0001_a.sql", SHA256: "x"}}, nil)
+	if len(plan.Pending) != 1 || len(plan.Problems) != 0 {
+		t.Fatalf("первая установка: %+v", plan)
+	}
+}

@@ -67,6 +67,19 @@ rollback() {
 }
 trap rollback ERR
 docker compose build --pull
+
+# OPS-11: до любых изменений в работающем стеке сверяем схему базы с деревом
+# миграций нового образа. Схема новее образа, изменённая применённая миграция
+# или нарушенный порядок — выкладку не начинаем: контейнеры ещё не тронуты,
+# откатывать нечего. Первая установка (базы ещё нет) проверку пропускает.
+if [[ -n "$(docker compose ps -q db 2>/dev/null | head -n 1)" ]]; then
+  if ! docker compose run --rm --no-deps -T --entrypoint /app/upgradecheck migrate schema /app/migrations; then
+    trap - ERR
+    echo "Schema preflight failed; the running stack was not touched." >&2
+    rm -r "$deploy_state"
+    exit 1
+  fi
+fi
 # Одна повторная попытка после очистки остатков: сбой при пересоздании
 # контейнеров из-за чужого недозавершённого запуска не должен ронять выкладку.
 if ! docker compose up -d --remove-orphans --wait --wait-timeout 180; then

@@ -1792,9 +1792,10 @@ async function wireAttachSection(root, entryId, readOnly = false, uploadControl 
 }
 
 // ТОП-ИТ/ТОП-ИИ: составляющие программы (TOP-04, TOP-06, TOP-07) — неденежная
-// поддержка, стипендиаты и производственные кейсы. Пороги и шкала прогресса не
-// показываются: они ждут решения ADR-14.
-const TOP_KIND_LABELS = { support: "Неденежная поддержка", scholarship: "Стипендиаты", case: "Производственные кейсы" };
+// поддержка, стипендиаты и производственные кейсы. Шкала софинансирования
+// (ADR-14) показывается отдельным блоком над списком.
+const TOP_KIND_LABELS = { support: "Неденежная поддержка", scholarship: "Стипендиаты", case: "Производственные кейсы", rid: "РИД (результаты интеллектуальной деятельности)" };
+const TOP_RID_TYPE_LABELS = { software: "Программное обеспечение", ai_model: "Модель ИИ", dataset: "Набор данных" };
 const TOP_SUPPORT_KIND_LABELS = { equipment: "Оборудование", software: "Программное обеспечение" };
 const TOP_CASE_STATUS_LABELS = { proposed: "Предложен", implemented: "Внедрён" };
 const TOP_FIELDS = {
@@ -1816,6 +1817,12 @@ const TOP_FIELDS = {
     { key: "criterion", label: "Критерий отбора", type: "text" },
     { key: "donor_name", label: "Компания-донор", type: "text" },
   ],
+  rid: [
+    { key: "rid_type", label: "Тип РИД", type: "select", options: TOP_RID_TYPE_LABELS },
+    { key: "authors", label: "Авторы", type: "text" },
+    { key: "university_share_pct", label: "Доля прав вуза, %", type: "number" },
+    { key: "company_share_pct", label: "Доля прав компании, % (вместе со вузом — 100)", type: "number" },
+  ],
   case: [
     { key: "implementation_org", label: "Организация внедрения", type: "text" },
     { key: "implementation_status", label: "Статус внедрения", type: "select", options: TOP_CASE_STATUS_LABELS },
@@ -1830,7 +1837,23 @@ function topItemSummary(item) {
     return `${TOP_SUPPORT_KIND_LABELS[item.support_kind] || item.support_kind} · акт ${item.act_reference || "—"} от ${String(item.act_date || "").split("-").reverse().join(".")} · подтверждено ${money(item.confirmed_value_rub)}`;
   if (item.kind === "scholarship")
     return `${item.student_name}, ${item.group_name}, ${item.course} курс · ${item.period_start} — ${item.period_end} · ${money(item.amount_rub)} · донор ${item.donor_name}`;
+  if (item.kind === "rid")
+    return `${TOP_RID_TYPE_LABELS[item.rid_type] || item.rid_type} · авторы: ${item.authors} · права: вуз ${Number(item.university_share_pct).toLocaleString("ru-RU")}% / компания ${Number(item.company_share_pct).toLocaleString("ru-RU")}%`;
   return `${item.implementation_org} · ${TOP_CASE_STATUS_LABELS[item.implementation_status] || item.implementation_status}${item.implemented_on ? " " + item.implemented_on : ""}`;
+}
+
+// ADR-14: шкала софинансирования — списанное вузом к плану X по договору.
+// ≥100% зелёный, 70–99,9% жёлтый, ниже 70% красный; норма вуза от гранта
+// показывается отдельно и в шкалу не входит. Пороги считает сервер.
+const TOP_SCALE_LABELS = { green: "План выполнен", yellow: "Есть отставание", red: "Значительное отставание", unknown: "План софинансирования не задан" };
+function topScaleMarkup(progress) {
+  const scale = progress?.scale;
+  if (!scale) return "";
+  const money = (value) => `${Number(value || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`;
+  const width = scale.known ? Math.min(100, Math.max(0, scale.percent)) : 0;
+  const detail = scale.known ? `${scale.percent.toLocaleString("ru-RU")}% (${money(scale.spent_rub)} из ${money(scale.planned_rub)})` : "";
+  const norm = progress.university_norm_rub != null ? `<p class="muted">Норма вуза: ${progress.university_norm_percent}% от гранта — ${money(progress.university_norm_rub)}.</p>` : "";
+  return `<div class="top-scale ${escapeHTML(scale.state)}" role="img" aria-label="${escapeHTML(TOP_SCALE_LABELS[scale.state] || "")} ${escapeHTML(detail)}"><div class="top-scale-bar"><i style="width:${width}%"></i></div><b>${escapeHTML(TOP_SCALE_LABELS[scale.state] || "")}</b> ${escapeHTML(detail)}</div>${norm}`;
 }
 
 function renderTopItemsSection() {
@@ -1845,13 +1868,15 @@ function renderTopItemsSection() {
 async function wireTopItems(root, entryId, canEdit) {
   const list = root.querySelector("#top-items-list");
   const formBox = root.querySelector("#top-items-form-box");
+  // REPORT-09: отчёт АНО АЦ по программе — шесть листов по ТЗ.
+  if (isStaffUser()) list.insertAdjacentHTML("beforebegin", `<p><a class="btn secondary" id="top-ano-report" href="/api/reports/export?report_type=ano_ac&report_year=${encodeURIComponent(state.year)}&entry_id=${encodeURIComponent(entryId)}">Отчёт АНО АЦ (XLSX, 6 листов)</a></p>`);
   const refresh = async () => {
     try {
       const data = await api(`/entries/${encodeURIComponent(entryId)}/top-items`);
       const items = data?.items || [];
       const summary = data?.summary || {};
       list.className = "attach-list";
-      list.innerHTML = ["support", "scholarship", "case"]
+      list.innerHTML = topScaleMarkup(data?.progress) + ["support", "scholarship", "case", "rid"]
         .map((kind) => {
           const rows = items.filter((item) => item.kind === kind);
           return `<h3>${escapeHTML(TOP_KIND_LABELS[kind])} · ${rows.length}</h3>${rows.length
@@ -1859,8 +1884,8 @@ async function wireTopItems(root, entryId, canEdit) {
             : '<p class="muted">Строк пока нет.</p>'}`;
         })
         .join("");
-      if (summary.supports || summary.scholarships || summary.cases)
-        list.insertAdjacentHTML("beforeend", `<p class="muted">Подтверждённая поддержка: ${Number(summary.confirmed_support_rub || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽ (без подтверждения: ${Number(summary.unconfirmed_supports || 0)}); стипендии: ${Number(summary.scholarships_total_rub || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽; внедрено кейсов: ${Number(summary.implemented_cases || 0)} из ${Number(summary.cases || 0)}.</p>`);
+      if (summary.supports || summary.scholarships || summary.cases || summary.rids)
+        list.insertAdjacentHTML("beforeend", `<p class="muted">Подтверждённая поддержка: ${Number(summary.confirmed_support_rub || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽ (без подтверждения: ${Number(summary.unconfirmed_supports || 0)}); стипендии: ${Number(summary.scholarships_total_rub || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽; внедрено кейсов: ${Number(summary.implemented_cases || 0)} из ${Number(summary.cases || 0)}; РИД: ${Number(summary.rids || 0)}.</p>`);
       list.querySelectorAll("[data-top-delete]").forEach((button) => {
         button.onclick = async () => {
           if (!confirm("Удалить строку?")) return;

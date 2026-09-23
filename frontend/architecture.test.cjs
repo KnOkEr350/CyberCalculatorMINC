@@ -170,12 +170,13 @@ test("OOP and RPD screen exposes permanent 2 by 3 matrix and document registry",
   assert.match(workspace, /\[\["rpd", "РПД"\], \["oop", "ООП"\]\]/);
 });
 
-test("UI-07: TOP-IT entry card exposes the three sub-registers and no threshold gauge", () => {
+test("UI-07 TOP-05 TOP-08 ADR-14: TOP-IT entry card shows the sub-registers, RID and the co-financing scale", () => {
   const app = source("./app.js");
   assert.match(app, /function renderTopItemsSection/);
   assert.match(app, /\/entries\/\$\{encodeURIComponent\(entryId\)\}\/top-items/);
-  for (const label of ["Неденежная поддержка", "Стипендиаты", "Производственные кейсы"]) assert.match(app, new RegExp(label));
-  assert.doesNotMatch(app, /gauge/i);
+  for (const label of ["Неденежная поддержка", "Стипендиаты", "Производственные кейсы", "РИД \\(результаты", "Модель ИИ", "university_share_pct"]) assert.match(app, new RegExp(label));
+  assert.match(app, /function topScaleMarkup/);
+  assert.match(source("./theme.css"), /\.top-scale/);
 });
 
 test("UI-11 SEC-10: settings expose the task dispatcher with route, fallback reason and history", () => {
@@ -255,4 +256,10 @@ test("МЦ template work statuses are summarised in the internship, practice and
   assert.equal((workspace.match(/(?<!function )workStatusSummary\(entries\)/g) || []).length, 3);
   const app = source("./app.js");
   for (const label of ["Поиск кандидата", "Кандидат найден", "Запущена", "Ждём от вуза", "Утверждено вузом"]) assert.ok(app.includes(label), label);
+});
+
+test("REPORT-09: TOP-IT card links to the six-sheet АНО АЦ report", () => {
+  const app = source("./app.js");
+  assert.match(app, /report_type=ano_ac&report_year=/);
+  assert.match(app, /Отчёт АНО АЦ \(XLSX, 6 листов\)/);
 });

@@ -101,3 +101,36 @@ func TestSummaryKeepsUnconfirmedSupportOutOfTheTotal(t *testing.T) {
 		t.Fatalf("сводка: %+v", s)
 	}
 }
+
+// TOP-08: РИД — тип, авторы и доли прав, которые в сумме дают ровно 100%.
+func TestRIDNormalizeShares(t *testing.T) {
+	today := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
+	share := func(v float64) *float64 { return &v }
+	valid := Input{Kind: "rid", Title: "SecureAI-BERT", RIDType: "ai_model", Authors: "Иванов И. И., Петров П. П.",
+		UniversitySharePct: share(50), CompanySharePct: share(50)}
+	if _, err := Normalize(valid, today); err != nil {
+		t.Fatalf("корректный РИД: %v", err)
+	}
+	if _, err := Normalize(Input{Kind: "rid", Title: "Датасет", RIDType: "dataset", Authors: "Коллектив",
+		UniversitySharePct: share(33.33), CompanySharePct: share(66.67)}, today); err != nil {
+		t.Fatalf("доли 33,33 и 66,67 дают 100: %v", err)
+	}
+	bad := map[string]func(Input) Input{
+		"доли меньше 100":   func(in Input) Input { in.CompanySharePct = share(49.99); return in },
+		"доли больше 100":   func(in Input) Input { in.CompanySharePct = share(50.01); return in },
+		"нет доли компании": func(in Input) Input { in.CompanySharePct = nil; return in },
+		"отрицательная":     func(in Input) Input { in.UniversitySharePct, in.CompanySharePct = share(-10), share(110); return in },
+		"неизвестный тип":   func(in Input) Input { in.RIDType = "patent"; return in },
+		"нет авторов":       func(in Input) Input { in.Authors = " "; return in },
+		"поле кейса":        func(in Input) Input { in.Description = "описание"; return in },
+	}
+	for name, mutate := range bad {
+		if _, err := Normalize(mutate(valid), today); err == nil {
+			t.Errorf("%s: должно отвергаться", name)
+		}
+	}
+	// Поля РИД в чужой строке — ошибка.
+	if _, err := Normalize(Input{Kind: "case", Title: "Кейс", ImplementationOrg: "ООО", ImplementationStatus: "proposed", Description: "д", Authors: "кто-то"}, today); err == nil {
+		t.Error("авторы РИД в кейсе не допускаются")
+	}
+}

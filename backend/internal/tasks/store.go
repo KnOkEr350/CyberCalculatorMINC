@@ -381,6 +381,56 @@ func Complete(ctx context.Context, tx *sql.Tx, id, actor string) (Task, error) {
 	return Get(ctx, tx, id)
 }
 
+// CloseBySubject закрывает открытую задачу вида и предмета без участия
+// исполнителя: событие workflow само сняло причину задачи (например, отчёт
+// проверен другим сотрудником или возвращён в черновик). status — done или
+// cancelled; закрытие фиксируется системным событием, автор — тот, чьё действие
+// его вызвало (для done он обязателен: таблица требует, чтобы у выполненной
+// задачи был исполнитель). Возвращает число закрытых задач; повтор ничего не меняет.
+func CloseBySubject(ctx context.Context, tx *sql.Tx, kind, subjectType, subjectID, status, actor string) (int, error) {
+	if status != "done" && status != "cancelled" {
+		return 0, fmt.Errorf("%w: статус закрытия — done или cancelled", ErrInvalid)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id::text,COALESCE(assignee_id::text,''),route FROM workflow_tasks
+		WHERE kind=$1 AND subject_type=$2 AND subject_id=$3 AND status='open' FOR UPDATE`, kind, subjectType, subjectID)
+	if err != nil {
+		return 0, err
+	}
+	type open struct{ id, assignee, route string }
+	var found []open
+	for rows.Next() {
+		var o open
+		if err := rows.Scan(&o.id, &o.assignee, &o.route); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		found = append(found, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	action := "completed"
+	if status == "cancelled" {
+		action = "cancelled"
+	}
+	for _, o := range found {
+		update := `UPDATE workflow_tasks SET status='cancelled',updated_at=now() WHERE id::text=$1`
+		args := []interface{}{o.id}
+		if status == "done" {
+			update = `UPDATE workflow_tasks SET status='done',completed_by=$2::uuid,completed_at=now(),updated_at=now() WHERE id::text=$1`
+			args = append(args, actor)
+		}
+		if _, err := tx.ExecContext(ctx, update, args...); err != nil {
+			return 0, err
+		}
+		if err := insertEvent(ctx, tx, o.id, action, o.assignee, o.assignee, Route(o.route), "закрыто событием workflow", actor); err != nil {
+			return 0, err
+		}
+	}
+	return len(found), nil
+}
+
 // RedispatchOpen пересчитывает открытые задачи, которые идут не по основной
 // дороге или чей исполнитель больше не действует: специалист появился, куратор
 // перестал быть закреплённым, пользователь отключён. Возвращает число

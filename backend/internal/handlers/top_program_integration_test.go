@@ -123,6 +123,56 @@ func TestTopProgramModelAndItems(t *testing.T) {
 			s.ScholarshipsTotalRub.String() != "240000.00" || s.Cases != 1 || s.ImplementedCases != 1 {
 			t.Fatalf("сводка: %+v", s)
 		}
+		// ADR-14: план X = 300 000 из паспорта, списано 225 000 → 75%, жёлтая зона;
+		// норма вуза — 70% от гранта 1 500 000,50.
+		if _, err := db.ExecContext(ctx, `UPDATE entries SET payload=payload||'{"actual_spent_amount_rub":"225000"}' WHERE id::text=$1`, entry); err != nil {
+			t.Fatal(err)
+		}
+		rec = httptest.NewRecorder()
+		handlers.List(rec, httptest.NewRequest("GET", "/api/entries/"+entry+"/top-items", nil), author, entry)
+		var scaled struct {
+			Progress struct {
+				Scale       topit.Progress `json:"scale"`
+				Norm        string         `json:"university_norm_rub"`
+				NormPercent int            `json:"university_norm_percent"`
+			} `json:"progress"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &scaled); err != nil {
+			t.Fatal(err)
+		}
+		if p := scaled.Progress; p.Scale.State != "yellow" || p.Scale.Percent != 75 || p.Scale.Planned != "300000.00" || p.Norm != "1050000.35" || p.NormPercent != 70 {
+			t.Fatalf("шкала и норма: %+v", scaled.Progress)
+		}
+	})
+
+	t.Run("реестр РИД и ограничения БД", func(t *testing.T) {
+		rid := `{"kind":"rid","title":"SecureAI-BERT","rid_type":"ai_model","authors":"Иванов И. И., Петров П. П.","university_share_pct":50,"company_share_pct":50}`
+		rec := post(author, entry, rid)
+		if rec.Code != 201 {
+			t.Fatalf("РИД: %d %s", rec.Code, rec.Body.String())
+		}
+		if bad := post(author, entry, strings.Replace(rid, `"company_share_pct":50`, `"company_share_pct":40`, 1)); bad.Code != 400 {
+			t.Fatalf("доли не в сумме 100%% должны отвергаться: %d", bad.Code)
+		}
+		// БД держит правило и мимо API: сумма долей 100 и доли только у РИД.
+		for name, statement := range map[string]string{
+			"доли 60+50":      `INSERT INTO top_program_items(entry_id,kind,title,rid_type,authors,university_share_pct,company_share_pct) VALUES($1::uuid,'rid','Х','software','Автор',60,50)`,
+			"доли у кейса":    `INSERT INTO top_program_items(entry_id,kind,title,implementation_org,implementation_status,description,university_share_pct) VALUES($1::uuid,'case','Х','О','proposed','д',10)`,
+			"РИД без авторов": `INSERT INTO top_program_items(entry_id,kind,title,rid_type,university_share_pct,company_share_pct) VALUES($1::uuid,'rid','Х','dataset',50,50)`,
+			"неизвестный вид": `INSERT INTO top_program_items(entry_id,kind,title) VALUES($1::uuid,'patent','Х')`,
+		} {
+			if _, err := db.ExecContext(ctx, statement, entry); err == nil {
+				t.Errorf("%s: БД должна отвергать строку", name)
+			}
+		}
+		listed := httptest.NewRecorder()
+		handlers.List(listed, httptest.NewRequest("GET", "/api/entries/"+entry+"/top-items", nil), author, entry)
+		var body struct {
+			Summary topit.Summary `json:"summary"`
+		}
+		if err := json.Unmarshal(listed.Body.Bytes(), &body); err != nil || body.Summary.Rids != 1 {
+			t.Fatalf("в сводке один РИД: %+v %v", body.Summary, err)
+		}
 	})
 
 	t.Run("проверки вида и записи", func(t *testing.T) {

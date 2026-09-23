@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -26,6 +27,7 @@ const (
 	KindSupport     Kind = "support"
 	KindScholarship Kind = "scholarship"
 	KindCase        Kind = "case"
+	KindRID         Kind = "rid"
 )
 
 var (
@@ -61,6 +63,11 @@ type Input struct {
 	ImplementationStatus string `json:"implementation_status,omitempty"`
 	ImplementedOn        string `json:"implemented_on,omitempty"`
 	Description          string `json:"description,omitempty"`
+	// РИД (TOP-08): тип, авторы и доли исключительных прав.
+	RIDType            string   `json:"rid_type,omitempty"`
+	Authors            string   `json:"authors,omitempty"`
+	UniversitySharePct *float64 `json:"university_share_pct,omitempty"`
+	CompanySharePct    *float64 `json:"company_share_pct,omitempty"`
 	// DocumentIDs — вложения записи, подтверждающие строку.
 	DocumentIDs []string `json:"document_ids,omitempty"`
 }
@@ -111,6 +118,7 @@ func Normalize(in Input, today time.Time) (Input, error) {
 	}
 	isSupport := in.SupportKind != "" || in.ActReference != "" || in.ActDate != "" || in.BalanceValueRub != nil || in.AppraisedValueRub != nil || in.ConfirmedValueRub != nil
 	isScholarship := in.StudentName != "" || in.GroupName != "" || in.Course != 0 || in.PeriodStart != "" || in.PeriodEnd != "" || in.AmountRub != nil || in.Criterion != "" || in.DonorName != ""
+	isRID := in.RIDType != "" || in.Authors != "" || in.UniversitySharePct != nil || in.CompanySharePct != nil
 	isCase := in.ImplementationOrg != "" || in.ImplementationStatus != "" || in.ImplementedOn != "" || in.Description != ""
 
 	switch kind {
@@ -119,6 +127,9 @@ func Normalize(in Input, today time.Time) (Input, error) {
 			return in, err
 		}
 		if err := foreign("кейса", isCase); err != nil {
+			return in, err
+		}
+		if err := foreign("РИД", isRID); err != nil {
 			return in, err
 		}
 		if in.SupportKind != "equipment" && in.SupportKind != "software" {
@@ -147,6 +158,9 @@ func Normalize(in Input, today time.Time) (Input, error) {
 			return in, err
 		}
 		if err := foreign("кейса", isCase); err != nil {
+			return in, err
+		}
+		if err := foreign("РИД", isRID); err != nil {
 			return in, err
 		}
 		if in.StudentName, err = text(in.StudentName, "студент", 2, 300); err != nil {
@@ -183,6 +197,9 @@ func Normalize(in Input, today time.Time) (Input, error) {
 		if err := foreign("стипендиата", isScholarship); err != nil {
 			return in, err
 		}
+		if err := foreign("РИД", isRID); err != nil {
+			return in, err
+		}
 		if in.ImplementationOrg, err = text(in.ImplementationOrg, "организация внедрения", 1, 300); err != nil {
 			return in, err
 		}
@@ -201,8 +218,32 @@ func Normalize(in Input, today time.Time) (Input, error) {
 		default:
 			return in, fail("статус внедрения: proposed или implemented")
 		}
+	case KindRID:
+		if err := foreign("неденежной поддержки", isSupport); err != nil {
+			return in, err
+		}
+		if err := foreign("стипендиата", isScholarship); err != nil {
+			return in, err
+		}
+		if err := foreign("кейса", isCase); err != nil {
+			return in, err
+		}
+		if in.RIDType != "software" && in.RIDType != "ai_model" && in.RIDType != "dataset" {
+			return in, fail("тип РИД: software, ai_model или dataset")
+		}
+		if in.Authors, err = text(in.Authors, "авторы", 2, 2000); err != nil {
+			return in, err
+		}
+		if in.UniversitySharePct == nil || in.CompanySharePct == nil {
+			return in, fail("укажите доли вуза и компании")
+		}
+		// Доли считаются в сотых процента: 33,33 и 66,67 дают ровно 100.
+		university, company := int64(math.Round(*in.UniversitySharePct*100)), int64(math.Round(*in.CompanySharePct*100))
+		if university < 0 || company < 0 || university+company != 10000 {
+			return in, fail("доли исключительных прав вуза и компании в сумме дают 100%%")
+		}
 	default:
-		return in, fail("вид строки: support, scholarship или case")
+		return in, fail("вид строки: support, scholarship, case или rid")
 	}
 	seen := map[string]bool{}
 	for _, id := range in.DocumentIDs {
@@ -240,6 +281,13 @@ func nullableAmount(value *money.Amount) interface{} {
 		return nil
 	}
 	return value.String()
+}
+
+func nullableShare(value *float64) interface{} {
+	if value == nil {
+		return nil
+	}
+	return fmt.Sprintf("%.2f", *value)
 }
 
 func nullableInt(value int) interface{} {
@@ -295,18 +343,25 @@ func writeDocuments(ctx context.Context, db queryer, itemID string, ids []string
 const itemColumns = `id::text,entry_id::text,created_at::text,kind,title,COALESCE(support_kind,''),COALESCE(act_reference,''),COALESCE(act_date::text,''),
 	balance_value_rub::text,appraised_value_rub::text,confirmed_value_rub::text,COALESCE(student_name,''),COALESCE(group_name,''),COALESCE(course,0),
 	COALESCE(period_start::text,''),COALESCE(period_end::text,''),amount_rub::text,COALESCE(criterion,''),COALESCE(donor_name,''),
-	COALESCE(implementation_org,''),COALESCE(implementation_status,''),COALESCE(implemented_on::text,''),COALESCE(description,''),
+	COALESCE(implementation_org,''),COALESCE(implementation_status,''),COALESCE(implemented_on::text,''),COALESCE(description,''),COALESCE(rid_type,''),COALESCE(authors,''),university_share_pct::float8,company_share_pct::float8,
 	ARRAY(SELECT d.attachment_id::text FROM top_item_documents d WHERE d.item_id=top_program_items.id ORDER BY 1)`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var item Item
 	var balance, appraised, confirmed, amount sql.NullString
+	var university, company sql.NullFloat64
 	var documents pq.StringArray
 	if err := row.Scan(&item.ID, &item.EntryID, &item.CreatedAt, &item.Kind, &item.Title, &item.SupportKind, &item.ActReference, &item.ActDate,
 		&balance, &appraised, &confirmed, &item.StudentName, &item.GroupName, &item.Course, &item.PeriodStart, &item.PeriodEnd,
 		&amount, &item.Criterion, &item.DonorName, &item.ImplementationOrg, &item.ImplementationStatus, &item.ImplementedOn,
-		&item.Description, &documents); err != nil {
+		&item.Description, &item.RIDType, &item.Authors, &university, &company, &documents); err != nil {
 		return item, err
+	}
+	if university.Valid {
+		item.UniversitySharePct = &university.Float64
+	}
+	if company.Valid {
+		item.CompanySharePct = &company.Float64
 	}
 	for _, pair := range []struct {
 		from sql.NullString
@@ -331,13 +386,14 @@ func Create(ctx context.Context, db queryer, entryID string, in Input, by string
 	}
 	row := db.QueryRowContext(ctx, `INSERT INTO top_program_items(entry_id,kind,title,support_kind,act_reference,act_date,balance_value_rub,
 			appraised_value_rub,confirmed_value_rub,student_name,group_name,course,period_start,period_end,amount_rub,criterion,donor_name,
-			implementation_org,implementation_status,implemented_on,description,created_by)
-		VALUES($1::uuid,$2,$3,$4,$5,$6::date,$7::numeric,$8::numeric,$9::numeric,$10,$11,$12,$13::date,$14::date,$15::numeric,$16,$17,$18,$19,$20::date,$21,$22::uuid)
+			implementation_org,implementation_status,implemented_on,description,rid_type,authors,university_share_pct,company_share_pct,created_by)
+		VALUES($1::uuid,$2,$3,$4,$5,$6::date,$7::numeric,$8::numeric,$9::numeric,$10,$11,$12,$13::date,$14::date,$15::numeric,$16,$17,$18,$19,$20::date,$21,$22,$23,$24::numeric,$25::numeric,$26::uuid)
 		RETURNING `+itemColumns, entryID, in.Kind, in.Title, nullable(in.SupportKind), nullable(in.ActReference), nullable(in.ActDate),
 		nullableAmount(in.BalanceValueRub), nullableAmount(in.AppraisedValueRub), nullableAmount(in.ConfirmedValueRub),
 		nullable(in.StudentName), nullable(in.GroupName), nullableInt(in.Course), nullable(in.PeriodStart), nullable(in.PeriodEnd),
 		nullableAmount(in.AmountRub), nullable(in.Criterion), nullable(in.DonorName), nullable(in.ImplementationOrg),
-		nullable(in.ImplementationStatus), nullable(in.ImplementedOn), nullable(in.Description), nullable(by))
+		nullable(in.ImplementationStatus), nullable(in.ImplementedOn), nullable(in.Description), nullable(in.RIDType), nullable(in.Authors),
+		nullableShare(in.UniversitySharePct), nullableShare(in.CompanySharePct), nullable(by))
 	item, err := scanItem(row)
 	if err != nil {
 		return Item{}, classify(err)
@@ -373,11 +429,12 @@ func Update(ctx context.Context, db queryer, id string, in Input) (Item, error) 
 	if _, err := db.ExecContext(ctx, `UPDATE top_program_items SET title=$2,support_kind=$3,act_reference=$4,act_date=$5::date,balance_value_rub=$6::numeric,
 			appraised_value_rub=$7::numeric,confirmed_value_rub=$8::numeric,student_name=$9,group_name=$10,course=$11,period_start=$12::date,
 			period_end=$13::date,amount_rub=$14::numeric,criterion=$15,donor_name=$16,implementation_org=$17,implementation_status=$18,
-			implemented_on=$19::date,description=$20,updated_at=now() WHERE id::text=$1`, id, in.Title, nullable(in.SupportKind),
+			implemented_on=$19::date,description=$20,rid_type=$21,authors=$22,university_share_pct=$23::numeric,company_share_pct=$24::numeric,updated_at=now() WHERE id::text=$1`, id, in.Title, nullable(in.SupportKind),
 		nullable(in.ActReference), nullable(in.ActDate), nullableAmount(in.BalanceValueRub), nullableAmount(in.AppraisedValueRub),
 		nullableAmount(in.ConfirmedValueRub), nullable(in.StudentName), nullable(in.GroupName), nullableInt(in.Course),
 		nullable(in.PeriodStart), nullable(in.PeriodEnd), nullableAmount(in.AmountRub), nullable(in.Criterion), nullable(in.DonorName),
-		nullable(in.ImplementationOrg), nullable(in.ImplementationStatus), nullable(in.ImplementedOn), nullable(in.Description)); err != nil {
+		nullable(in.ImplementationOrg), nullable(in.ImplementationStatus), nullable(in.ImplementedOn), nullable(in.Description),
+		nullable(in.RIDType), nullable(in.Authors), nullableShare(in.UniversitySharePct), nullableShare(in.CompanySharePct)); err != nil {
 		return Item{}, classify(err)
 	}
 	if err := writeDocuments(ctx, db, id, in.DocumentIDs); err != nil {
@@ -425,6 +482,7 @@ type Summary struct {
 	ScholarshipsTotalRub money.Amount `json:"scholarships_total_rub"`
 	Cases                int          `json:"cases"`
 	ImplementedCases     int          `json:"implemented_cases"`
+	Rids                 int          `json:"rids"`
 }
 
 // Summarize считает сводку. Неподтверждённая поддержка (без confirmed) в
@@ -450,6 +508,8 @@ func Summarize(items []Item) (Summary, error) {
 					return s, err
 				}
 			}
+		case KindRID:
+			s.Rids++
 		case KindCase:
 			s.Cases++
 			if item.ImplementationStatus == "implemented" {

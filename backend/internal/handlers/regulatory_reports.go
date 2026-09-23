@@ -176,6 +176,10 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		h.exportAgreementTemplate(w, r, u, year, kind, company, partner, agreement)
 		return
 	}
+	if kind == "ano_ac" {
+		h.exportAnoAc(w, r, u, year, company)
+		return
+	}
 	if kind == "annex3" {
 		h.exportAbsenceStatements(w, r, u, year, company, partner, agreement)
 		return

@@ -4093,6 +4093,10 @@
           "implementation_status": true,
           "implemented_on": true,
           "description": true,
+          "rid_type": true,
+          "authors": true,
+          "university_share_pct": true,
+          "company_share_pct": true,
           "document_ids": true
         },
         "additionalProperties": false

@@ -17,13 +17,17 @@ RUN rm -rf internal/modules/webapp/dist \
     && cp -R /tmp/frontend/core /tmp/frontend/shell /tmp/frontend/screens internal/modules/webapp/dist/ \
     && cp /tmp/frontend/components/ui.js internal/modules/webapp/dist/components/ \
     && printf '%s\n' "$APP_VERSION" > internal/modules/webapp/dist/version.txt
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/upgradecheck ./cmd/upgradecheck \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/tlsbootstrap ./cmd/tlsbootstrap
 
 # ---- Stage 2: минимальный рантайм-образ ---------------------------------
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS runtime
 WORKDIR /app
 
 COPY --from=builder /out/server /app/server
+COPY --from=builder /out/upgradecheck /app/upgradecheck
+COPY --from=builder /out/tlsbootstrap /app/tlsbootstrap
 COPY migrations /app/migrations
 
 USER nonroot:nonroot

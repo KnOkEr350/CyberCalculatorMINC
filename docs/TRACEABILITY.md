@@ -5,12 +5,12 @@
 `docs/traceability_evidence.json`. Матрица показывает, где искать исполнение задачи; результат
 приёмки она не заменяет.
 
-Задач: 202 — выполнено 148, частично 29, не начато 25.
+Задач: 202 — выполнено 151, частично 29, не начато 22.
 
 | Задача | Название | Статус | Код | Тесты | Документы |
 |---|---|---|---|---|---|
 | ADR-07 | Срок хранения вложений и аудита | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-07-retention-policy.md`<br>`docs/adr/README.md` |
-| ADR-14 | Знаменатель процентов ТОП-ИТ | не начато | `backend/internal/compliance/readiness.go`<br>`backend/internal/topit/items.go`<br>`frontend/app.js`<br>`migrations/0601_top_program_model.sql` | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-14-top-it-percent-denominator.md`<br>`docs/adr/README.md` |
+| ADR-14 | Знаменатель процентов ТОП-ИТ | не начато | `backend/internal/compliance/readiness.go`<br>`backend/internal/handlers/ano_ac_report.go`<br>`backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go` и ещё 3 | `backend/internal/handlers/top_program_integration_test.go`<br>`backend/internal/topit/scale_test.go`<br>`frontend/architecture.test.cjs` | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-14-top-it-percent-denominator.md`<br>`docs/adr/README.md` |
 | ADR-16 | Расчёт ИТ-стажа за последние пять лет | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-16-it-experience.md`<br>`docs/adr/README.md` |
 | ADR-20 | Snapshot cutoff и часовой пояс | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-20-snapshot-cutoff.md`<br>`docs/adr/README.md` |
 | ADR-21 | Допустимое название и эмблема продукта | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-21-product-brand.md`<br>`docs/adr/README.md` |
@@ -26,7 +26,7 @@
 | BASE-10 | Контракт событий аудита | выполнено | `migrations/0900_audit_event_contract.sql` | — | `docs/AUDIT_EVENTS.md`<br>`docs/LEGACY_MIGRATION.md` |
 | BASE-11 | Стратегия legacy migration | выполнено | — | — | `docs/LEGACY_MIGRATION.md`<br>`docs/LEGACY_MIGRATION.md` |
 | BASE-12 | CI-матрица модулей | выполнено | `.github/workflows/ci-cd.yml` | — | — |
-| BASE-13 | Реестр нормативных источников | выполнено | `migrations/0103_normative_sources.sql`<br>`migrations/0204_organizations_and_specialties.sql` | — | `docs/NORMATIVE_SOURCES.md` |
+| BASE-13 | Реестр нормативных источников | выполнено | `backend/internal/handlers/ano_ac_report.go`<br>`migrations/0103_normative_sources.sql`<br>`migrations/0204_organizations_and_specialties.sql` | — | `docs/NORMATIVE_SOURCES.md` |
 | DATA-01 | Организации и партнёры v4.4 | выполнено | `migrations/0204_organizations_and_specialties.sql` | `backend/internal/traceability/traceability_test.go` | `docs/TZ_4_4_FOUNDATION_PACKAGES.md` |
 | DATA-02 | Соглашения v4.4 | частично | `backend/internal/handlers/agreement_history.go`<br>`frontend/workspace.js`<br>`migrations/0112_agreement_history_and_curator.sql` | `backend/internal/handlers/agreement_history_integration_test.go`<br>`backend/internal/traceability/traceability_test.go`<br>`frontend/architecture.test.cjs` | — |
 | DATA-03 | Структурные подразделения | выполнено | `migrations/0201_partner_academic_structure.sql` | — | — |
@@ -49,7 +49,7 @@
 | SEC-07 | MFA policy v4.4 | выполнено | `backend/internal/handlers/admin.go`<br>`backend/internal/handlers/auth_handlers.go`<br>`backend/internal/handlers/mfa_policy.go` | `backend/internal/handlers/mfa_policy_integration_test.go`<br>`frontend/architecture.test.cjs` | — |
 | SEC-08 | Политика сессий | выполнено | `backend/internal/auth/session.go`<br>`migrations/0106_session_idle_timeout.sql` | `backend/internal/handlers/audit_and_session_integration_test.go` | — |
 | SEC-09 | Security contract tests | частично | — | `backend/internal/handlers/rbac_matrix_test.go`<br>`backend/internal/handlers/role_category_matrix_integration_test.go`<br>`backend/internal/server/role_matrix_integration_test.go`<br>`backend/internal/traceability/traceability_test.go` | — |
-| SEC-10 | Диспетчер задач и эскалаций | частично | `backend/internal/handlers/workflow_tasks.go`<br>`backend/internal/rbac/rbac.go`<br>`backend/internal/tasks/resolve.go`<br>`frontend/app.js` и ещё 1 | `backend/internal/handlers/workflow_tasks_integration_test.go`<br>`frontend/architecture.test.cjs` | — |
+| SEC-10 | Диспетчер задач и эскалаций | частично | `backend/internal/handlers/report_tasks.go`<br>`backend/internal/handlers/workflow_tasks.go`<br>`backend/internal/rbac/rbac.go`<br>`backend/internal/tasks/resolve.go` и ещё 2 | `backend/internal/handlers/report_tasks_integration_test.go`<br>`backend/internal/handlers/workflow_tasks_integration_test.go`<br>`frontend/architecture.test.cjs` | `docs/RUNBOOK.md` |
 | TCH-01 | Модель педагогической нагрузки | выполнено | `backend/internal/handlers/entries.go`<br>`migrations/0301_teaching_load_atomic_key.sql` | `backend/internal/handlers/teaching_load_key_integration_test.go` | — |
 | TCH-02 | Матрица семестров | выполнено | — | — | `docs/TEACHING_SEMESTERS.md`<br>`docs/TEACHING_SEMESTERS.md` |
 | TCH-03 | Проверка стажа и ОКЗ | выполнено | `migrations/0300_teaching_staff_and_payouts.sql` | — | `docs/adr/ADR-16-it-experience.md` |
@@ -84,10 +84,10 @@
 | TOP-02 | Денежное софинансирование | выполнено | `backend/internal/calculators/exact.go` | `backend/internal/calculators/top_it_test.go` | — |
 | TOP-03 | Белый список расходов | не начато | — | — | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | TOP-04 | Неденежная поддержка | выполнено | `backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go`<br>`frontend/app.js`<br>`migrations/0601_top_program_model.sql` | `backend/internal/handlers/top_program_integration_test.go` | — |
-| TOP-05 | Шкала прогресса | не начато | — | — | — |
+| TOP-05 | Шкала прогресса | выполнено | — | `frontend/architecture.test.cjs` | — |
 | TOP-06 | Стипендиаты | выполнено | `backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go`<br>`frontend/app.js`<br>`migrations/0601_top_program_model.sql` | `backend/internal/handlers/top_program_integration_test.go` | — |
 | TOP-07 | Производственные кейсы | выполнено | `backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go`<br>`frontend/app.js`<br>`migrations/0601_top_program_model.sql` | `backend/internal/handlers/top_program_integration_test.go` | — |
-| TOP-08 | Реестр РИД | не начато | — | — | `docs/adr/ADR-14-top-it-percent-denominator.md` |
+| TOP-08 | Реестр РИД | выполнено | `backend/internal/topit/items.go`<br>`migrations/0602_top_rid_registry.sql` | `backend/internal/topit/items_test.go`<br>`frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | TOP-09 | Документы АНО АЦ | выполнено | — | `backend/internal/compliance/documents_test.go` | — |
 | TOP-10 | Правило п. 22 | выполнено | — | `backend/internal/handlers/calendar_deadline_test.go`<br>`backend/internal/handlers/report_workflow_integration_test.go` | `docs/adr/ADR-03-top-it-exemption.md` |
 | TOP-11 | Legacy backfill | выполнено | `migrations/0601_top_program_model.sql`<br>`migrations/0811_top_legacy_eligibility.sql` | `backend/internal/dbx/migrations_integration_test.go` | — |
@@ -126,7 +126,7 @@
 | WF-06 | Snapshot на 1 мая | частично | — | — | `docs/adr/ADR-20-snapshot-cutoff.md` |
 | WF-07 | Snapshot API | выполнено | — | `backend/internal/handlers/limits_and_snapshots_test.go` | — |
 | WF-08 | Источник «Факт на 1 мая» | выполнено | `backend/internal/handlers/annex4.go` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | — |
-| REPORT-01 | Reporting projection | выполнено | `migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | `docs/PERFORMANCE.md` |
+| REPORT-01 | Reporting projection | выполнено | `migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/tenant_and_mentor_integration_test.go` | — |
 | REPORT-02 | Общий XLSX/DOCX toolkit | частично | `backend/internal/docx`<br>`backend/internal/xlsx` | `backend/internal/exchange/perf_test.go` | — |
 | REPORT-03 | Приложение №4 XLSX | частично | — | `backend/internal/handlers/limits_and_snapshots_test.go` | `docs/ORDER_270_ADR_ANALYSIS.md` |
 | REPORT-04 | Приложение №5, таблица 1 | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | `docs/adr/ADR-20-snapshot-cutoff.md` |
@@ -134,7 +134,7 @@
 | REPORT-06 | Приложение №2 к отчёту | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | `docs/adr/ADR-13-internship-agreement.md` |
 | REPORT-07 | Приложение №3 DOCX | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-08 | Типовые соглашения DOCX | выполнено | `migrations/0202_agreement_signatories.sql` | `backend/internal/handlers/agreement_template_test.go` | — |
-| REPORT-09 | АНО АЦ: 6 листов | не начато | — | — | `docs/adr/ADR-14-top-it-percent-denominator.md` |
+| REPORT-09 | АНО АЦ: 6 листов | частично | `backend/internal/handlers/ano_ac_report.go`<br>`frontend/app.js`<br>`migrations/0812_ano_ac_report_type.sql` | `backend/internal/handlers/ano_ac_report_integration_test.go`<br>`frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | REPORT-10 | Конструктор срезов | выполнено | `backend/internal/handlers/regulatory_reports.go`<br>`migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-11 | Реестр сформированных файлов | частично | `backend/internal/handlers/annex4.go`<br>`backend/internal/handlers/regulatory_reports.go` | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-12 | Golden regression suite | частично | `backend/internal/xlsx` | — | `docs/ORDER_270_ADR_ANALYSIS.md` |
@@ -176,13 +176,13 @@
 | UI-04 | ООП/РПД | выполнено | `frontend/screens/ood-rpd/index.js` | — | — |
 | UI-05 | Стажировки | частично | `frontend/app.js`<br>`frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
 | UI-06 | Практика | выполнено | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
-| UI-07 | ТОП-ИТ/ИИ | частично | `frontend/workspace.js` | `frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
+| UI-07 | ТОП-ИТ/ИИ | выполнено | `frontend/workspace.js` | `frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | UI-08 | Школы | выполнено | `frontend/workspace.js` | `frontend/architecture.test.cjs` | — |
 | UI-09 | Решение МЦ | выполнено | `frontend/screens/minc-decision/index.js` | — | — |
 | UI-10 | Отчётность | не начато | — | — | — |
 | UI-11 | Настройки | частично | — | `frontend/architecture.test.cjs` | — |
 | OPS-01 | Встраивание SPA | выполнено | `backend/internal/modules/webapp/module.go` | `backend/internal/modules/webapp/module_test.go` | `docs/adr/ADR-05-frontend-delivery.md` |
-| OPS-02 | TLS bootstrap | частично | `backend/cmd/tlsbootstrap/main.go`<br>`backend/internal/tlsboot/tlsboot.go` | — | `docs/RUNBOOK.md` |
+| OPS-02 | TLS bootstrap | частично | `backend/cmd/tlsbootstrap/main.go`<br>`backend/internal/tlsboot/tlsboot.go`<br>`docker-compose.tls.yml` | `backend/internal/tlsboot/tlsboot_test.go` | `docs/RUNBOOK.md` |
 | OPS-03 | nginx hardening/WAF | выполнено | — | `backend/internal/handlers/nginx_hardening_test.go` | — |
 | OPS-04 | Offline container bundle | частично | `scripts/build-offline-bundle.sh`<br>`scripts/offline-install.sh` | — | `docs/RUNBOOK.md`<br>`docs/adr/ADR-05-frontend-delivery.md` |
 | OPS-05 | Debian 12 hardened base | не начато | — | — | — |
@@ -191,7 +191,7 @@
 | OPS-08 | QCOW2 image | не начато | — | — | — |
 | OPS-09 | VHDX image | не начато | — | — | — |
 | OPS-10 | Backup/restore v4.4 | выполнено | `backend/cmd/backupbundle/main.go`<br>`backend/internal/backup/bundle.go` | `backend/internal/backup/backup_test.go`<br>`backend/internal/backup/drill_integration_test.go` | `docs/RUNBOOK.md`<br>`docs/adr/ADR-07-retention-policy.md` |
-| OPS-11 | Upgrade/rollback | частично | `backend/cmd/upgradecheck/main.go`<br>`backend/internal/upgrade/upgrade.go` | — | `docs/RUNBOOK.md`<br>`docs/adr/ADR-05-frontend-delivery.md` |
+| OPS-11 | Upgrade/rollback | частично | `backend/cmd/upgradecheck/main.go`<br>`backend/internal/upgrade/upgrade.go`<br>`scripts/deploy-safe.sh` | — | `docs/RUNBOOK.md`<br>`docs/adr/ADR-05-frontend-delivery.md` |
 | OPS-12 | Monitoring/runbook | выполнено | `backend/internal/handlers/operations_metrics.go` | `backend/internal/handlers/operations_metrics_integration_test.go` | `docs/RUNBOOK.md` |
 | QA-01 | Formula conformance | выполнено | — | `backend/internal/calculators/conformance_test.go` | — |
 | QA-02 | RBAC/tenant/fallback conformance | выполнено | — | `backend/internal/handlers/tenant_conformance_integration_test.go`<br>`backend/internal/rbac/rbac_test.go`<br>`backend/internal/server/endpoint_matrix_test.go` | — |
@@ -202,7 +202,7 @@
 | QA-07 | Storage security tests | выполнено | — | `backend/internal/filestore/concurrency_test.go`<br>`backend/internal/handlers/upload_quota_race_integration_test.go` | — |
 | QA-08 | API contract suite | выполнено | — | `backend/internal/apicontract/coverage_test.go`<br>`backend/internal/apicontract/dto_schema_test.go` | — |
 | QA-09 | E2E по 11 экранам | не начато | — | — | — |
-| QA-10 | Performance/load | частично | `migrations/0108_entries_hot_path_indexes.sql` | `backend/internal/backup/backup_test.go`<br>`backend/internal/exchange/perf_test.go`<br>`backend/internal/handlers/dashboard_load_integration_test.go`<br>`backend/internal/xlsx/xlsx_test.go` | `docs/PERFORMANCE.md` |
+| QA-10 | Performance/load | частично | `migrations/0108_entries_hot_path_indexes.sql` | `backend/internal/backup/backup_test.go`<br>`backend/internal/exchange/perf_test.go`<br>`backend/internal/handlers/dashboard_load_integration_test.go`<br>`backend/internal/handlers/reports_load_integration_test.go` и ещё 1 | `docs/PERFORMANCE.md` |
 | QA-11 | Disaster recovery drill | частично | `backend/cmd/backupbundle/main.go`<br>`backend/internal/backup/drill.go` | `backend/internal/backup/drill_integration_test.go` | `docs/RUNBOOK.md` |
 | QA-12 | Offline acceptance | не начато | — | — | — |
 | INTG-01 | Подключение backend-модулей | выполнено | — | `backend/internal/server/composition_test.go` | — |

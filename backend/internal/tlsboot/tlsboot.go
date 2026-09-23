@@ -475,3 +475,69 @@ server {
 }
 `, host, certDir, upstream), nil
 }
+
+// Renew выпускает и устанавливает новую пару от локального центра, если
+// действующей нет, она не покрывает нужные имена, не проверяется по центру или
+// истекает раньше, чем через before. Иначе ничего не меняет. Возвращает, была
+// ли установлена новая пара, и сведения о действующей.
+func (s Store) Renew(ca PEM, hosts []string, before time.Duration, now time.Time) (bool, Info, error) {
+	if len(hosts) == 0 {
+		return false, Info{}, errors.New("tlsboot: укажите хотя бы одно имя")
+	}
+	roots, err := Pool(ca.Cert)
+	if err != nil {
+		return false, Info{}, err
+	}
+	if live := s.Live(); live != "" {
+		cert, certErr := os.ReadFile(filepath.Join(live, "fullchain.pem"))
+		key, keyErr := os.ReadFile(filepath.Join(live, "privkey.pem"))
+		if certErr == nil && keyErr == nil {
+			if info, err := Validate(PEM{Cert: cert, Key: key}, hosts[0], roots, now); err == nil &&
+				coversAll(info.Hosts, hosts) && info.NotAfter.Sub(now) > before {
+				return false, info, nil
+			}
+		}
+	}
+	pair, err := IssueServer(ca, hosts, MaxServerValidity, now)
+	if err != nil {
+		return false, Info{}, err
+	}
+	info, err := s.Install(pair, hosts[0], roots, now)
+	return err == nil, info, err
+}
+
+func coversAll(have, want []string) bool {
+	set := map[string]bool{}
+	for _, host := range have {
+		set[host] = true
+	}
+	for _, host := range want {
+		if !set[strings.ToLower(host)] && !set[host] {
+			return false
+		}
+	}
+	return true
+}
+
+// Status сообщает срок действующей пары и то, что до истечения осталось меньше
+// before: для проверки импортированных сертификатов, которые сами не
+// продлеваются, и для мониторинга.
+func (s Store) Status(host string, roots *x509.CertPool, before time.Duration, now time.Time) (info Info, expiring bool, err error) {
+	live := s.Live()
+	if live == "" {
+		return Info{}, false, errors.New("tlsboot: пара не установлена")
+	}
+	cert, err := os.ReadFile(filepath.Join(live, "fullchain.pem"))
+	if err != nil {
+		return Info{}, false, err
+	}
+	key, err := os.ReadFile(filepath.Join(live, "privkey.pem"))
+	if err != nil {
+		return Info{}, false, err
+	}
+	info, err = Validate(PEM{Cert: cert, Key: key}, host, roots, now)
+	if err != nil {
+		return Info{}, false, err
+	}
+	return info, info.NotAfter.Sub(now) <= before, nil
+}

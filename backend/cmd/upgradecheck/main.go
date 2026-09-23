@@ -8,6 +8,8 @@
 //	upgradecheck verify <подписанный файл> <открытый ключ>
 //	upgradecheck preflight <подписанный файл> <открытый ключ> <миграции>
 //	    # DATABASE_DSN, BACKUP_FILE, BACKUP_PASSPHRASE_FILE, DATA_DIR; проверка ничего не меняет
+//	upgradecheck schema <миграции>
+//	    # DATABASE_DSN или DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME: подходит ли схема базы этому дереву миграций
 //	upgradecheck rollback <подписанный прежний релиз> <открытый ключ>
 //	    # DATABASE_DSN: сможет ли прежний релиз работать на текущей схеме
 //
@@ -167,6 +169,28 @@ func main() {
 			os.Exit(3)
 		}
 		fmt.Println("обновление можно начинать")
+	case "schema":
+		if len(args) != 1 {
+			fail("использование: upgradecheck schema <миграции>")
+		}
+		tree, err := upgrade.ReadMigrations(args[0])
+		if err != nil {
+			fail("%v", err)
+		}
+		db := openDB()
+		defer db.Close()
+		applied, err := upgrade.ReadAppliedOrEmpty(context.Background(), db)
+		if err != nil {
+			fail("%v", err)
+		}
+		plan := upgrade.PlanUpgrade(tree, applied)
+		fmt.Printf("применено миграций %d, в дереве %d, будет применено %d\n", len(applied), len(tree), len(plan.Pending))
+		for _, problem := range plan.Problems {
+			fmt.Fprintln(os.Stderr, "upgradecheck:", problem)
+		}
+		if len(plan.Problems) > 0 {
+			os.Exit(3)
+		}
 	case "rollback":
 		if len(args) != 2 {
 			fail("использование: upgradecheck rollback <подписанный прежний релиз> <открытый ключ>")
@@ -209,12 +233,23 @@ func loadRelease(signedPath, keyPath string) upgrade.Release {
 
 func openDB() *sql.DB {
 	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == "" && os.Getenv("DB_HOST") != "" {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			os.Getenv("DB_HOST"), envOr("DB_PORT", "5432"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"), envOr("DB_SSLMODE", "disable"))
+	}
 	if dsn == "" {
-		fail("задайте DATABASE_DSN")
+		fail("задайте DATABASE_DSN или DB_HOST/DB_USER/DB_PASSWORD/DB_NAME")
 	}
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		fail("%v", err)
 	}
 	return db
+}
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }
