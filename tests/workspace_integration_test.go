@@ -54,6 +54,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if _, e := db.Exec(`INSERT INTO users(email,password_hash,full_name,role,entity_type) VALUES($1,$2,'Тест Администратор','super_admin','organization')`, email, hash); e != nil {
 		t.Fatal(e)
 	}
+	verifyWorkspaceTariff(t, db, email)
 	newClient := func() *http.Client { jar, _ := cookiejar.New(nil); return &http.Client{Jar: jar} }
 	admin, partnerClient, companyClient := newClient(), newClient(), newClient()
 	call := func(client *http.Client, method, path string, body interface{}, want int) []byte {
@@ -648,6 +649,33 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	t.Run("atomic authentication and session rollback", func(t *testing.T) { checkAtomicAuthentication(t, db) })
 	t.Log("ACL, formulas, mentors, optional batch files, expiry, Excel atomicity/idempotency and exports verified")
+}
+
+// verifyWorkspaceTariff links the migration tariff fixture to an immutable
+// test-only normative source. Production deliberately rejects the unverified
+// legacy version, while this integration test needs to exercise entry writes.
+func verifyWorkspaceTariff(t *testing.T, db *sql.DB, adminEmail string) {
+	t.Helper()
+	const source = `INSERT INTO normative_sources(
+		act_code,title,revision,published_on,effective_on,source_url,source_host,content_sha256,
+		content_type,original_filename,size_bytes,content_bytes,imported_by
+	) SELECT 'ORDER-270','Тестовый источник тарифов Приказа № 270','workspace-fixture',DATE '2026-01-01',DATE '2026-01-01',
+		'https://publication.pravo.gov.ru/document/workspace-test','publication.pravo.gov.ru',repeat('f',64),
+		'text/plain','workspace-order-270.txt',24,convert_to('workspace tariff fixture','UTF8'),id
+	FROM users WHERE email=$1
+	ON CONFLICT (act_code,revision) DO NOTHING`
+	if _, err := db.Exec(source, adminEmail); err != nil {
+		t.Fatal("seed verified tariff source:", err)
+	}
+	result, err := db.Exec(`UPDATE tariff_versions SET
+		normative_source_id=(SELECT id FROM normative_sources WHERE act_code='ORDER-270' AND revision='workspace-fixture'),
+		provenance_verified=TRUE WHERE code='order-270-2026.legacy'`)
+	if err != nil {
+		t.Fatal("verify tariff fixture:", err)
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		t.Fatalf("verify tariff fixture: changed %d versions, want 1", changed)
+	}
 }
 
 func mustURL(t *testing.T, s string) *url.URL {

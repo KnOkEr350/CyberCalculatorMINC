@@ -62,6 +62,7 @@ func TestComposeWorkspace(t *testing.T) {
 	admin := s.login(t, smokeAdminEmail, smokeAdminPassword)
 	admin.json(t, "POST", "/api/auth/entity-type", map[string]string{"entity_type": "organization"}, http.StatusOK)
 	tenantID := s.seedTenant(t)
+	s.seedVerifiedTariff(t)
 	partner := s.createPartner(t, admin)
 
 	t.Run("create_edit_and_attachments", func(t *testing.T) {

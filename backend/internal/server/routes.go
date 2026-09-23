@@ -4,6 +4,7 @@ package server
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 	"time"
 
 	"cybercalc/internal/config"
@@ -68,7 +69,19 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 			Snapshots: cfg.BackendFeatureFlags.Any(featureflags.ReportingV44, featureflags.SettingsV44),
 		}),
 		routing.When(cfg.BackendFeatureFlags.Enabled(featureflags.SettingsV44), administration.New(db)),
-		webapp.New(),
 	)
-	return middleware.Security(mux, cfg.PublicURL, cfg.Environment == "production")
+
+	// Keep the SPA fallback outside the API mux. Otherwise its broad "GET /"
+	// pattern intercepts a wrong-method request to a known API path and turns
+	// the ServeMux-generated 405 into a misleading 404.
+	webMux := http.NewServeMux()
+	webapp.New().RegisterRoutes(webMux)
+	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		webMux.ServeHTTP(w, r)
+	})
+	return middleware.Security(root, cfg.PublicURL, cfg.Environment == "production")
 }
