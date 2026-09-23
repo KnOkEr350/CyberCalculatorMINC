@@ -125,12 +125,13 @@ func uploadedWorkbook(w http.ResponseWriter, r *http.Request) ([]byte, [][]strin
 }
 
 type importRow struct {
-	Row           int                    `json:"row"`
-	Payload       map[string]interface{} `json:"payload"`
-	Amount        money.Amount           `json:"amount_rub"`
-	FormulaAmount money.Amount           `json:"formula_amount_rub"`
-	ActualAmount  *money.Amount          `json:"actual_amount_rub,omitempty"`
-	CostMethod    string                 `json:"cost_method"`
+	Row             int                    `json:"row"`
+	Payload         map[string]interface{} `json:"payload"`
+	Amount          money.Amount           `json:"amount_rub"`
+	FormulaAmount   money.Amount           `json:"formula_amount_rub"`
+	ActualAmount    *money.Amount          `json:"actual_amount_rub,omitempty"`
+	CostMethod      string                 `json:"cost_method"`
+	TariffVersionID *string                `json:"tariff_version_id,omitempty"`
 }
 type importResult struct {
 	Rows      []importRow  `json:"rows"`
@@ -269,7 +270,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 			if err := calculators.ValidatePayload(calc, row.Payload); err != nil {
 				return err
 			}
-			formulaAmount, e := calculators.CalculateAmount(category, models.Audience(audience), row.Payload)
+			formulaAmount, tariffVersionID, e := calculateEntryAmount(r.Context(), h.DB, category, models.Audience(audience), row.Payload, year)
 			if e != nil {
 				return e
 			}
@@ -277,6 +278,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 				return e
 			}
 			row.FormulaAmount = formulaAmount
+			row.TariffVersionID = tariffVersionID
 			row.CostMethod, row.Amount, e = resolveEntryAmount(row.CostMethod, row.ActualAmount, formulaAmount)
 			if e != nil {
 				return e
@@ -335,7 +337,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	for _, row := range result.Rows {
 		payload, _ := json.Marshal(row.Payload)
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, u.ID).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,tariff_version_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, row.TariffVersionID, u.ID).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}

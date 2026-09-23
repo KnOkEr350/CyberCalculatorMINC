@@ -1457,6 +1457,119 @@
         }
       }
     },
+    "/api/attachments/{id}/metadata": {
+      "parameters": [{ "$ref": "#/components/parameters/ID" }],
+      "patch": {
+        "tags": ["documents"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["document_type", "version"],
+            "properties": {
+              "document_type": { "$ref": "#/components/schemas/DocumentType" },
+              "document_date": { "type": "string" },
+              "valid_from": { "type": "string" },
+              "valid_until": { "type": "string" },
+              "signer_name": { "type": "string" },
+              "signer_certificate_id": { "type": "string" },
+              "signer_key_id": { "type": "string" },
+              "signature_algorithm": { "type": "string" },
+              "version": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          } } }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/attachments/{id}/dispute": {
+      "parameters": [{ "$ref": "#/components/parameters/ID" }],
+      "patch": {
+        "tags": ["documents"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["active", "reason"],
+            "properties": {
+              "active": { "type": "boolean" },
+              "reason": { "type": "string", "maxLength": 2000 }
+            },
+            "additionalProperties": false
+          } } }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/organizations": {
+      "get": {
+        "tags": ["directories"],
+        "parameters": [
+          { "name": "kind", "in": "query", "schema": { "type": "string" } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/PaginatedJSON" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/specialties": {
+      "get": {
+        "tags": ["directories"],
+        "parameters": [
+          { "name": "education_system", "in": "query", "schema": { "type": "string", "enum": ["higher", "secondary_vocational"] } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/PaginatedJSON" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/specialty-catalogs/import": {
+      "post": {
+        "tags": ["directories"],
+        "requestBody": { "$ref": "#/components/requestBodies/VersionedCSVImport" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/tariffs": {
+      "get": {
+        "tags": ["directories"],
+        "parameters": [
+          { "name": "report_year", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 2000, "maximum": 2100 } },
+          { "name": "activity_code", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "audience", "in": "query", "required": true, "schema": { "type": "string", "enum": ["vuz", "kolledj", "school"] } }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/tariff-versions/import": {
+      "post": {
+        "tags": ["directories"],
+        "requestBody": { "$ref": "#/components/requestBodies/VersionedCSVImport" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/dashboard": {
       "get": {
         "tags": [
@@ -1644,6 +1757,64 @@
           "default": {
             "$ref": "#/components/responses/Error"
           }
+        }
+      }
+    },
+    "/api/regulatory-workflows": {
+      "get": {
+        "tags": ["reporting"],
+        "parameters": [
+          { "name": "agreement_id", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/UUID" } },
+          { "name": "report_year", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 2000, "maximum": 2100 } },
+          { "name": "process_type", "in": "query", "required": true, "schema": { "type": "string", "enum": ["agreement", "preliminary", "final"] } }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "tags": ["reporting"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["agreement_id", "report_year", "process_type"],
+            "properties": {
+              "agreement_id": { "$ref": "#/components/schemas/UUID" },
+              "report_year": { "type": "integer", "minimum": 2000, "maximum": 2100 },
+              "process_type": { "type": "string", "enum": ["agreement", "preliminary", "final"] }
+            },
+            "additionalProperties": false
+          } } }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/regulatory-workflows/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/ID" }],
+      "patch": {
+        "tags": ["reporting"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["status", "reason", "version"],
+            "properties": {
+              "status": { "type": "string", "enum": ["draft", "sent", "in_review", "rework", "resubmitted", "approved", "default_approved", "disputed"] },
+              "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+              "review_due_on": { "type": "string" },
+              "version": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          } } }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JSONSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
         }
       }
     },
@@ -3465,6 +3636,24 @@
                   "contentMediaType": "application/octet-stream",
                   "maxLength": 26214400
                 }
+              }
+            }
+          }
+        }
+      },
+      "VersionedCSVImport": {
+        "required": true,
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "required": ["version_code", "title", "effective_from", "normative_source_id", "file"],
+              "properties": {
+                "version_code": { "type": "string", "minLength": 3, "maxLength": 64 },
+                "title": { "type": "string", "minLength": 3, "maxLength": 500 },
+                "effective_from": { "$ref": "#/components/schemas/Date" },
+                "normative_source_id": { "$ref": "#/components/schemas/UUID" },
+                "file": { "type": "string", "format": "binary", "contentMediaType": "application/octet-stream", "maxLength": 4194304, "description": "UTF-8 CSV или XLSX" }
               }
             }
           }

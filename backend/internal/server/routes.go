@@ -18,6 +18,7 @@ import (
 	"cybercalc/internal/modules/okz"
 	"cybercalc/internal/modules/planning"
 	"cybercalc/internal/modules/reporting"
+	"cybercalc/internal/modules/webapp"
 	"cybercalc/internal/platform/featureflags"
 	"cybercalc/internal/platform/routing"
 )
@@ -67,6 +68,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 			Snapshots: cfg.BackendFeatureFlags.Any(featureflags.ReportingV44, featureflags.SettingsV44),
 		}),
 		routing.When(cfg.BackendFeatureFlags.Enabled(featureflags.SettingsV44), administration.New(db)),
+		webapp.New(),
 	)
 	return middleware.Security(mux, cfg.PublicURL, cfg.Environment == "production")
 }

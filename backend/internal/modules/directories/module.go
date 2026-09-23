@@ -18,6 +18,7 @@ type Module struct {
 	regionalAuthorities *handlers.RegionalAuthorityHandlers
 	entryReferences     *handlers.EntryHandlers
 	partnerStructure    *handlers.PartnerStructureHandlers
+	referenceCatalogs   *handlers.ReferenceCatalogHandlers
 }
 
 func New(db *sql.DB) *Module {
@@ -25,7 +26,8 @@ func New(db *sql.DB) *Module {
 		db: db, partners: &handlers.PartnerHandlers{DB: db}, itCompanies: &handlers.ITCompanyHandlers{DB: db},
 		agreements: &handlers.AgreementHandlers{DB: db}, legalEntityGroups: &handlers.LegalEntityGroupHandlers{DB: db},
 		regionalAuthorities: &handlers.RegionalAuthorityHandlers{DB: db}, entryReferences: &handlers.EntryHandlers{DB: db},
-		partnerStructure: &handlers.PartnerStructureHandlers{DB: db},
+		partnerStructure:  &handlers.PartnerStructureHandlers{DB: db},
+		referenceCatalogs: &handlers.ReferenceCatalogHandlers{DB: db},
 	}
 }
 
@@ -93,4 +95,9 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mentors", middleware.RequireAuth(m.db, m.entryReferences.CreateMentor))
 	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireAuth(m.db, m.partners.DirectoryTemplate))
 	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireAuth(m.db, m.partners.ImportDirectory))
+	mux.HandleFunc("GET /api/organizations", middleware.RequireAuth(m.db, m.referenceCatalogs.Organizations))
+	mux.HandleFunc("GET /api/specialties", middleware.RequireAuth(m.db, m.referenceCatalogs.Specialties))
+	mux.HandleFunc("POST /api/specialty-catalogs/import", middleware.RequireAuth(m.db, m.referenceCatalogs.ImportSpecialties))
+	mux.HandleFunc("GET /api/tariffs", middleware.RequireAuth(m.db, m.referenceCatalogs.Tariffs))
+	mux.HandleFunc("POST /api/tariff-versions/import", middleware.RequireAuth(m.db, m.referenceCatalogs.ImportTariffs))
 }

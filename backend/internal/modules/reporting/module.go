@@ -11,13 +11,14 @@ import (
 )
 
 type Module struct {
-	db        *sql.DB
-	dashboard *handlers.DashboardHandlers
-	reports   *handlers.ReportHandlers
-	workflow  *handlers.ReportWorkflowHandlers
-	snapshots *handlers.SnapshotHandlers
-	calendar  handlers.ReportCalendarHandlers
-	options   Options
+	db                 *sql.DB
+	dashboard          *handlers.DashboardHandlers
+	reports            *handlers.ReportHandlers
+	workflow           *handlers.ReportWorkflowHandlers
+	regulatoryWorkflow *handlers.RegulatoryWorkflowHandlers
+	snapshots          *handlers.SnapshotHandlers
+	calendar           handlers.ReportCalendarHandlers
+	options            Options
 }
 
 type Options struct {
@@ -28,7 +29,7 @@ type Options struct {
 
 func New(db *sql.DB, options Options) *Module {
 	projection := repository.NewActivityProjection(db)
-	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, options: options}
+	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, regulatoryWorkflow: &handlers.RegulatoryWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, options: options}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -58,6 +59,11 @@ func (m *Module) registerReportRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/report-calendar", middleware.RequireAuth(m.db, m.calendar.Get))
 	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(m.db, m.workflow.Get))
 	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(m.db, m.workflow.Transition))
+	mux.HandleFunc("GET /api/regulatory-workflows", middleware.RequireAuth(m.db, m.regulatoryWorkflow.Get))
+	mux.HandleFunc("POST /api/regulatory-workflows", middleware.RequireAuth(m.db, m.regulatoryWorkflow.Start))
+	mux.HandleFunc("PATCH /api/regulatory-workflows/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.regulatoryWorkflow.Transition(w, r, u, r.PathValue("id"))
+	}))
 }
 
 func (m *Module) registerSnapshotRoutes(mux *http.ServeMux) {

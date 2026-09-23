@@ -24,7 +24,7 @@
 | [ADR-02](ADR-02-calendar-policy.md) | Календарь таймеров | ACCEPTED | Владелец продукта + юрист | — |
 | [ADR-03](ADR-03-top-it-exemption.md) | Исключение ТОП-ИТ по п. 22 | ACCEPTED | Владелец продукта + юрист | — |
 | [ADR-04](ADR-04-primary-database.md) | Основная СУБД | ACCEPTED | Технический руководитель | — |
-| [ADR-05](ADR-05-frontend-delivery.md) | Доставка frontend | PROPOSED | Технический руководитель | Technical |
+| [ADR-05](ADR-05-frontend-delivery.md) | Доставка frontend | ACCEPTED | Технический руководитель | — |
 | [ADR-06](ADR-06-mfa-policy.md) | Обязательность 2FA | ACCEPTED | Security owner | — |
 | [ADR-07](ADR-07-retention-policy.md) | Хранение вложений и аудита | PROPOSED | Security owner + юрист | Technical/Legal |
 | [ADR-08](ADR-08-report-templates.md) | Эталонные формы отчётности | ACCEPTED | Владелец продукта + юрист | Source verification |
@@ -55,7 +55,7 @@
 
 ### Technical/Security
 
-Открыты ADR-05 и ADR-07. ADR-07 дополнительно требует юридического
+Открыт ADR-07. Он дополнительно требует юридического
 подтверждения сроков хранения. ADR-04, ADR-06, ADR-09 и ADR-23 приняты;
 ADR-10 фиксирует dual-write/backfill/cutover; security profile конкретного
 криптопровайдера ведётся как зависимость ADR-09.

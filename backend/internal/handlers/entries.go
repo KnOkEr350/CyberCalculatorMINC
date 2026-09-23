@@ -199,7 +199,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	formulaAmount, err := calculators.CalculateAmount(req.CategoryCode, models.Audience(req.Audience), req.Payload)
+	formulaAmount, tariffVersionID, err := calculateEntryAmount(r.Context(), h.DB, req.CategoryCode, models.Audience(req.Audience), req.Payload, req.ReportYear)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
@@ -228,9 +228,9 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 
 	var id string
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14) RETURNING id`,
-		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
+		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,tariff_version_id,created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,$15) RETURNING id`,
+		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, tariffVersionID, u.ID,
 	).Scan(&id)
 	if err != nil {
 		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
@@ -588,7 +588,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	formulaAmount, err := calculators.CalculateAmount(categoryCode, models.Audience(audience), req.Payload)
+	formulaAmount, tariffVersionID, err := calculateEntryAmount(r.Context(), h.DB, categoryCode, models.Audience(audience), req.Payload, reportYear)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
@@ -610,9 +610,9 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
 	_, err = tx.ExecContext(r.Context(),
-		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),updated_by=$10,updated_at=now()
-		 WHERE id=$11`,
-		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, u.ID, entryID,
+		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),tariff_version_id=$10,updated_by=$11,updated_at=now()
+		 WHERE id=$12`,
+		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, tariffVersionID, u.ID, entryID,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
