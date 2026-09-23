@@ -7,11 +7,21 @@ import (
 	"testing"
 
 	"cybercalc/internal/config"
+	"cybercalc/internal/platform/featureflags"
 	appserver "cybercalc/internal/server"
 )
 
+func allBackendFeatures(t testing.TB) featureflags.Set {
+	t.Helper()
+	flags, err := featureflags.Parse("all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return flags
+}
+
 func TestProtectedAPIRoutesRejectAnonymousRequests(t *testing.T) {
-	h := appserver.BuildRoutes(nil, config.Config{})
+	h := appserver.BuildRoutes(nil, config.Config{BackendFeatureFlags: allBackendFeatures(t)})
 	for _, path := range []string{
 		"/api/auth/me",
 		"/api/partners",

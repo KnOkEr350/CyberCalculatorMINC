@@ -69,9 +69,18 @@ function renderLayout() {
     state.me.entity_type === "organization"
       ? "ИТ-организация"
       : "Учебное заведение";
-  const screens = CyberCalcScreens.all;
-  if (!CyberCalcScreens.get(state.view)) state.view = "dashboard";
-  const activeScreen = CyberCalcScreens.get(state.view);
+  const screens = CyberCalcScreens.available();
+  if (!screens.length) {
+    const empty = el(`<main class="system-state"><div class="card"><span class="state-mark" aria-hidden="true">!</span><h1>Модули не включены</h1><p>Администратор appliance должен включить разрешённые экраны в конфигурации feature flags.</p><button class="btn secondary" id="no-feature-logout">Выйти</button></div></main>`);
+    empty.querySelector("#no-feature-logout").onclick = async () => {
+      await api("/auth/logout", { method: "POST" });
+      state.me = null;
+      render();
+    };
+    return empty;
+  }
+  if (!CyberCalcScreens.getAvailable(state.view)) state.view = screens[0].id;
+  const activeScreen = CyberCalcScreens.getAvailable(state.view);
   const organizationName = state.me.organization_name || state.me.entity_name || profileLabel;
   const wrap = el(`<div class="app-shell">
     <a class="skip-link" href="#content">К содержанию</a>

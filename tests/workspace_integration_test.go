@@ -44,7 +44,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	if err := dbx.RunMigrations(db, dir); err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Config{UploadDir: t.TempDir(), MFAKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}
+	cfg := config.Config{UploadDir: t.TempDir(), MFAKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", BackendFeatureFlags: allBackendFeatures(t)}
 	server := httptest.NewServer(appserver.BuildRoutes(db, cfg))
 	defer server.Close()
 	stamp := fmt.Sprint(time.Now().UnixNano())

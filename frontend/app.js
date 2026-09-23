@@ -190,6 +190,7 @@ function showToast(message, kind = "error") {
 // ---------------------------------------------------------------- ROUTER --
 
 async function boot() {
+  await CyberCalcFeatures.ready;
   try {
     state.me = await api("/auth/me");
   } catch (e) {

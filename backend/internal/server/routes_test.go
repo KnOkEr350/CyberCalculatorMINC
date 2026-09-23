@@ -12,7 +12,11 @@ import (
 )
 
 func TestBuildRoutesMountsAllProtectedModuleRoutes(t *testing.T) {
-	handler := BuildRoutes(nil, config.Config{})
+	allFlags, err := featureflags.Parse("all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := BuildRoutes(nil, config.Config{BackendFeatureFlags: allFlags})
 	routes := []struct {
 		method string
 		path   string
@@ -108,6 +112,105 @@ func TestBuildRoutesMountsAllProtectedModuleRoutes(t *testing.T) {
 			handler.ServeHTTP(response, request)
 			if response.Code != http.StatusUnauthorized {
 				t.Fatalf("got %d for %s, want %d; body=%q", response.Code, name, http.StatusUnauthorized, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestBuildRoutesFailsClosedForDisabledBackendModules(t *testing.T) {
+	handler := BuildRoutes(nil, config.Config{})
+	for _, path := range []string{
+		"/api/partners",
+		"/api/entries",
+		"/api/dashboard",
+		"/api/reports/export",
+		"/api/admin/users",
+	} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("X-Cybercalc-Request", "1")
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("GET %s returned %d, want 404", path, response.Code)
+		}
+	}
+}
+
+func TestBuildRoutesEnablesOnlyRequestedBackendCapabilities(t *testing.T) {
+	flags, err := featureflags.Parse("teachers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := BuildRoutes(nil, config.Config{BackendFeatureFlags: flags})
+
+	for _, path := range []string{"/api/entries", "/api/staff-members", "/api/partners", "/api/okz"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("X-Cybercalc-Request", "1")
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("GET %s returned %d, want 401", path, response.Code)
+		}
+	}
+
+	for _, path := range []string{"/api/dashboard", "/api/reports/export", "/api/admin/users"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("X-Cybercalc-Request", "1")
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("GET %s returned %d, want 404", path, response.Code)
+		}
+	}
+}
+
+func TestSharedReferenceRoutesFollowAnyEnabledCapability(t *testing.T) {
+	flags, err := featureflags.Parse("dashboard_v44")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := BuildRoutes(nil, config.Config{BackendFeatureFlags: flags})
+	for _, path := range []string{"/api/categories", "/api/partners"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("X-Cybercalc-Request", "1")
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("GET %s returned %d, want 401", path, response.Code)
+		}
+	}
+}
+
+func TestEveryBackendFeatureEnablesItsCapability(t *testing.T) {
+	tests := []struct {
+		flag featureflags.Name
+		path string
+	}{
+		{featureflags.DashboardV44, "/api/dashboard"},
+		{featureflags.PartnersV44, "/api/partners"},
+		{featureflags.Teachers, "/api/staff-members"},
+		{featureflags.OOPRPD, "/api/entries"},
+		{featureflags.Internships, "/api/entries"},
+		{featureflags.Practice, "/api/entries"},
+		{featureflags.TopITAI, "/api/entries"},
+		{featureflags.Schools, "/api/entries"},
+		{featureflags.MinistryDecision, "/api/entries"},
+		{featureflags.ReportingV44, "/api/reports/export"},
+		{featureflags.SettingsV44, "/api/admin/users"},
+	}
+	for _, test := range tests {
+		t.Run(string(test.flag), func(t *testing.T) {
+			flags, err := featureflags.Parse(string(test.flag))
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := BuildRoutes(nil, config.Config{BackendFeatureFlags: flags})
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			request.Header.Set("X-Cybercalc-Request", "1")
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("GET %s returned %d, want 401", test.path, response.Code)
 			}
 		})
 	}

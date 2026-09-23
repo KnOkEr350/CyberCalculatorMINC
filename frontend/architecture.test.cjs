@@ -8,7 +8,10 @@ function source(path) {
 }
 
 test("store and router preserve activity selection invariants", () => {
-  const context = vm.createContext({ console });
+  const context = vm.createContext({
+    console,
+    CyberCalcFeatures: { filter(items) { return items; } },
+  });
   vm.runInContext(source("./core/store.js"), context, { filename: "core/store.js" });
   vm.runInContext(source("./screens.js"), context, { filename: "screens.js" });
   vm.runInContext(source("./core/router.js"), context, { filename: "core/router.js" });
@@ -28,6 +31,22 @@ test("store and router preserve activity selection invariants", () => {
   assert.equal(state.partnerID, "");
   assert.equal(state.agreementID, "");
   assert.equal(renders, 1);
+});
+
+test("router rejects screens hidden by feature flags", () => {
+  const context = vm.createContext({
+    console,
+    CyberCalcFeatures: {
+      filter(items) { return items.filter((item) => item.featureFlag === "teachers"); },
+    },
+  });
+  vm.runInContext(source("./core/store.js"), context, { filename: "core/store.js" });
+  vm.runInContext(source("./screens.js"), context, { filename: "screens.js" });
+  vm.runInContext(source("./core/router.js"), context, { filename: "core/router.js" });
+  context.CyberCalcRouter.configure(() => {});
+
+  context.CyberCalcRouter.activate("dashboard");
+  assert.equal(context.CyberCalcStore.state.view, "teachers");
 });
 
 test("html loads store, router, loader and shell before bootstrap", () => {

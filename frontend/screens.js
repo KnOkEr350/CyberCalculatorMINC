@@ -11,6 +11,7 @@
       subtitle: "Норматив 3%, обязательный минимум, план, факт и риски.",
       icon: "dashboard",
       module: "/screens/dashboard/index.js",
+      featureFlag: "dashboard_v44",
     },
     {
       id: "partners",
@@ -20,6 +21,7 @@
       subtitle: "Образовательные организации, РОИВ, реквизиты и соглашения.",
       icon: "partners",
       module: "/screens/partners/index.js",
+      featureFlag: "partners_v44",
     },
     {
       id: "teachers",
@@ -29,6 +31,7 @@
       subtitle: "Нагрузка штатных ИТ-специалистов, семестры, ставки и компенсации.",
       icon: "teachers",
       module: "/screens/teachers/index.js",
+      featureFlag: "teachers",
       categoryCodes: ["teachers"],
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
@@ -43,6 +46,7 @@
       subtitle: "Разработка, актуализация и экспертиза образовательных программ.",
       icon: "documents",
       module: "/screens/ood-rpd/index.js",
+      featureFlag: "oop_rpd",
       categoryCodes: ["ood_rpd"],
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
@@ -57,6 +61,7 @@
       subtitle: "Стажёры, наставники, часы и комплект кадровых документов.",
       icon: "internship",
       module: "/screens/internship/index.js",
+      featureFlag: "internships",
       categoryCodes: ["internship"],
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
@@ -71,6 +76,7 @@
       subtitle: "Производственная практика с проверкой официального трудоустройства.",
       icon: "practice",
       module: "/screens/employment-practice/index.js",
+      featureFlag: "practice",
       categoryCodes: ["employment_practice"],
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
@@ -85,6 +91,7 @@
       subtitle: "Софинансирование программ, фактическое списание и подтверждение АНО АЦ.",
       icon: "top",
       module: "/screens/top-it/index.js",
+      featureFlag: "top_it_ai",
       categoryCodes: ["top_it"],
       audiences: ["vuz"],
       defaultAudience: "vuz",
@@ -99,6 +106,7 @@
       subtitle: "ИТ-кружки, повышение квалификации и образовательный контент.",
       icon: "schools",
       module: "/screens/schools/index.js",
+      featureFlag: "schools",
       categoryCodes: ["it_clubs", "teacher_training", "edu_content"],
       audiences: ["school"],
       defaultAudience: "school",
@@ -113,6 +121,7 @@
       subtitle: "Разовые мероприятия по решениям Президента, Правительства и Совбеза.",
       icon: "ministry",
       module: "/screens/minc-decision/index.js",
+      featureFlag: "ministry_decision",
       categoryCodes: ["minc_decision"],
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
@@ -127,6 +136,7 @@
       subtitle: "Срезы, регламентные формы, статусы согласования и обменные пакеты.",
       icon: "reports",
       module: "/screens/reports/index.js",
+      featureFlag: "reporting_v44",
     },
     {
       id: "settings",
@@ -136,6 +146,7 @@
       subtitle: "Контекст, справочники, доступ, 2FA, хранение и аудит.",
       icon: "settings",
       module: "/screens/settings/index.js",
+      featureFlag: "settings_v44",
     },
   ].map((screen) => Object.freeze({
     ...screen,
@@ -145,10 +156,17 @@
   }));
 
   const byID = new Map(screens.map((screen) => [screen.id, screen]));
+  const available = () => global.CyberCalcFeatures?.filter
+    ? global.CyberCalcFeatures.filter(screens)
+    : screens;
   const api = {
     all: Object.freeze(screens),
+    available,
     get(id) {
       return byID.get(id) || null;
+    },
+    getAvailable(id) {
+      return available().find((screen) => screen.id === id) || null;
     },
     activity(id) {
       const screen = byID.get(id);

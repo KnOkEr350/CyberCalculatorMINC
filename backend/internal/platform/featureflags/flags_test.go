@@ -38,3 +38,16 @@ func TestParseAllAndSnapshotIsolation(t *testing.T) {
 		}
 	}
 }
+
+func TestAnyReportsSharedCapability(t *testing.T) {
+	set, err := Parse("teachers,reporting_v44")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.Any(Schools, Teachers) {
+		t.Fatal("Any must succeed when one requested flag is enabled")
+	}
+	if set.Any(Practice, SettingsV44) {
+		t.Fatal("Any must fail when every requested flag is disabled")
+	}
+}

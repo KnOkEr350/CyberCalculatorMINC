@@ -13,7 +13,8 @@
   function activate(view) {
     const state = global.CyberCalcStore.state;
     const registry = global.CyberCalcScreens;
-    const screen = registry.get(view) || registry.get("dashboard");
+    const screen = registry.getAvailable(view) || registry.available()[0];
+    if (!screen) throw new Error("Нет включённых экранов");
     const activity = registry.activity(screen.id);
     state.view = screen.id;
 

@@ -92,6 +92,19 @@ func (s Set) Enabled(name Name) bool {
 	return ok
 }
 
+// Any reports whether at least one of the supplied capabilities is enabled.
+// Composition roots use it for shared dependencies (for example, the common
+// activity registry used by every activity screen) without exposing the
+// mutable representation of the flag set.
+func (s Set) Any(names ...Name) bool {
+	for _, name := range names {
+		if s.Enabled(name) {
+			return true
+		}
+	}
+	return false
+}
+
 // Snapshot returns all known flags, including disabled ones, and never exposes
 // the internal map to callers.
 func (s Set) Snapshot() map[string]bool {

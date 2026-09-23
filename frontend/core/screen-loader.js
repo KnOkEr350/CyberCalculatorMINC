@@ -21,7 +21,7 @@
 
   async function render(screenID, root) {
     if (!contextFactory) throw new Error("screen loader is not configured");
-    const screen = global.CyberCalcScreens.get(screenID);
+    const screen = global.CyberCalcScreens.getAvailable(screenID);
     if (!screen) throw new Error(`Неизвестный экран: ${screenID}`);
     root.setAttribute("aria-busy", "true");
     try {

@@ -13,11 +13,13 @@ import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
 	"cybercalc/internal/money"
+	"cybercalc/internal/platform/activityprojection"
 	"github.com/lib/pq"
 )
 
 type DashboardHandlers struct {
-	DB *sql.DB
+	DB         *sql.DB
+	Projection activityprojection.Reader
 }
 
 type categoryBreakdown struct {
@@ -210,6 +212,29 @@ func riskBucketState(state string, approved bool) string {
 
 func (h *DashboardHandlers) riskBreakdown(r *http.Request, year int, scope, companyScope, categoryFilter, audienceFilter string) (map[string]riskBucket, error) {
 	result := map[string]riskBucket{"green": {}, "yellow": {}, "red": {}}
+	if h.Projection != nil {
+		items, err := h.Projection.List(r.Context(), activityprojection.Filter{
+			ReportYear: year, Period: "fact", TenantID: companyScope, PartnerID: scope,
+			CategoryCode: categoryFilter, Audience: audienceFilter,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			state := item.Risk.State
+			if state != "green" && state != "yellow" && state != "red" {
+				state = "red"
+			}
+			bucket := result[state]
+			bucket.EntryCount++
+			bucket.AmountRub, err = money.Add(bucket.AmountRub, item.FactAmount)
+			if err != nil {
+				return nil, err
+			}
+			result[state] = bucket
+		}
+		return result, nil
+	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT e.category_code,e.payload,e.amount_rub,eligibility.eligible,
 		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=e.id AND a.retention_expires_at>now())
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id

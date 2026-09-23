@@ -18,6 +18,7 @@ import (
 	"cybercalc/internal/modules/okz"
 	"cybercalc/internal/modules/planning"
 	"cybercalc/internal/modules/reporting"
+	"cybercalc/internal/platform/featureflags"
 	"cybercalc/internal/platform/routing"
 )
 
@@ -26,6 +27,16 @@ import (
 // assembles registrars, then applies process-wide middleware.
 func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
+	anyFeatureEnabled := cfg.BackendFeatureFlags.Any(featureflags.Names()...)
+	activityEnabled := cfg.BackendFeatureFlags.Any(
+		featureflags.Teachers,
+		featureflags.OOPRPD,
+		featureflags.Internships,
+		featureflags.Practice,
+		featureflags.TopITAI,
+		featureflags.Schools,
+		featureflags.MinistryDecision,
+	)
 	routing.RegisterAll(
 		mux,
 		health.New(db),
@@ -36,17 +47,25 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 			MFAKey:       cfg.MFAKey,
 			RequireMFA:   cfg.Environment == "production",
 		}),
-		directories.New(db),
-		okz.New(db),
-		normative.New(db),
-		planning.New(db),
-		documents.New(db, documents.Options{
+		routing.When(anyFeatureEnabled, directories.New(db)),
+		routing.When(cfg.BackendFeatureFlags.Any(featureflags.Teachers, featureflags.SettingsV44), okz.New(db)),
+		routing.When(cfg.BackendFeatureFlags.Any(featureflags.ReportingV44, featureflags.SettingsV44), normative.New(db)),
+		planning.New(db, planning.Options{
+			Categories: anyFeatureEnabled,
+			Activities: activityEnabled,
+			Teaching:   cfg.BackendFeatureFlags.Enabled(featureflags.Teachers),
+		}),
+		routing.When(activityEnabled, documents.New(db, documents.Options{
 			UploadDir:      cfg.UploadDir,
 			ScannerAddress: cfg.ScannerAddress,
 			QuotaBytes:     cfg.UploadQuotaBytes,
+		})),
+		reporting.New(db, reporting.Options{
+			Dashboard: cfg.BackendFeatureFlags.Enabled(featureflags.DashboardV44),
+			Reports:   cfg.BackendFeatureFlags.Enabled(featureflags.ReportingV44),
+			Snapshots: cfg.BackendFeatureFlags.Any(featureflags.ReportingV44, featureflags.SettingsV44),
 		}),
-		reporting.New(db),
-		administration.New(db),
+		routing.When(cfg.BackendFeatureFlags.Enabled(featureflags.SettingsV44), administration.New(db)),
 	)
 	return middleware.Security(mux, cfg.PublicURL, cfg.Environment == "production")
 }

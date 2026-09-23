@@ -4,6 +4,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(require.resolve("./screens.js"), "utf8");
+const featureSource = fs.readFileSync(require.resolve("./features.js"), "utf8");
 
 function registry() {
   const context = vm.createContext({});
@@ -19,6 +20,33 @@ test("registers the eleven TZ screens in menu order", () => {
   assert.equal(new Set(Array.from(screens, (screen) => screen.module)).size, 11);
   for (const screen of screens) {
     assert.match(screen.module, /^\/screens\/[a-z0-9-]+\/index\.js$/);
+    assert.match(screen.featureFlag, /^[a-z][a-z0-9_]*$/);
+  }
+  assert.equal(new Set(Array.from(screens, (screen) => screen.featureFlag)).size, 11);
+});
+
+test("filters the registry with the runtime feature snapshot", () => {
+  const context = vm.createContext({
+    CyberCalcFeatures: {
+      filter(items) {
+        return items.filter((item) => item.featureFlag === "teachers");
+      },
+    },
+  });
+  vm.runInContext(source, context, { filename: "screens.js" });
+
+  assert.deepEqual(Array.from(context.CyberCalcScreens.available(), (screen) => screen.id), ["teachers"]);
+  assert.equal(context.CyberCalcScreens.getAvailable("dashboard"), null);
+  assert.equal(context.CyberCalcScreens.getAvailable("teachers").id, "teachers");
+});
+
+test("every screen flag belongs to the frontend feature registry", () => {
+  const context = vm.createContext({ console: { warn() {} } });
+  vm.runInContext(featureSource, context, { filename: "features.js" });
+  vm.runInContext(source, context, { filename: "screens.js" });
+  const known = new Set(Array.from(context.CyberCalcFeatures.known));
+  for (const screen of context.CyberCalcScreens.all) {
+    assert.ok(known.has(screen.featureFlag), `${screen.id}: unknown feature flag ${screen.featureFlag}`);
   }
 });
 
