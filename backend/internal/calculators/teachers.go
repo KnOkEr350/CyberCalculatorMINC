@@ -68,6 +68,7 @@ func (teachersCalc) Fields() []FieldSpec {
 		{Key: "class_schedule", Label: "Расписание занятий", Type: "text", MaxLength: 2000},
 		{Key: "work_schedule", Label: "График работы", Type: "text", MaxLength: 2000},
 		{Key: "employment_contract_reference", Label: "Реквизиты ТД / ГПХ", Type: "text", MaxLength: 1000},
+		{Key: "donation_usage_report_reference", Label: "Реквизиты отчёта об использовании пожертвования", Type: "text", MaxLength: 1000},
 		{Key: "appointment_order_reference", Label: "Реквизиты приказа о допуске", Type: "text", MaxLength: 1000},
 		{Key: "individual_plan_reference", Label: "Реквизиты индивидуального плана", Type: "text", MaxLength: 1000},
 	}

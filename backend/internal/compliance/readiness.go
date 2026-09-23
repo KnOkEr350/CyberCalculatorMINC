@@ -134,6 +134,9 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 		require("it_experience", "ИТ-стаж не менее 365 дней за последние 5 лет", num("it_experience_days") >= 365, true)
 		require("okz", "Проверенный код ОКЗ сотрудника", has("okz_code"), true)
 		require("employment_contract", "Трудовой договор или ГПХ", hasDoc("employment_contract", "employment_contract_reference"), blockDocuments)
+		if fmt.Sprint(payload["employment_form"]) == "Договор пожертвования" {
+			require("donation_usage_report", "Отчёт об использовании пожертвования", has("donation_usage_report_reference"), false)
+		}
 		require("appointment_order", "Приказ о допуске к преподаванию", hasDoc("appointment_order", "appointment_order_reference"), false)
 		require("individual_plan", "Индивидуальный план и расписание", hasDoc("individual_plan", "individual_plan_reference") && has("class_schedule"), false)
 	case "ood_rpd":

@@ -112,3 +112,19 @@ func TestTeacherEmploymentFormsMatchOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestTeacherDonationUsageReportField(t *testing.T) {
+	calc, err := Get("teachers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range calc.Fields() {
+		if field.Key == "donation_usage_report_reference" {
+			if field.Label != "Реквизиты отчёта об использовании пожертвования" || field.Type != "text" {
+				t.Fatalf("поле отчёта об использовании пожертвования описано неверно: %+v", field)
+			}
+			return
+		}
+	}
+	t.Fatal("нет реквизита отчёта об использовании пожертвования для договора пожертвования")
+}

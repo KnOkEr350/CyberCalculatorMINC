@@ -16,6 +16,20 @@ func TestTeacherReadinessGreen(t *testing.T) {
 	}
 }
 
+func TestTeacherDonationAgreementRequiresUsageReport(t *testing.T) {
+	payload := teacherPayload()
+	payload["employment_form"] = "Договор пожертвования"
+	got := Evaluate("teachers", "fact", payload, teacherDocuments())
+	if got.State != "yellow" || got.Ready || got.Eligible {
+		t.Fatalf("donation agreement without usage report must stay yellow, got %+v", got)
+	}
+	payload["donation_usage_report_reference"] = "Отчёт № 7 от 30.12.2026"
+	got = Evaluate("teachers", "fact", payload, teacherDocuments())
+	if got.State != "green" || !got.Ready || !got.Eligible {
+		t.Fatalf("donation agreement with usage report must be green, got %+v", got)
+	}
+}
+
 func TestTopProgressUsesSpentNotTransferred(t *testing.T) {
 	got := Evaluate("top_it", "fact", map[string]interface{}{"planned_cofinancing_amount_rub": 1000, "transferred_amount_rub": 1000, "actual_spent_amount_rub": 600}, []string{"top_agreement", "payment_order", "spending_act", "ano_letter"})
 	if got.State != "red" {
