@@ -191,7 +191,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.validateMentor(r, req.CategoryCode, partnerID, req.Payload); err != nil {
+	if err := h.validateMentor(r, req.CategoryCode, partnerID, "", req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
@@ -227,10 +227,19 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	defer tx.Rollback()
 
 	var id string
+	mentor := mentorColumns(req.CategoryCode, req.Payload)
+	ministry := ministryCardColumns(req.CategoryCode, req.Payload)
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,tariff_version_id,created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,$15) RETURNING id`,
+		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,tariff_version_id,created_by,
+		 mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
+		 ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
+		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,$15,NULLIF($16,'')::uuid,NULLIF($17,'')::date,NULLIF($18,'')::date,NULLIF($19,''),NULLIF($20,'')::date,NULLIF(lower($21),''),
+		 NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,''),NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,'')::date,NULLIF($29,''),NULLIF($30,''),NULLIF($31,'')) RETURNING id`,
 		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, tariffVersionID, u.ID,
+		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
+		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
+		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
 	).Scan(&id)
 	if err != nil {
 		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
@@ -247,6 +256,13 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	if err := logAudit(r.Context(), tx, "entry", id, "create", u.ID, "", nil, req); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
 		return
+	}
+	if req.CategoryCode == "minc_decision" {
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO ministry_cost_revisions(entry_id,revision_no,confirmed_amount_rub,calculation_basis,correction_reason,changed_by)
+			VALUES($1,1,$2,$3,'Начальная редакция подтверждённой стоимости',$4)`, id, amount, strings.TrimSpace(fmt.Sprint(req.Payload["calculation_basis"])), u.ID); err != nil {
+			middleware.WriteError(w, 500, "ошибка сохранения истории подтверждённой стоимости")
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка завершения транзакции")
@@ -307,7 +323,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	}
 	// SQL structure comes only from fixed fragments; values remain positional parameters.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	query := `SELECT id,COALESCE(it_company_id::text,''), category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,
+	query := `SELECT id,COALESCE(it_company_id::text,''), category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,COALESCE(ministry_card_backfill_status,''),
 		created_by, updated_by, created_at, updated_at,
 		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=entries.id AND a.retention_expires_at>now())
 		FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
@@ -326,7 +342,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 		var payloadRaw []byte
 		var documentTypes pq.StringArray
 		if err := rows.Scan(&e.ID, &e.ITCompanyID, &e.CategoryCode, &partnerID, &e.AgreementID, &e.PeriodType, &e.ReportYear, &e.Audience,
-			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt, &documentTypes); err != nil {
+			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.MinistryCardBackfillStatus, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt, &documentTypes); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -580,7 +596,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.validateMentor(r, categoryCode, partnerID, req.Payload); err != nil {
+	if err := h.validateMentor(r, categoryCode, partnerID, entryID, req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
@@ -609,14 +625,31 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
+	mentor := mentorColumns(categoryCode, req.Payload)
+	ministry := ministryCardColumns(categoryCode, req.Payload)
 	_, err = tx.ExecContext(r.Context(),
-		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),tariff_version_id=$10,updated_by=$11,updated_at=now()
+		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),tariff_version_id=$10,updated_by=$11,updated_at=now(),
+		 mentor_id=NULLIF($13,'')::uuid,mentor_assignment_start=NULLIF($14,'')::date,mentor_assignment_end=NULLIF($15,'')::date,mentor_order_number=NULLIF($16,''),mentor_order_date=NULLIF($17,'')::date,assigned_student_name=NULLIF(lower($18),''),
+		 ministry_instruction_type=NULLIF($19,''),ministry_instruction_authority=NULLIF($20,''),ministry_instruction_reference=NULLIF($21,''),ministry_decision_number=NULLIF($22,''),
+		 ministry_decision_date=NULLIF($23,'')::date,ministry_implementation_start=NULLIF($24,'')::date,ministry_implementation_deadline=NULLIF($25,'')::date,
+		 ministry_implementation_conditions=NULLIF($26,''),ministry_activity_description=NULLIF($27,''),ministry_card_backfill_status=NULLIF($28,'')
 		 WHERE id=$12`,
 		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, tariffVersionID, u.ID, entryID,
+		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
+		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
+		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
+	}
+	if categoryCode == "minc_decision" && newAmount != oldAmount {
+		if _, err = tx.ExecContext(r.Context(), `INSERT INTO ministry_cost_revisions(entry_id,revision_no,previous_amount_rub,confirmed_amount_rub,calculation_basis,correction_reason,changed_by)
+			SELECT $1,COALESCE(max(revision_no),0)+1,$2,$3,$4,$5,$6 FROM ministry_cost_revisions WHERE entry_id=$1`,
+			entryID, oldAmount, newAmount, strings.TrimSpace(fmt.Sprint(req.Payload["calculation_basis"])), req.Comment, u.ID); err != nil {
+			middleware.WriteError(w, 500, "ошибка сохранения истории подтверждённой стоимости")
+			return
+		}
 	}
 
 	_, err = tx.ExecContext(r.Context(),
@@ -647,6 +680,41 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	}
 
 	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"amount_rub": newAmount})
+}
+
+type mentorEntryColumns struct {
+	ID, Start, End, OrderNumber, OrderDate, Student string
+}
+
+func mentorColumns(category string, payload map[string]interface{}) mentorEntryColumns {
+	if category != "internship" && category != "employment_practice" {
+		return mentorEntryColumns{}
+	}
+	value := func(key string) string { return strings.TrimSpace(fmt.Sprint(payload[key])) }
+	return mentorEntryColumns{
+		ID: value("mentor_id"), Start: value("mentor_assignment_start"), End: value("mentor_assignment_end"),
+		OrderNumber: value("mentor_order_number"), OrderDate: value("mentor_order_date"), Student: strings.Join(strings.Fields(value("student_full_name")), " "),
+	}
+}
+
+type ministryEntryColumns struct {
+	InstructionType, Authority, InstructionReference string
+	DecisionNumber, DecisionDate, Start, Deadline    string
+	Conditions, Description, Status                  string
+}
+
+func ministryCardColumns(category string, payload map[string]interface{}) ministryEntryColumns {
+	if category != "minc_decision" {
+		return ministryEntryColumns{}
+	}
+	value := func(key string) string { return strings.TrimSpace(fmt.Sprint(payload[key])) }
+	return ministryEntryColumns{
+		InstructionType: value("instruction_type"), Authority: value("instruction_authority"),
+		InstructionReference: value("instruction_reference"), DecisionNumber: value("decision_number"),
+		DecisionDate: value("decision_date"), Start: value("implementation_start"),
+		Deadline: value("implementation_deadline"), Conditions: value("implementation_conditions"),
+		Description: value("activity_description"), Status: "complete",
+	}
 }
 
 func financialUpdateAllowed(oldPayloadRaw []byte, req updateEntryRequest, oldAudience, oldAgreementID, oldCostMethod string, oldActualAmount *money.Amount) bool {
@@ -712,6 +780,48 @@ func (h *EntryHandlers) Comments(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	writePage(w, r, out)
+}
+
+// MinistryCostHistory exposes the append-only correction trail for a Type 5
+// activity. The same tenant guard as the entry itself applies.
+func (h *EntryHandlers) MinistryCostHistory(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
+	if !requireEntry(w, r, h.DB, u, entryID) {
+		return
+	}
+	var category string
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT category_code FROM entries WHERE id=$1`, entryID).Scan(&category); err != nil {
+		middleware.WriteError(w, 404, "запись не найдена")
+		return
+	}
+	if category != "minc_decision" {
+		middleware.WriteError(w, 400, "история подтверждённой стоимости доступна только для мероприятий по Решению Минцифры")
+		return
+	}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT revision_no,previous_amount_rub,confirmed_amount_rub,calculation_basis,correction_reason,changed_by,changed_at
+		FROM ministry_cost_revisions WHERE entry_id=$1 ORDER BY revision_no DESC`, entryID)
+	if err != nil {
+		middleware.WriteError(w, 500, "ошибка чтения истории стоимости")
+		return
+	}
+	defer rows.Close()
+	items := []map[string]interface{}{}
+	for rows.Next() {
+		var revision int
+		var previous *money.Amount
+		var confirmed money.Amount
+		var basis, reason, actor string
+		var changed time.Time
+		if err := rows.Scan(&revision, &previous, &confirmed, &basis, &reason, &actor, &changed); err != nil {
+			middleware.WriteError(w, 500, "ошибка чтения истории стоимости")
+			return
+		}
+		items = append(items, map[string]interface{}{"revision_no": revision, "previous_amount_rub": previous, "confirmed_amount_rub": confirmed, "calculation_basis": basis, "correction_reason": reason, "changed_by": actor, "changed_at": changed})
+	}
+	if rows.Err() != nil {
+		middleware.WriteError(w, 500, "ошибка чтения истории стоимости")
+		return
+	}
+	middleware.WriteJSON(w, 200, items)
 }
 
 func joinAnd(conds []string) string {

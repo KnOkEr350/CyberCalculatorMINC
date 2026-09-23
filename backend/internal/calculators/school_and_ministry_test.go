@@ -125,11 +125,15 @@ func TestEducationalContentCountsPersonMonths(t *testing.T) {
 func ministryPayload() map[string]interface{} {
 	return map[string]interface{}{
 		"org_name": "partner-id", "decision_reference": "№ МЦ-П12-402 от 12.03.2026",
-		"instruction_authority": "prime_minister", "instruction_reference": "Поручение ПР-1",
-		"implementation_deadline": "2026-11-15", "activity_description": "Разработка национальной СУБД",
+		"instruction_type": "government_instruction", "instruction_authority": "prime_minister", "instruction_reference": "Поручение ПР-1",
+		"decision_number": "МЦ-П12-402", "decision_date": "2026-03-12",
+		"implementation_start": "2026-03-15", "implementation_deadline": "2026-11-15",
+		"implementation_conditions": "Передать результат по акту", "activity_description": "Разработка национальной СУБД",
 		"metric_description": "Количество переданных подсистем", "metric_unit": "модуль ПО",
 		"planned_volume": 2.0, "actual_volume": 2.0,
 		"calculation_basis": "Акт сдачи-приёмки и платёжные поручения", "amount_manual": 300000.0,
+		"decision_required_documents": "Акт сдачи-приёмки\nПлатёжное поручение",
+		"decision_provided_documents": "Акт сдачи-приёмки\nПлатёжное поручение",
 	}
 }
 
@@ -161,6 +165,10 @@ func TestMinistryDecisionDynamicMetrics(t *testing.T) {
 		{"нет подтверждённой стоимости", func(p map[string]interface{}) { delete(p, "amount_manual") }, "подтверждённую стоимость"},
 		{"нулевая стоимость", func(p map[string]interface{}) { p["amount_manual"] = 0.0 }, "подтверждённую стоимость"},
 		{"нет методики расчёта", func(p map[string]interface{}) { delete(p, "calculation_basis") }, "методику расчёта"},
+		{"вид поручения не соответствует органу", func(p map[string]interface{}) { p["instruction_type"] = "president_instruction" }, "не соответствует"},
+		{"срок раньше начала", func(p map[string]interface{}) { p["implementation_deadline"] = "2026-03-01" }, "проверьте даты"},
+		{"нет состава документов Решения", func(p map[string]interface{}) { delete(p, "decision_required_documents") }, "состав подтверждающих документов"},
+		{"лишний документ", func(p map[string]interface{}) { p["decision_provided_documents"] = "Счёт-фактура" }, "отсутствует в составе"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

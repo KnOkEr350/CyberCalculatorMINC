@@ -160,28 +160,32 @@ type AgreementResponsiblePerson struct {
 }
 
 type Agreement struct {
-	ID                  string                       `json:"id"`
-	ITCompanyID         string                       `json:"it_company_id,omitempty"`
-	PartnerIDs          []string                     `json:"partner_ids"`
-	AgreementKind       string                       `json:"agreement_kind"`
-	Number              string                       `json:"number"`
-	Status              string                       `json:"status"`
-	SignedOn            string                       `json:"signed_on"`
-	ValidFrom           string                       `json:"valid_from"`
-	ValidUntil          string                       `json:"valid_until"`
-	ROIVName            string                       `json:"roiv_name,omitempty"`
-	RegionalAuthorityID string                       `json:"regional_authority_id,omitempty"`
-	LegalEntityGroup    string                       `json:"legal_entity_group,omitempty"`
-	LegalEntityGroupID  string                       `json:"legal_entity_group_id,omitempty"`
-	SignatureMethod     string                       `json:"signature_method"`
-	SignedBy            string                       `json:"signed_by,omitempty"`
-	SignatureDate       string                       `json:"signature_date,omitempty"`
-	DocumentReference   string                       `json:"document_reference,omitempty"`
-	Notes               string                       `json:"notes,omitempty"`
-	ResponsiblePeople   []AgreementResponsiblePerson `json:"responsible_people"`
-	ActivityCodes       []string                     `json:"activity_codes"`
-	CreatedAt           time.Time                    `json:"created_at"`
-	UpdatedAt           time.Time                    `json:"updated_at"`
+	ID                          string                       `json:"id"`
+	ITCompanyID                 string                       `json:"it_company_id,omitempty"`
+	PartnerIDs                  []string                     `json:"partner_ids"`
+	AgreementKind               string                       `json:"agreement_kind"`
+	Number                      string                       `json:"number"`
+	Status                      string                       `json:"status"`
+	SignedOn                    string                       `json:"signed_on"`
+	ValidFrom                   string                       `json:"valid_from"`
+	ValidUntil                  string                       `json:"valid_until"`
+	ROIVName                    string                       `json:"roiv_name,omitempty"`
+	RegionalAuthorityID         string                       `json:"regional_authority_id,omitempty"`
+	LegalEntityGroup            string                       `json:"legal_entity_group,omitempty"`
+	LegalEntityGroupID          string                       `json:"legal_entity_group_id,omitempty"`
+	SignatureMethod             string                       `json:"signature_method"`
+	SignedBy                    string                       `json:"signed_by,omitempty"`
+	CompanySignerAuthority      string                       `json:"company_signer_authority,omitempty"`
+	CounterpartySignerName      string                       `json:"counterparty_signer_name,omitempty"`
+	CounterpartySignerPosition  string                       `json:"counterparty_signer_position,omitempty"`
+	CounterpartySignerAuthority string                       `json:"counterparty_signer_authority,omitempty"`
+	SignatureDate               string                       `json:"signature_date,omitempty"`
+	DocumentReference           string                       `json:"document_reference,omitempty"`
+	Notes                       string                       `json:"notes,omitempty"`
+	ResponsiblePeople           []AgreementResponsiblePerson `json:"responsible_people"`
+	ActivityCodes               []string                     `json:"activity_codes"`
+	CreatedAt                   time.Time                    `json:"created_at"`
+	UpdatedAt                   time.Time                    `json:"updated_at"`
 }
 
 type RegionalAuthority struct {
@@ -206,24 +210,25 @@ type ActivityCategory struct {
 }
 
 type Entry struct {
-	ID               string                 `json:"id"`
-	ITCompanyID      string                 `json:"it_company_id,omitempty"`
-	CategoryCode     string                 `json:"category_code"`
-	PartnerID        *string                `json:"partner_id,omitempty"`
-	AgreementID      string                 `json:"agreement_id"`
-	PeriodType       PeriodType             `json:"period_type"`
-	ReportYear       int                    `json:"report_year"`
-	Audience         Audience               `json:"audience"`
-	Payload          map[string]interface{} `json:"payload"`
-	AmountRub        money.Amount           `json:"amount_rub"`
-	FormulaAmountRub money.Amount           `json:"formula_amount_rub"`
-	ActualAmountRub  *money.Amount          `json:"actual_amount_rub,omitempty"`
-	CostMethod       string                 `json:"cost_method"`
-	CreatedBy        string                 `json:"created_by"`
-	UpdatedBy        *string                `json:"updated_by,omitempty"`
-	CreatedAt        time.Time              `json:"created_at"`
-	UpdatedAt        time.Time              `json:"updated_at"`
-	Compliance       compliance.Result      `json:"compliance"`
+	ID                         string                 `json:"id"`
+	ITCompanyID                string                 `json:"it_company_id,omitempty"`
+	CategoryCode               string                 `json:"category_code"`
+	PartnerID                  *string                `json:"partner_id,omitempty"`
+	AgreementID                string                 `json:"agreement_id"`
+	PeriodType                 PeriodType             `json:"period_type"`
+	ReportYear                 int                    `json:"report_year"`
+	Audience                   Audience               `json:"audience"`
+	Payload                    map[string]interface{} `json:"payload"`
+	AmountRub                  money.Amount           `json:"amount_rub"`
+	FormulaAmountRub           money.Amount           `json:"formula_amount_rub"`
+	ActualAmountRub            *money.Amount          `json:"actual_amount_rub,omitempty"`
+	CostMethod                 string                 `json:"cost_method"`
+	MinistryCardBackfillStatus string                 `json:"ministry_card_backfill_status,omitempty"`
+	CreatedBy                  string                 `json:"created_by"`
+	UpdatedBy                  *string                `json:"updated_by,omitempty"`
+	CreatedAt                  time.Time              `json:"created_at"`
+	UpdatedAt                  time.Time              `json:"updated_at"`
+	Compliance                 compliance.Result      `json:"compliance"`
 }
 
 type LegalEntityGroupMember struct {

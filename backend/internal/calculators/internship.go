@@ -3,6 +3,8 @@ package calculators
 import (
 	"fmt"
 	"math"
+	"strings"
+	"time"
 
 	"cybercalc/internal/models"
 )
@@ -53,6 +55,8 @@ func (internshipCalc) Fields() []FieldSpec {
 		{Key: "period", Label: "Период проведения", Type: "text"},
 		{Key: "period_start", Label: "Дата начала", Type: "date"},
 		{Key: "period_end", Label: "Дата окончания", Type: "date"},
+		{Key: "mentor_assignment_start", Label: "Наставник назначен с", Type: "date", Required: true},
+		{Key: "mentor_assignment_end", Label: "Наставник назначен по", Type: "date", Required: true},
 		{Key: "specialty_code", Label: "Код ИТ-специальности по приказу № 27", Type: "text"},
 		{Key: "duration_months", Label: "Продолжительность, мес.", Type: "number", Required: true},
 		{Key: "student_load_hours_per_month", Label: "Нагрузка студента, ч/мес", Type: "number", Required: true},
@@ -61,11 +65,17 @@ func (internshipCalc) Fields() []FieldSpec {
 		{Key: "internship_agreement_reference", Label: "Реквизиты договора о стажировке", Type: "text", MaxLength: 1000},
 		{Key: "labor_contract_number", Label: "Номер трудового договора", Type: "text", MaxLength: 100},
 		{Key: "labor_contract_date", Label: "Дата трудового договора", Type: "date"},
-		{Key: "mentor_order_reference", Label: "Реквизиты приказа о наставнике", Type: "text", MaxLength: 1000},
+		{Key: "mentor_order_number", Label: "Номер приказа о наставнике", Type: "text", Required: true, MaxLength: 100},
+		{Key: "mentor_order_date", Label: "Дата приказа о наставнике", Type: "date", Required: true},
+		{Key: "mentor_order_reference", Label: "Дополнительные реквизиты приказа о наставнике", Type: "text", MaxLength: 1000},
 		{Key: "individual_program_reference", Label: "Индивидуальная программа / табель", Type: "text", MaxLength: 1000},
 		{Key: "incoming_certificate_reference", Label: "Входящая справка", Type: "text", MaxLength: 1000},
 		{Key: "outgoing_certificate_reference", Label: "Итоговая справка", Type: "text", MaxLength: 1000},
 	}
+}
+
+func (internshipCalc) Validate(payload map[string]interface{}) error {
+	return validateMentorAppointment(payload)
 }
 
 func (employmentPracticeCalc) Fields() []FieldSpec {
@@ -85,6 +95,9 @@ func (employmentPracticeCalc) Fields() []FieldSpec {
 }
 
 func (employmentPracticeCalc) Validate(payload map[string]interface{}) error {
+	if err := validateMentorAppointment(payload); err != nil {
+		return err
+	}
 	contractType, err := str(payload, "labor_contract_type")
 	if err != nil {
 		return err
@@ -113,6 +126,39 @@ func (employmentPracticeCalc) Validate(payload map[string]interface{}) error {
 		return fmt.Errorf("укажите рабочих часов в неделю: без них не проверить нормы ТК РФ")
 	}
 	return validateWorkingTimeLimit(age, hours)
+}
+
+func validateMentorAppointment(payload map[string]interface{}) error {
+	startRaw, err := str(payload, "mentor_assignment_start")
+	if err != nil {
+		return fmt.Errorf("укажите дату начала назначения наставника")
+	}
+	endRaw, err := str(payload, "mentor_assignment_end")
+	if err != nil {
+		return fmt.Errorf("укажите дату окончания назначения наставника")
+	}
+	start, startErr := time.Parse("2006-01-02", startRaw)
+	end, endErr := time.Parse("2006-01-02", endRaw)
+	if startErr != nil || endErr != nil || end.Before(start) {
+		return fmt.Errorf("период назначения наставника должен быть корректным и неотрицательным")
+	}
+	if periodStart, ok := payload["period_start"].(string); ok && strings.TrimSpace(periodStart) != "" && startRaw > periodStart {
+		return fmt.Errorf("наставник должен быть назначен не позднее начала мероприятия")
+	}
+	if periodEnd, ok := payload["period_end"].(string); ok && strings.TrimSpace(periodEnd) != "" && endRaw < periodEnd {
+		return fmt.Errorf("назначение наставника должно покрывать весь период мероприятия")
+	}
+	if _, err := str(payload, "mentor_order_number"); err != nil {
+		return fmt.Errorf("укажите номер приказа о назначении наставника")
+	}
+	orderDate, err := str(payload, "mentor_order_date")
+	if err != nil {
+		return fmt.Errorf("укажите дату приказа о назначении наставника")
+	}
+	if parsed, parseErr := time.Parse("2006-01-02", orderDate); parseErr != nil || parsed.After(start) {
+		return fmt.Errorf("приказ о наставнике должен быть издан не позднее начала назначения")
+	}
+	return nil
 }
 
 // minimumEmploymentAge — трудовой договор с обучающимся заключается не

@@ -70,6 +70,7 @@ func TestBuildRoutesMountsAllProtectedModuleRoutes(t *testing.T) {
 		{http.MethodPost, "/api/entries"},
 		{http.MethodPut, "/api/entries/example"},
 		{http.MethodGet, "/api/entries/example/comments"},
+		{http.MethodGet, "/api/entries/example/cost-history"},
 		{http.MethodGet, "/api/staff-members"},
 		{http.MethodPost, "/api/staff-members"},
 		{http.MethodPut, "/api/staff-members/example"},

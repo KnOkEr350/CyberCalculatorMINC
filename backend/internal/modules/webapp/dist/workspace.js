@@ -87,7 +87,11 @@ function agreementFieldsMarkup(prefix, agreement = {}, withPartners = false) {
     <div class="field" id="${prefix}-roiv-box"><label>Региональный орган управления образованием *</label><select id="${prefix}-roiv-authority"><option value="">— Выберите РОИВ —</option>${state.regionalAuthorities.map((authority) => `<option value="${authority.id}" ${authority.id === agreement.regional_authority_id ? "selected" : ""} ${authority.status === "active" ? "" : "disabled"}>${escapeHTML(authority.region)} — ${escapeHTML(authority.name)}</option>`).join("")}</select><div class="field-hint">РОИВ ведётся отдельно и связывает соглашение со школами и их мероприятиями.</div></div>
     <div class="field"><label>Группа юридических лиц</label><select id="${prefix}-group-id"><option value="">Без договора о взаимодействии</option>${(state.legalEntityGroups || []).map((group) => `<option value="${group.id}" ${group.id === agreement.legal_entity_group_id ? "selected" : ""}>${escapeHTML(group.name)} · договор № ${escapeHTML(group.interaction_agreement_number)}</option>`).join("")}</select>${agreement.legal_entity_group && !agreement.legal_entity_group_id ? `<div class="field-hint">Legacy-значение: ${escapeHTML(agreement.legal_entity_group)}</div>` : ""}</div>
     <div class="field"><label>Способ подписания *</label><select id="${prefix}-signature"><option value="unsigned">Не подписано</option><option value="paper">Бумажный документ</option><option value="qualified_electronic">УКЭП</option><option value="goskey">Госключ</option></select></div>
-    <div class="field"><label>Подписант (обязательно для действующего)</label><input id="${prefix}-signed-by" maxlength="300" value="${escapeHTML(agreement.signed_by || "")}"></div>
+    <div class="field"><label>Подписант ИТ-компании</label><input id="${prefix}-signed-by" maxlength="300" value="${escapeHTML(agreement.signed_by || "")}"></div>
+    <div class="field"><label>Основание полномочий подписанта ИТ-компании</label><input id="${prefix}-company-authority" maxlength="1000" value="${escapeHTML(agreement.company_signer_authority || "")}" placeholder="Устав / доверенность № …"></div>
+    <div class="field"><label>Подписант контрагента</label><input id="${prefix}-counterparty-signer" maxlength="300" value="${escapeHTML(agreement.counterparty_signer_name || "")}"></div>
+    <div class="field"><label>Должность подписанта контрагента</label><input id="${prefix}-counterparty-position" maxlength="300" value="${escapeHTML(agreement.counterparty_signer_position || "")}"></div>
+    <div class="field"><label>Основание полномочий подписанта контрагента</label><input id="${prefix}-counterparty-authority" maxlength="1000" value="${escapeHTML(agreement.counterparty_signer_authority || "")}" placeholder="Устав / положение / доверенность № …"></div>
     <div class="field"><label>Дата подписания (обязательно для действующего)</label><input type="date" id="${prefix}-signature-date" value="${escapeHTML(agreement.signature_date || "")}"></div>
     <div class="field"><label>Ссылка / реквизиты документа</label><input id="${prefix}-document" maxlength="1000" value="${escapeHTML(agreement.document_reference || "")}"></div>
   </div>
@@ -136,6 +140,9 @@ function wireAgreementFields(root, prefix, agreement = {}) {
     const firstActivity = activityInputs.find((input) => !input.disabled);
     if (firstActivity) firstActivity.setCustomValidity(activityInputs.some((input) => !input.disabled && input.checked) ? "" : "Выберите хотя бы один вид мероприятия");
     root.querySelector(`#${prefix}-signed-by`).required = active;
+    root.querySelector(`#${prefix}-company-authority`).required = active;
+    root.querySelector(`#${prefix}-counterparty-signer`).required = active;
+    root.querySelector(`#${prefix}-counterparty-authority`).required = active;
     root.querySelector(`#${prefix}-signature-date`).required = active;
     root.querySelector(`#${prefix}-people-cp`).required = active;
     root.querySelector(`#${prefix}-people-other`).required = active;
@@ -186,6 +193,10 @@ function collectAgreement(root, prefix, partnerIDs) {
     legal_entity_group_id: root.querySelector(`#${prefix}-group-id`).value,
     signature_method: root.querySelector(`#${prefix}-signature`).value,
     signed_by: root.querySelector(`#${prefix}-signed-by`).value.trim(),
+    company_signer_authority: root.querySelector(`#${prefix}-company-authority`).value.trim(),
+    counterparty_signer_name: root.querySelector(`#${prefix}-counterparty-signer`).value.trim(),
+    counterparty_signer_position: root.querySelector(`#${prefix}-counterparty-position`).value.trim(),
+    counterparty_signer_authority: root.querySelector(`#${prefix}-counterparty-authority`).value.trim(),
     signature_date: root.querySelector(`#${prefix}-signature-date`).value,
     document_reference: root.querySelector(`#${prefix}-document`).value.trim(),
     notes: root.querySelector(`#${prefix}-notes`).value.trim(),

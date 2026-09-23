@@ -359,9 +359,19 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 		return
 	}
 	if req.Key != "audit_log_retention_days" && req.Key != "attachment_retention_days" &&
-		req.Key != "system_owner_role" && req.Key != settingMFARequired && req.Key != settingMFAGraceHours {
+		req.Key != "session_idle_timeout_minutes" && req.Key != "system_owner_role" && req.Key != settingMFARequired && req.Key != settingMFAGraceHours {
 		middleware.WriteError(w, http.StatusBadRequest, "неизвестная настройка")
 		return
+	}
+	if req.Key == "session_idle_timeout_minutes" {
+		if admin.Role != models.RoleSuperAdmin {
+			middleware.WriteError(w, http.StatusForbidden, "тайм-аут бездействия меняет только системный администратор")
+			return
+		}
+		if minutes, err := strconv.Atoi(req.Value); err != nil || minutes < 5 || minutes > 1440 {
+			middleware.WriteError(w, http.StatusBadRequest, "тайм-аут бездействия задаётся минутами от 5 до 1440")
+			return
+		}
 	}
 	// SEC-02: режим инстанса определяет, кого система считает контрагентом, и
 	// меняет смысл всего реестра партнёров. Такое переключение — полномочие

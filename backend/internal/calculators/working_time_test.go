@@ -66,6 +66,8 @@ func practicePayload() map[string]interface{} {
 		"mentor_load_hours_per_month": json.Number("30"),
 		"labor_contract_type":         "fixed_term", "labor_contract_number": "88-ТД", "labor_contract_date": "2026-05-30",
 		"practice_agreement_number": "ПР-12", "practice_agreement_date": "2026-05-15",
+		"mentor_assignment_start": "2026-06-01", "mentor_assignment_end": "2026-07-31",
+		"mentor_order_number": "12-ОК", "mentor_order_date": "2026-05-28",
 		"student_age": json.Number("19"), "weekly_hours": json.Number("30"),
 	}
 }

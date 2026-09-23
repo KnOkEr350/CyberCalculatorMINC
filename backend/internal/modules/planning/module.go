@@ -55,6 +55,9 @@ func (m *Module) registerActivityRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/entries/{id}/comments", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.entries.Comments(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("GET /api/entries/{id}/cost-history", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.entries.MinistryCostHistory(w, r, u, r.PathValue("id"))
+	}))
 }
 
 func (m *Module) registerTeachingRoutes(mux *http.ServeMux) {

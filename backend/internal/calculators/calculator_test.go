@@ -307,6 +307,8 @@ func TestEmploymentPracticeRequiresFixedTermLaborContract(t *testing.T) {
 		"labor_contract_type": "fixed_term", "labor_contract_number": "ТД-42", "labor_contract_date": "2026-09-01",
 		"practice_agreement_number": "ПР-12", "practice_agreement_date": "2026-05-15",
 		"practice_agreement_start_date": "2026-06-01", "practice_agreement_end_date": "2026-07-31",
+		"mentor_assignment_start": "2026-06-01", "mentor_assignment_end": "2026-07-31",
+		"mentor_order_number": "12-ОК", "mentor_order_date": "2026-05-28",
 		// PRA-04: практика подтверждается нормами ТК РФ, поэтому возраст и
 		// недельные часы обязательны.
 		"student_age": 19.0, "weekly_hours": 30.0,

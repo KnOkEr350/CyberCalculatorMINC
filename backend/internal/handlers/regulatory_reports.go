@@ -476,7 +476,10 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 	var number, signed, partnerName, partnerINN, companyName, companyINN, companyOGRN, address, director string
-	err := h.DB.QueryRowContext(r.Context(), `SELECT a.number,a.signed_on::text,p.name,COALESCE(d.inn,''),c.name,c.inn,c.ogrn,c.legal_address,c.director_name FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id JOIN partners p ON p.id=ap.partner_id LEFT JOIN education_directory d ON d.id=p.directory_id JOIN accredited_it_companies c ON c.id=a.it_company_id WHERE a.id::text=$1 AND p.id::text=$2 AND c.id::text=$3`, agreement, partner, company).Scan(&number, &signed, &partnerName, &partnerINN, &companyName, &companyINN, &companyOGRN, &address, &director)
+	var companyAuthority, counterpartySigner, counterpartyPosition, counterpartyAuthority string
+	err := h.DB.QueryRowContext(r.Context(), `SELECT a.number,a.signed_on::text,p.name,COALESCE(d.inn,''),c.name,c.inn,c.ogrn,c.legal_address,COALESCE(NULLIF(a.signed_by,''),c.director_name),
+		COALESCE(a.company_signer_authority,''),COALESCE(a.counterparty_signer_name,''),COALESCE(a.counterparty_signer_position,''),COALESCE(a.counterparty_signer_authority,'')
+		FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id JOIN partners p ON p.id=ap.partner_id LEFT JOIN education_directory d ON d.id=p.directory_id JOIN accredited_it_companies c ON c.id=a.it_company_id WHERE a.id::text=$1 AND p.id::text=$2 AND c.id::text=$3`, agreement, partner, company).Scan(&number, &signed, &partnerName, &partnerINN, &companyName, &companyINN, &companyOGRN, &address, &director, &companyAuthority, &counterpartySigner, &counterpartyPosition, &counterpartyAuthority)
 	if err != nil {
 		middleware.WriteError(w, 404, "соглашение не найдено")
 		return
@@ -485,7 +488,8 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 		Kind: kind, Number: number, SignedOn: signed, Year: year,
 		PartnerName: partnerName, PartnerINN: partnerINN,
 		CompanyName: companyName, CompanyINN: companyINN, CompanyOGRN: companyOGRN,
-		CompanyAddress: address, CompanyDirector: director,
+		CompanyAddress: address, CompanyDirector: director, CompanySignerAuthority: companyAuthority,
+		CounterpartySigner: counterpartySigner, CounterpartySignerPosition: counterpartyPosition, CounterpartySignerAuthority: counterpartyAuthority,
 	}
 	body, err := docx.Document(agreementTemplateTitle(kind), agreementTemplateBlocks(party))
 	if err != nil {
@@ -503,6 +507,10 @@ type agreementParty struct {
 	PartnerName, PartnerINN              string
 	CompanyName, CompanyINN, CompanyOGRN string
 	CompanyAddress, CompanyDirector      string
+	CompanySignerAuthority               string
+	CounterpartySigner                   string
+	CounterpartySignerPosition           string
+	CounterpartySignerAuthority          string
 }
 
 func agreementTemplateTitle(kind string) string {
@@ -530,9 +538,9 @@ func agreementTemplateBlocks(party agreementParty) []docx.Block {
 		docx.Paragraph(fmt.Sprintf("№ %s от %s", value(party.Number, "____"), formatRuDate(party.SignedOn))),
 		docx.Paragraph(""),
 		docx.Paragraph(fmt.Sprintf(
-			"%s, именуемое в дальнейшем «%s», в лице ____________________, действующего на основании ____________________, с одной стороны, и %s, именуемое в дальнейшем «Организация», в лице %s, действующего на основании ____________________, с другой стороны, совместно именуемые «Стороны», заключили настоящее Соглашение о нижеследующем.",
-			value(party.PartnerName, "____________________"), counterparty,
-			value(party.CompanyName, "____________________"), value(party.CompanyDirector, "____________________"))),
+			"%s, именуемое в дальнейшем «%s», в лице %s, действующего на основании %s, с одной стороны, и %s, именуемое в дальнейшем «Организация», в лице %s, действующего на основании %s, с другой стороны, совместно именуемые «Стороны», заключили настоящее Соглашение о нижеследующем.",
+			value(party.PartnerName, "____________________"), counterparty, value(party.CounterpartySigner, "____________________"), value(party.CounterpartySignerAuthority, "____________________"),
+			value(party.CompanyName, "____________________"), value(party.CompanyDirector, "____________________"), value(party.CompanySignerAuthority, "____________________"))),
 		docx.Paragraph(""),
 		docx.Heading("1. Предмет Соглашения"),
 		docx.Paragraph(fmt.Sprintf(
@@ -543,7 +551,7 @@ func agreementTemplateBlocks(party agreementParty) []docx.Block {
 		docx.Paragraph(fmt.Sprintf("%s: %s", counterparty, value(party.PartnerName, "____________________"))),
 		docx.Paragraph(fmt.Sprintf("ИНН: %s", value(party.PartnerINN, "__________"))),
 		docx.Paragraph("Адрес в пределах места нахождения: ____________________"),
-		docx.Paragraph("Руководитель ____________________ / ____________________"),
+		docx.Paragraph(fmt.Sprintf("%s ____________________ / %s", value(party.CounterpartySignerPosition, "Руководитель"), value(party.CounterpartySigner, "____________________"))),
 		docx.Paragraph(""),
 		docx.Paragraph(fmt.Sprintf("Организация: %s", value(party.CompanyName, "____________________"))),
 		docx.Paragraph(fmt.Sprintf("ИНН: %s, ОГРН: %s", value(party.CompanyINN, "__________"), value(party.CompanyOGRN, "_____________"))),

@@ -418,9 +418,9 @@ func (f *Factory) CreateAgreement(ctx context.Context, params AgreementParams) (
 		validUntil := time.Date(f.now.Year()+2, 12, 31, 0, 0, 0, 0, time.UTC)
 		if err := txFactory.db.QueryRowContext(ctx, `INSERT INTO agreements(
 			agreement_kind,number,status,signed_on,valid_from,valid_until,regional_authority_id,roiv_name,
-			it_company_id,signature_method,signed_by,signature_date,document_reference,created_by,updated_by
+			it_company_id,signature_method,signed_by,company_signer_authority,counterparty_signer_name,counterparty_signer_position,counterparty_signer_authority,signature_date,document_reference,created_by,updated_by
 		) VALUES($1,$2,'active',$3,$3,$4,NULLIF($5,'')::uuid,NULLIF($6,''),$7::uuid,
-			'qualified_electronic','Тестовый подписант',$3,'shared test fixture',$8::uuid,$8::uuid)
+			'qualified_electronic','Тестовый подписант','Устав','Подписант контрагента','Руководитель','Устав',$3,'shared test fixture',$8::uuid,$8::uuid)
 			RETURNING id::text`, params.Kind, params.Number, signedOn, validUntil, params.RegionalAuthorityID,
 			params.RegionalAuthority, params.CompanyID, params.CreatedBy).Scan(&record.ID); err != nil {
 			return fmt.Errorf("create agreement fixture: %w", err)

@@ -159,6 +159,9 @@ func TestNormalizeActiveAgreement(t *testing.T) {
 			{Party: "counterparty", FullName: "Сидоров Сидор Сидорович"},
 		},
 	}
+	req.CompanySignerAuthority = "Устав"
+	req.CounterpartySignerName = "Петров Пётр Петрович"
+	req.CounterpartySignerAuthority = "Устав"
 	agreement, err := normalizeAgreement(req)
 	if err != nil {
 		t.Fatal(err)
@@ -203,6 +206,9 @@ func TestRegionalAuthorityValidation(t *testing.T) {
 		PartnerIDs: []string{"school-id"}, AgreementKind: "roiv", Number: "РОИВ-1", Status: "draft",
 		SignedOn: "2026-01-01", ValidFrom: "2026-01-01", ValidUntil: "2026-12-31", SignatureMethod: "unsigned",
 	}
+	agreement.CompanySignerAuthority = "Устав"
+	agreement.CounterpartySignerName = "Петров Пётр Петрович"
+	agreement.CounterpartySignerAuthority = "Устав"
 	if _, err = normalizeAgreement(agreement); err == nil {
 		t.Fatal("ROIV agreement without regional authority accepted")
 	}

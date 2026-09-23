@@ -81,7 +81,7 @@ func TestMentorMustBelongToPartner(t *testing.T) {
 	for _, category := range []string{"internship", "employment_practice"} {
 		t.Run(category, func(t *testing.T) {
 			payload := map[string]interface{}{"mentor_id": ownMentor, "mentor_full_name": "Подменённое Имя Отчество"}
-			if err := handlers.validateMentor(request, category, own.partner, payload); err != nil {
+			if err := handlers.validateMentor(request, category, own.partner, "", payload); err != nil {
 				t.Fatalf("наставник своей ОО должен приниматься: %v", err)
 			}
 			if payload["mentor_full_name"] != sharedName {
@@ -89,12 +89,12 @@ func TestMentorMustBelongToPartner(t *testing.T) {
 			}
 
 			// Наставник другого партнёра — потерянная связь.
-			if err := handlers.validateMentor(request, category, own.partner, map[string]interface{}{"mentor_id": foreignMentor}); err == nil {
+			if err := handlers.validateMentor(request, category, own.partner, "", map[string]interface{}{"mentor_id": foreignMentor}); err == nil {
 				t.Fatal("наставник другой ОО не должен приниматься")
 			}
 			// Разрешение по ФИО не должно перескакивать к тёзке чужой ОО.
 			byName := map[string]interface{}{"mentor_full_name": sharedName}
-			if err := handlers.validateMentor(request, category, own.partner, byName); err != nil {
+			if err := handlers.validateMentor(request, category, own.partner, "", byName); err != nil {
 				t.Fatalf("наставник своей ОО должен находиться по ФИО: %v", err)
 			}
 			if byName["mentor_id"] != ownMentor {
@@ -103,7 +103,7 @@ func TestMentorMustBelongToPartner(t *testing.T) {
 			// У арендатора с пустым справочником поиск по тому же ФИО не
 			// должен находить чужую запись.
 			blank := newTenant(ctx, t, testfixtures.New(db, t.Name()+"-blank"))
-			if err := handlers.validateMentor(request, category, blank.partner, map[string]interface{}{"mentor_full_name": sharedName}); err == nil {
+			if err := handlers.validateMentor(request, category, blank.partner, "", map[string]interface{}{"mentor_full_name": sharedName}); err == nil {
 				t.Fatal("пустой справочник не должен подтягивать наставника другой ОО")
 			}
 		})
