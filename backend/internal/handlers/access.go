@@ -3,6 +3,7 @@ package handlers
 import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+	"cybercalc/internal/rbac"
 	"database/sql"
 	"net/http"
 )
@@ -48,12 +49,7 @@ func canPrepareReports(u middleware.AuthUser) bool {
 	if u.EntityType == models.EntityEduInst {
 		return false
 	}
-	switch u.Role {
-	case models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator:
-		return true
-	default:
-		return false
-	}
+	return rbac.Allows(u.Role, rbac.PrepareReports)
 }
 
 func canEditEntryCategory(u middleware.AuthUser, category string) bool {
@@ -81,13 +77,7 @@ func canEditAnyEntry(u middleware.AuthUser) bool {
 	if u.EntityType == models.EntityEduInst {
 		return false
 	}
-	switch u.Role {
-	case models.RoleSuperAdmin, models.RoleHoldingAdmin, models.RoleOrgAdmin, models.RoleCurator,
-		models.RoleHRSpecialist, models.RoleFinancialSpecialist:
-		return true
-	default:
-		return false
-	}
+	return rbac.Allows(u.Role, rbac.EditAnyEntry)
 }
 
 func canCreateEntryCategory(u middleware.AuthUser, category string) bool {
@@ -99,7 +89,7 @@ func canCreateEntryCategory(u middleware.AuthUser, category string) bool {
 }
 
 func canCreateAnyEntry(u middleware.AuthUser) bool {
-	return canPrepareReports(u) || (u.EntityType != models.EntityEduInst && u.Role == models.RoleHRSpecialist)
+	return u.EntityType != models.EntityEduInst && rbac.Allows(u.Role, rbac.CreateAnyEntry)
 }
 
 func canUploadDocument(u middleware.AuthUser, category, documentType string) bool {
@@ -150,11 +140,11 @@ func canReviewReport(u middleware.AuthUser, period string) bool {
 }
 
 func canApproveReports(u middleware.AuthUser) bool {
-	return u.EntityType != models.EntityEduInst && (u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin || u.Role == models.RoleOrgAdmin)
+	return u.EntityType != models.EntityEduInst && rbac.Allows(u.Role, rbac.ApproveReports)
 }
 
 func canManageITCompanies(u middleware.AuthUser) bool {
-	return u.Role == models.RoleSuperAdmin || u.Role == models.RoleHoldingAdmin
+	return rbac.Allows(u.Role, rbac.ManageITCompanies)
 }
 
 func canViewITCompanies(u middleware.AuthUser) bool {
@@ -183,11 +173,11 @@ func canManagePartnerStructure(u middleware.AuthUser) bool {
 }
 
 func canProposeEducationDirectory(u middleware.AuthUser) bool {
-	return u.Role == models.RoleOrgAdmin && u.EntityType == models.EntityOrganization
+	return u.EntityType == models.EntityOrganization && rbac.Allows(u.Role, rbac.ProposeEducationDirectory)
 }
 
 func canApproveEducationDirectory(u middleware.AuthUser) bool {
-	return u.Role == models.RoleSuperAdmin && u.EntityType == models.EntityOrganization
+	return u.EntityType == models.EntityOrganization && rbac.Allows(u.Role, rbac.ApproveEducationDirectory)
 }
 func canAccessPartner(u middleware.AuthUser, id string) bool {
 	if u.EntityType == models.EntityEduInst {

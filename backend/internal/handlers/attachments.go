@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"cybercalc/internal/compliance"
 	"cybercalc/internal/filestore"
@@ -29,14 +28,6 @@ type AttachmentHandlers struct {
 
 const maxAttachmentSize int64 = 20 << 20
 const maxAttachmentCount = 20
-
-func randomHex(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
 
 // Optional attachments for plan and fact. One batch is all-or-nothing.
 func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, entryID string) {
@@ -93,6 +84,8 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	type stagedFile struct {
 		name, path, contentSHA256 string
 		size                      int64
+		// shared — байты уже лежали в хранилище до этой загрузки.
+		shared bool
 	}
 	staged := make([]stagedFile, 0, len(headers))
 	// Files are unreferenced until the short metadata transaction commits.
@@ -101,6 +94,9 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	defer func() {
 		if !commitAttempted {
 			for _, f := range staged {
+				if f.shared {
+					continue
+				}
 				if err := filestore.Remove(h.UploadDir, f.path); err != nil && !os.IsNotExist(err) {
 					slog.Error("staged file cleanup failed", "entry_id", entryID)
 				}
@@ -117,28 +113,29 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 400, "не удалось прочитать файл")
 			return
 		}
-		filename, err := randomHex(16)
-		if err != nil {
-			src.Close()
-			middleware.WriteError(w, 500, "ошибка создания файла")
-			return
-		}
-		dst, path, err := filestore.Create(h.UploadDir, entryID, filename)
-		if err != nil {
-			src.Close()
-			middleware.WriteError(w, 500, "не удалось сохранить файл")
-			return
-		}
-		digest := sha256.New()
-		staged = append(staged, stagedFile{name: header.Filename, path: path, size: header.Size})
-		size, copyErr := io.Copy(io.MultiWriter(dst, digest), io.LimitReader(src, maxAttachmentSize+1))
-		closeErr := dst.Close()
+		// STORE-01: файл адресуется своим SHA-256 и пишется потоково с
+		// атомарным переименованием. Одинаковые байты занимают один blob,
+		// поэтому повторная загрузка того же документа не удваивает хранилище.
+		blob, blobErr := filestore.CreateBlob(h.UploadDir, src, maxAttachmentSize)
 		src.Close()
-		if copyErr != nil || closeErr != nil || size != header.Size {
+		if blobErr != nil {
 			middleware.WriteError(w, 500, "ошибка записи файла")
 			return
 		}
-		staged[len(staged)-1].contentSHA256 = hex.EncodeToString(digest.Sum(nil))
+		path := blob.Path
+		if blob.Size != header.Size {
+			if !blob.Deduplicated {
+				if err := filestore.Remove(h.UploadDir, path); err != nil && !os.IsNotExist(err) {
+					slog.Error("staged blob cleanup failed", "entry_id", entryID)
+				}
+			}
+			middleware.WriteError(w, 500, "ошибка записи файла")
+			return
+		}
+		// Дедуплицированный blob уже принадлежит другим вложениям: его нельзя
+		// удалять при откате этой загрузки.
+		staged = append(staged, stagedFile{name: header.Filename, path: path, size: header.Size,
+			contentSHA256: blob.SHA256, shared: blob.Deduplicated})
 		if err := filestore.Validate(header.Filename, path, h.UploadDir); err != nil {
 			middleware.WriteError(w, 400, err.Error())
 			return

@@ -26,4 +26,5 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/settings", middleware.RequireAdmin(m.db, m.handler.GetSettings))
 	mux.HandleFunc("POST /api/admin/settings", middleware.RequireAdmin(m.db, m.handler.UpdateSetting))
 	mux.HandleFunc("GET /api/admin/logs", middleware.RequireAdmin(m.db, m.handler.AuditLog))
+	mux.HandleFunc("GET /api/admin/logs/export", middleware.RequireAdmin(m.db, m.handler.ExportAuditLog))
 }

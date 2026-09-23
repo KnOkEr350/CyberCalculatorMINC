@@ -69,6 +69,13 @@ func purgeExpiredAttachments(db *sql.DB, root string) {
 		log.Printf("retention metadata: %v", err)
 		return
 	}
+	DrainDeletionQueue(ctx, db, root)
+}
+
+// DrainDeletionQueue освобождает файлы, на которые больше не ссылается ни одно
+// вложение. Вынесена отдельно, потому что это единственное место, где файл
+// действительно исчезает с диска, и его поведение проверяется тестом.
+func DrainDeletionQueue(ctx context.Context, db *sql.DB, root string) {
 	for i := 0; i < 500; i++ {
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
@@ -81,10 +88,22 @@ func purgeExpiredAttachments(db *sql.DB, root string) {
 			tx.Rollback()
 			return
 		}
-		if err := filestore.Remove(root, path); err != nil && !os.IsNotExist(err) {
+		// STORE-01: содержимое адресуется хешем, поэтому один blob может
+		// принадлежать нескольким вложениям. Удаление последней ссылки
+		// освобождает файл, удаление любой другой — нет, иначе исчезли бы
+		// подтверждающие документы, срок хранения которых ещё не истёк.
+		var referenced bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_path=$1)`, path).Scan(&referenced); err != nil {
 			tx.Rollback()
-			log.Printf("retention: file deletion failed for job %d", id)
+			log.Printf("retention: reference check failed for job %d", id)
 			return
+		}
+		if !referenced {
+			if err := filestore.Remove(root, path); err != nil && !os.IsNotExist(err) {
+				tx.Rollback()
+				log.Printf("retention: file deletion failed for job %d", id)
+				return
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM file_deletion_queue WHERE id=$1`, id); err != nil {
 			tx.Rollback()
