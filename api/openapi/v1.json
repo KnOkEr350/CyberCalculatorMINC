@@ -3321,6 +3321,9 @@
           "fact_by_category": true,
           "category_filter": true,
           "audience_filter": true,
+          "semester_filter": true,
+          "term_filter": true,
+          "light_filter": true,
           "risk_buckets": true,
           "mandatory_higher_education": true
         },

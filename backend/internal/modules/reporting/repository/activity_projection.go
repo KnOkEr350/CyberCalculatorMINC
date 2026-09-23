@@ -55,6 +55,13 @@ func (r *ActivityProjection) List(ctx context.Context, filter activityprojection
 		return nil, fmt.Errorf("activity projection: unsupported period %q", filter.Period)
 	}
 
+	if filter.Semester < 0 || filter.Semester > 13 {
+		return nil, fmt.Errorf("activity projection: semester is outside 1-13")
+	}
+	if filter.Term != "" && filter.Term != "autumn" && filter.Term != "spring" {
+		return nil, fmt.Errorf("activity projection: unsupported term %q", filter.Term)
+	}
+
 	rows, err := r.db.QueryContext(ctx, `SELECT e.id::text,COALESCE(e.it_company_id::text,''),COALESCE(e.partner_id::text,''),
 		COALESCE(e.agreement_id::text,''),e.category_code,e.audience,e.report_year,e.period_type,
 		e.amount_rub,e.formula_amount_rub,e.payload,COALESCE(eligibility.eligible,false),
@@ -67,8 +74,10 @@ func (r *ActivityProjection) List(ctx context.Context, filter activityprojection
 		AND ($3='' OR e.it_company_id=NULLIF($3,'')::uuid) AND ($4='' OR e.partner_id::text=$4)
 		AND ($5='' OR e.agreement_id::text=$5) AND ($6='' OR e.category_code=$6)
 		AND ($7='' OR e.audience=$7)
+		AND ($8=0 OR (CASE WHEN e.payload->>'semester' ~ '^[0-9]{1,2}$' THEN (e.payload->>'semester')::int END)=$8)
+		AND ($9='' OR (CASE WHEN e.payload->>'semester' ~ '^[0-9]{1,2}$' THEN (e.payload->>'semester')::int % 2 END)=CASE $9 WHEN 'autumn' THEN 1 ELSE 0 END)
 		ORDER BY e.report_year,e.period_type,e.category_code,e.id`,
-		filter.ReportYear, filter.Period, filter.TenantID, filter.PartnerID, filter.AgreementID, filter.CategoryCode, filter.Audience)
+		filter.ReportYear, filter.Period, filter.TenantID, filter.PartnerID, filter.AgreementID, filter.CategoryCode, filter.Audience, filter.Semester, filter.Term)
 	if err != nil {
 		return nil, err
 	}

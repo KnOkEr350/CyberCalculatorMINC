@@ -641,6 +641,20 @@ async function renderSettingsTasks(box) {
 
 // ------------------------------------------------------------- DASHBOARD --
 
+// Срезы заготовки МЦ «Светофор»: семестр или его сезон (нечётные — осенние,
+// чётные — весенние) и цвет светофора по вероятности подтверждения.
+const DASHBOARD_SEMESTER_OPTIONS = [["", "Все семестры"], ["autumn", "Осенние (нечётные)"], ["spring", "Весенние (чётные)"], ...Array.from({ length: 13 }, (_, index) => [String(index + 1), `Семестр ${index + 1}`])];
+const DASHBOARD_LIGHT_OPTIONS = [["", "Любая вероятность"], ["green", "Можем подтвердить сейчас"], ["yellow", "Подтвердим, есть вопросы"], ["red", "Низкая вероятность"]];
+
+function dashboardSliceParams() {
+  const semester = state.dashboardSemester || "";
+  const params = {};
+  if (semester === "autumn" || semester === "spring") params.term = semester;
+  else if (semester) params.semester = semester;
+  if (state.dashboardLight) params.light = state.dashboardLight;
+  return params;
+}
+
 async function renderDashboard(root) {
   root.appendChild(el(`<div class="muted">Загрузка дашборда…</div>`));
   const fixedEducationPartner = isEducationReviewer();
@@ -648,7 +662,7 @@ async function renderDashboard(root) {
   let d;
   try {
     d = await api(
-      `/dashboard?${new URLSearchParams({ report_year: state.year, partner_id: state.partnerID, category_code: state.dashboardCategory, audience: state.dashboardAudience, hide_zero: state.dashboardHideZero ? "1" : "" })}`,
+      `/dashboard?${new URLSearchParams({ report_year: state.year, partner_id: state.partnerID, category_code: state.dashboardCategory, audience: state.dashboardAudience, hide_zero: state.dashboardHideZero ? "1" : "", ...dashboardSliceParams() })}`,
     );
   } catch (e) {
     root.innerHTML = `<div class="error">${escapeHTML(e.message)}</div>`;
@@ -809,6 +823,8 @@ async function renderDashboard(root) {
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
           <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта</option></select></div>
+          <div class="field"><label for="dash-semester">Семестр</label><select id="dash-semester">${DASHBOARD_SEMESTER_OPTIONS.map(([code, label]) => `<option value="${code}" ${code === (state.dashboardSemester || "") ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
+          <div class="field"><label for="dash-light">Светофор</label><select id="dash-light">${DASHBOARD_LIGHT_OPTIONS.map(([code, label]) => `<option value="${code}" ${code === (state.dashboardLight || "") ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
           <div class="field"><label class="check-row" for="dash-hide-zero"><input type="checkbox" id="dash-hide-zero" ${state.dashboardHideZero ? "checked" : ""}> Скрыть нулевые позиции</label></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
         </div>
@@ -850,6 +866,14 @@ async function renderDashboard(root) {
   };
   root.querySelector("#dash-slice").onchange = (event) => {
     state.dashboardSlice = event.target.value;
+    renderDashboard(root);
+  };
+  root.querySelector("#dash-semester").onchange = (event) => {
+    state.dashboardSemester = event.target.value;
+    renderDashboard(root);
+  };
+  root.querySelector("#dash-light").onchange = (event) => {
+    state.dashboardLight = event.target.value;
     renderDashboard(root);
   };
   root.querySelector("#dash-audience").onchange = (event) => {

@@ -168,7 +168,7 @@
 | UIR-06 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js` | — | `docs/adr/ADR-21-product-brand.md` |
 | UIR-07 | НЕ НАЧАТО | не начато | — | — | — |
 | UI-00 | ВЫПОЛНЕНО | выполнено | `frontend/screens.js`<br>`frontend/shell/app-shell.js` | — | `docs/adr/ADR-21-product-brand.md` |
-| UI-01 | ЧАСТИЧНО | частично | `frontend/app.js`<br>`frontend/screens/dashboard/index.js` | — | — |
+| UI-01 | ЧАСТИЧНО | частично | `frontend/app.js`<br>`frontend/screens/dashboard/index.js` | `frontend/architecture.test.cjs` | — |
 | UI-02 | ЧАСТИЧНО | частично | `frontend/screens/partners/index.js` | — | — |
 | UI-12 | ЧАСТИЧНО | частично | `frontend/components/ui.js` | `frontend/architecture.test.cjs`<br>`frontend/architecture.test.cjs` | — |
 | UI-13 | ЧАСТИЧНО | частично | `frontend/theme.css` | `frontend/architecture.test.cjs` | — |

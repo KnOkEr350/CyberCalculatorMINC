@@ -213,3 +213,12 @@ test("UI-07 UI-11 UI-12: TOP-IT registry and settings group dialog are wired, re
   assert.match(app, /id="settings-groups"/);
   assert.match(app, /openLegalEntityGroups\(\(\) => renderSettingsOverview\(box\)\)/);
 });
+
+test("UI-01 dashboard exposes semester and traffic-light slices from the МЦ template", () => {
+  const app = source("./app.js");
+  assert.match(app, /id="dash-semester"/);
+  assert.match(app, /id="dash-light"/);
+  assert.match(app, /function dashboardSliceParams/);
+  for (const label of ["Можем подтвердить сейчас", "Подтвердим, есть вопросы", "Низкая вероятность", "Осенние (нечётные)", "Весенние (чётные)"]) assert.ok(app.includes(label), label);
+  assert.match(app, /\.\.\.dashboardSliceParams\(\)/);
+});

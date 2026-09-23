@@ -52,6 +52,10 @@ type Filter struct {
 	AgreementID  string
 	CategoryCode string
 	Audience     string
+	// Semester (1–13) и Term ("autumn" — нечётные семестры, "spring" —
+	// чётные) оставляют только записи, у которых в реквизитах указан семестр.
+	Semester int
+	Term     string
 }
 
 // Grouping selects stable projection dimensions without exposing storage

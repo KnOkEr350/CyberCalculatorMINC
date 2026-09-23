@@ -58,6 +58,9 @@ type dashboardResponse struct {
 	FactByCategory      []categoryBreakdown   `json:"fact_by_category"`
 	CategoryFilter      string                `json:"category_filter,omitempty"`
 	AudienceFilter      string                `json:"audience_filter,omitempty"`
+	SemesterFilter      int                   `json:"semester_filter,omitempty"`
+	TermFilter          string                `json:"term_filter,omitempty"`
+	LightFilter         string                `json:"light_filter,omitempty"`
 	RiskBuckets         map[string]riskBucket `json:"risk_buckets"`
 	MandatoryHigherEd   []mandatoryChip       `json:"mandatory_higher_education"`
 }
@@ -111,6 +114,12 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		}
 	}
 	resp.CategoryFilter, resp.AudienceFilter = categoryFilter, audienceFilter
+	semester, term, light, sliceErr := parseDashboardSlices(r.URL.Query().Get("semester"), r.URL.Query().Get("term"), r.URL.Query().Get("light"))
+	if sliceErr != nil || (h.Projection == nil && (semester != 0 || term != "" || light != "")) {
+		middleware.WriteError(w, 400, "некорректный срез: семестр 1–13, term=autumn|spring, light=green|yellow|red")
+		return
+	}
+	resp.SemesterFilter, resp.TermFilter, resp.LightFilter = semester, term, light
 	if companyScope == "" && scope != "" && scope != "unassigned" {
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT COALESCE(it_company_id::text,'') FROM partners WHERE id::text=$1`, scope).Scan(&companyScope)
 	}
@@ -120,12 +129,13 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 		var projectionErr error
 		projected, projectionErr = h.Projection.List(r.Context(), activityprojection.Filter{
 			ReportYear: year, TenantID: companyScope, PartnerID: scope,
-			CategoryCode: categoryFilter, Audience: audienceFilter,
+			CategoryCode: categoryFilter, Audience: audienceFilter, Semester: semester, Term: term,
 		})
 		if projectionErr != nil {
 			middleware.WriteError(w, 500, "ошибка чтения аналитической проекции")
 			return
 		}
+		projected = filterByLight(projected, light)
 	}
 
 	var target, savingsBase money.Amount
@@ -627,4 +637,44 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// parseDashboardSlices проверяет срезы дашборда из заготовки МЦ «Светофор»:
+// семестр (или его сезон) и цвет светофора — «можем подтвердить сейчас»,
+// «подтвердить, но есть вопросы», «низкая вероятность».
+func parseDashboardSlices(semester, term, light string) (int, string, string, error) {
+	number := 0
+	if semester != "" {
+		parsed, err := strconv.Atoi(semester)
+		if err != nil || parsed < 1 || parsed > 13 {
+			return 0, "", "", fmt.Errorf("семестр")
+		}
+		number = parsed
+	}
+	if term != "" && term != "autumn" && term != "spring" {
+		return 0, "", "", fmt.Errorf("сезон")
+	}
+	if light != "" && light != "green" && light != "yellow" && light != "red" {
+		return 0, "", "", fmt.Errorf("светофор")
+	}
+	return number, term, light, nil
+}
+
+// filterByLight оставляет записи одного цвета светофора; цвет определяется
+// так же, как в корзинах риска.
+func filterByLight(items []activityprojection.Contribution, light string) []activityprojection.Contribution {
+	if light == "" {
+		return items
+	}
+	kept := make([]activityprojection.Contribution, 0, len(items))
+	for _, item := range items {
+		state := item.Risk.State
+		if state != "green" && state != "yellow" && state != "red" {
+			state = "red"
+		}
+		if state == light {
+			kept = append(kept, item)
+		}
+	}
+	return kept
 }
