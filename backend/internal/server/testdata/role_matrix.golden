@@ -73,7 +73,7 @@ POST /api/auth/mfa/confirm | super_admin=pass holding_admin=pass org_admin=pass 
 POST /api/auth/mfa/enroll | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 POST /api/auth/password | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 POST /api/curator-assignments | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
-POST /api/curator-assignments/{id}/end | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
+POST /api/curator-assignments/{id}/end | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/curator-assignments/{id}/revoke | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/dashboard/target | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/directory | super_admin=pass holding_admin=403 org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403

@@ -169,6 +169,12 @@ func (h *CuratorAssignmentHandlers) load(w http.ResponseWriter, r *http.Request,
 
 // End сокращает период закрепления: куратор работает по указанный день включительно.
 func (h *CuratorAssignmentHandlers) End(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, id string) {
+	// Полномочие проверяется до разбора тела: роль без права не должна получать
+	// подсказок о том, что не так с её запросом.
+	if !canManageCuratorAssignments(u) {
+		middleware.WriteError(w, http.StatusForbidden, "изменять закрепления кураторов может администрация")
+		return
+	}
 	var req curatorAssignmentEndRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
@@ -203,6 +209,10 @@ func (h *CuratorAssignmentHandlers) End(w http.ResponseWriter, r *http.Request, 
 
 // Revoke отзывает закрепление с причиной.
 func (h *CuratorAssignmentHandlers) Revoke(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, id string) {
+	if !canManageCuratorAssignments(u) {
+		middleware.WriteError(w, http.StatusForbidden, "изменять закрепления кураторов может администрация")
+		return
+	}
 	var req curatorAssignmentRevokeRequest
 	if err := decodeJSON(r, &req); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")

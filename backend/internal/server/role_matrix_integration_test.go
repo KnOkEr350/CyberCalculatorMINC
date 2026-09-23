@@ -58,6 +58,29 @@ var matrixRoles = []matrixRole{
 	{"edu_curator", models.RoleCurator, models.EntityEduInst},
 }
 
+// objectScopedMutations — изменяющие маршруты, которые с несуществующим объектом
+// доходят до обработчика у ролей без права записи: обработчик сначала находит
+// объект (404), а полномочие роли проверяет по нему — оно зависит от
+// арендатора, партнёра или типа документа и до объекта неизвестно. Право на
+// такие маршруты проверяют интеграционные тесты с настоящими объектами. Список
+// закрытый: новый изменяющий маршрут, открытый аудитору, в него попадает только
+// осознанно и с объяснением.
+var objectScopedMutations = map[string]string{
+	"DELETE /api/academic-groups/{id}":            "право на структуру партнёра проверяется по найденной группе",
+	"DELETE /api/org-units/{id}":                  "право на структуру партнёра проверяется по найденному подразделению",
+	"PUT /api/academic-groups/{id}":               "право на структуру партнёра проверяется по найденной группе",
+	"PUT /api/org-units/{id}":                     "право на структуру партнёра проверяется по найденному подразделению",
+	"PATCH /api/attachments/{id}/metadata":        "владелец документа и допустимый тип определяются по найденному документу",
+	"POST /api/admin/directory-import":            "загрузку справочника разбирает обработчик: без файла отказ 400, полномочие проверяется внутри",
+	"POST /api/auth/mfa/confirm":                  "действие над собственной учётной записью",
+	"POST /api/auth/mfa/enroll":                   "действие над собственной учётной записью",
+	"POST /api/auth/password":                     "действие над собственной учётной записью",
+	"POST /api/regulatory/processes":              "автор процесса определяется по соглашению, найденному по идентификатору",
+	"POST /api/regulatory/processes/{id}/actions": "сторона процесса определяется по найденному процессу",
+	"POST /api/report-workflow/transition":        "переход разрешён стороне соглашения, найденного по параметрам",
+	"POST /api/workflow-tasks/{id}/complete":      "задачу закрывает её исполнитель, определяется по найденной задаче",
+}
+
 func matrixDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_DSN")
@@ -171,6 +194,28 @@ func TestRoleByEndpointMatrix(t *testing.T) {
 		lines = append(lines, name+" | "+strings.Join(classes, " "))
 	}
 	sort.Strings(lines)
+
+	// Независимо от эталона: аудитор ничего не меняет, а всё, что изменяющий
+	// маршрут открывает ему до объекта, названо и объяснено выше.
+	listed := map[string]bool{}
+	for _, line := range lines {
+		name, classes, _ := strings.Cut(line, " | ")
+		if strings.HasPrefix(name, "GET ") || strings.HasPrefix(name, "HEAD ") {
+			continue
+		}
+		if strings.Contains(classes, "auditor_viewer=pass") {
+			route := strings.Replace(name, "/"+objectID, "/{id}", -1)
+			if _, ok := objectScopedMutations[route]; !ok {
+				t.Errorf("%s открыт аудитору (только чтение): добавьте проверку роли или объясните в objectScopedMutations", name)
+			}
+			listed[route] = true
+		}
+	}
+	for route := range objectScopedMutations {
+		if !listed[route] {
+			t.Errorf("исключение %q больше не нужно или маршрут изменился: пересмотрите objectScopedMutations", route)
+		}
+	}
 	got := strings.Join(lines, "\n") + "\n"
 
 	golden := filepath.Join("testdata", "role_matrix.golden")
