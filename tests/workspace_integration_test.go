@@ -387,7 +387,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 		t.Fatalf("enable isolated employment practice fixture: %v", err)
 	}
 	practiceHeaders := []string{
-		"mentor_full_name", "student_full_name", "duration_months", "student_load_hours_per_month", "mentor_load_hours_per_month",
+		"mentor_full_name", "student_full_name", "course", "specialty_code", "period_start", "period_end",
+		"duration_months", "student_load_hours_per_month", "mentor_load_hours_per_month",
 		"labor_contract_type", "labor_contract_number", "labor_contract_date",
 		"mentor_assignment_start", "mentor_assignment_end", "mentor_order_number", "mentor_order_date",
 		"Номер договора о практической подготовке", "Дата договора о практической подготовке",
@@ -399,7 +400,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	practiceWorkbook := func(contractType string) []byte {
 		wb := xlsx.New()
 		wb.AddSheet("Данные", practiceHeaders, [][]interface{}{{
-			"Иванов Иван Иванович", "Практикантов Павел", 1, 10, 3, contractType, "ТД-42", "2026-09-01",
+			"Иванов Иван Иванович", "Практикантов Павел", "3", "09.03.01", "2026-09-01", "2026-09-30",
+			1, 10, 3, contractType, "ТД-42", "2026-09-01",
 			"2026-09-01", "2026-09-30", "12-ОК", "2026-08-30",
 			"ПР-12", "2026-05-15", 19, 30,
 		}})
@@ -420,6 +422,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	practice := map[string]interface{}{
 		"org_name": p1, "mentor_id": mentor, "student_full_name": "Практикантов Павел", "duration_months": 1,
+		"course": "3", "specialty_code": "09.03.01", "period_start": "2026-09-01", "period_end": "2026-09-30",
 		"student_load_hours_per_month": 10, "mentor_load_hours_per_month": 3,
 		"mentor_assignment_start": "2026-09-01", "mentor_assignment_end": "2026-09-30",
 		"mentor_order_number": "12-ОК", "mentor_order_date": "2026-08-30",
