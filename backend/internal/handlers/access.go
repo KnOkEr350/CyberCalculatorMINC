@@ -60,6 +60,13 @@ func canEditEntryCategory(u middleware.AuthUser, category string) bool {
 	if canPrepareReports(u) {
 		return true
 	}
+	// Профиль образовательной организации — контрагент, а не автор: он не
+	// правит мероприятия ИТ-организации ни в одной роли. Создание это уже
+	// учитывало (canCreateEntryCategory), обновление — нет, поэтому профильный
+	// специалист со стороны ОО мог изменить чужую строку.
+	if u.EntityType == models.EntityEduInst {
+		return false
+	}
 	switch u.Role {
 	case models.RoleHRSpecialist:
 		return category == "internship" || category == "employment_practice"

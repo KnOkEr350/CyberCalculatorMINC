@@ -163,9 +163,9 @@ function validYear(value) {
 }
 
 function brandMarkup(inverse = false) {
-  return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="ИТ-Партнерство">
+  return `<div class="brand-lockup${inverse ? " inverse" : ""}" aria-label="Киберпротект">
     <span class="brand-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" focusable="false"><path class="brand-shield" d="M20 2 35 8v10.4c0 9.1-6.1 16.5-15 19.6C11.1 34.9 5 27.5 5 18.4V8L20 2Z"/><path class="brand-cut" d="M27.8 13.2a10 10 0 1 0 0 13.6l-4-4a4.4 4.4 0 1 1 0-5.6l4-4Z"/><path class="brand-core" d="M21.5 16.6a4.5 4.5 0 0 0 0 6.8l-3.7 3.7a9.7 9.7 0 0 1 0-14.2l3.7 3.7Z"/></svg></span>
-    <span class="brand-copy"><strong>ИТ-ПАРТНЕРСТВО</strong><small>Калькулятор Минцифры</small></span>
+    <span class="brand-copy"><strong>КИБЕРПРОТЕКТ</strong></span>
   </div>`;
 }
 
@@ -254,7 +254,7 @@ function renderLogin() {
   const wrap = el(`<div class="auth-shell">
     <aside class="auth-brand-panel">
       ${brandMarkup(true)}
-      <div class="auth-message"><span>Корпоративный сервис</span><h2>Калькулятор затрат</h2><p>Планирование, согласование и контроль исполнения мероприятий в едином защищённом пространстве.</p></div>
+      <div class="auth-message"><h2>Калькулятор затрат</h2></div>
       <div class="auth-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
     </aside>
     <main class="auth-form-panel">
@@ -263,7 +263,7 @@ function renderLogin() {
         <h1>Вход</h1>
         <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required placeholder="name@company.ru"></div>
         <div class="field"><label for="login-password">Пароль</label><input type="password" id="login-password" autocomplete="current-password" required placeholder="Пароль"></div>
-        <div class="field"><label for="login-code">Код подтверждения <span class="label-optional">необязательно</span></label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"><div class="field-hint">Заполните, если включена двухфакторная защита.</div></div>
+        <div class="field"><label for="login-code">Код подтверждения <span class="label-optional">необязательно</span></label><input id="login-code" autocomplete="one-time-code" maxlength="20" placeholder="6 цифр или резервный код"></div>
         <div class="error form-message" id="login-error" style="display:none" role="alert"></div>
         <button type="submit" class="btn wide" id="login-submit">Войти</button>
         <p class="auth-help">Нет доступа? Обратитесь к администратору.</p>
@@ -328,14 +328,18 @@ function openPasswordDialog() {
 
 async function renderPartnersScreen(root) {
   const screen = CyberCalcScreens.get("partners");
-  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div></section><div id="partners-screen-content"></div>`;
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div></section><div id="partners-screen-content"></div>`;
   const content = root.querySelector("#partners-screen-content");
   if (state.me.entity_type === "edu_institution") await renderITCompanies(content, true);
   else await renderPartnerDirectory(content, true);
 }
 
+// Доступная форма объясняется своим названием. У недоступной причина остаётся:
+// иначе кнопка «Недоступно» не подсказывает, что сделать (снимок на 1 мая,
+// серверный шаблон АНО АЦ).
 function reportLink(href, label, description, enabled) {
-  return `<article class="report-format-card${enabled ? "" : " disabled"}"><div class="report-format-icon">${navigationIcon("reports")}</div><div><h3>${escapeHTML(label)}</h3><p>${escapeHTML(description)}</p></div><a class="btn secondary${enabled ? "" : " disabled"}" ${enabled ? `href="${escapeHTML(href)}"` : 'aria-disabled="true"'}>${enabled ? "Сформировать" : "Недоступно"}</a></article>`;
+  const reason = enabled || !description ? "" : `<p class="report-format-reason">${escapeHTML(description)}</p>`;
+  return `<article class="report-format-card${enabled ? "" : " disabled"}"><div class="report-format-icon">${navigationIcon("reports")}</div><div><h3>${escapeHTML(label)}</h3>${reason}</div><a class="btn secondary${enabled ? "" : " disabled"}" ${enabled ? `href="${escapeHTML(href)}"` : 'aria-disabled="true"'}>${enabled ? "Сформировать" : "Недоступно"}</a></article>`;
 }
 
 // Контрольные даты приходят с сервера: он считает их по московским датам
@@ -348,12 +352,12 @@ function regulatoryTimelineMarkup(milestones) {
     const date = String(milestone.date || "").split("-").reverse().join(".");
     return `<div><span class="risk-dot ${status}"></span><span title="${escapeHTML(milestone.basis || "")}">${escapeHTML(milestone.label)} · ${escapeHTML(date)}</span><b>${escapeHTML(left)}</b></div>`;
   }).join("");
-  return `<div class="card"><h2>Регламентный календарь приказа № 270</h2><div class="readiness-list">${rows || '<p class="muted">Контрольные даты недоступны.</p>'}</div><p class="field-hint">Сроки согласования после направления: 10 календарных дней для предварительного и 20 календарных дней для итогового перечня.</p></div>`;
+  return `<div class="card"><h2>Регламентный календарь приказа № 270</h2><div class="readiness-list">${rows || '<p class="muted">Контрольные даты недоступны.</p>'}</div></div>`;
 }
 
 async function renderReportsScreen(root) {
   const screen = CyberCalcScreens.get("reports");
-  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div><span class="year-badge">${state.year}</span></section><div class="card loading-state"><span class="spinner"></span>Загрузка отчётного контура…</div>`;
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div><span class="year-badge">${state.year}</span></section><div class="card loading-state"><span class="spinner"></span>Загрузка отчётного контура…</div>`;
   if (!state.categories.length) {
     state.categories = (await api("/categories")) || [];
     state.categories.forEach((category) => (CATEGORY_LABELS[category.code] = category.name));
@@ -419,14 +423,14 @@ async function renderReportsScreen(root) {
       ? "Отчёт утверждён — рабочие и регламентные выгрузки доступны."
       : `Текущий статус: ${statusLabels[workflow?.status] || "не определён"}; рабочие выгрузки доступны до финального утверждения.`;
 
-  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div><span class="year-badge">${state.year}</span></section>
-    <div class="card report-builder"><div class="flex between"><div><h2>Конструктор среза</h2><p class="muted">Выберите контекст отчёта; пустые строки сервер удалит при формировании документа.</p></div><span class="status-badge ${approved ? "active" : "pending"}">${escapeHTML(statusLabels[workflow?.status] || "Контекст не выбран")}</span></div>
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div><span class="year-badge">${state.year}</span></section>
+    <div class="card report-builder"><div class="flex between"><div><h2>Конструктор среза</h2></div><span class="status-badge ${approved ? "active" : "pending"}">${escapeHTML(statusLabels[workflow?.status] || "Контекст не выбран")}</span></div>
       <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div><div class="field"><label>Риск для конструктора</label><select id="report-risk"><option value="" ${!state.reportRiskFilter ? "selected" : ""}>Все зоны риска</option><option value="green" ${state.reportRiskFilter === "green" ? "selected" : ""}>🟢 Гарантировано</option><option value="yellow" ${state.reportRiskFilter === "yellow" ? "selected" : ""}>🟡 В процессе</option><option value="red" ${state.reportRiskFilter === "red" ? "selected" : ""}>🔴 В зоне риска</option></select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">— Выберите —</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">— Выберите —</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
     </div>
     <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", true)}${reportLink(`/api/reports/export?${planFactQuery}`, "План–факт–дельта", "Абсолютная и процентная дельта по партнёрам и видам с учётом фильтра риска.", hasCompanyContext)}${reportLink(`/api/reports/export?${planFactCSVQuery}`, "План–факт–дельта CSV", "Тот же конструктор в CSV для быстрой сверки.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex1" })}`, "Приложение № 1", "Детализированный перечень мероприятий.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2" })}`, "Приложение № 2", "Реестр стажировок, часов и трудовых договоров.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2", mode: "mentors" })}`, "Отчёт по наставникам", "Часы сопровождения и закреплённые стажёры по каждому наставнику.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex3" })}`, "Приложение № 3", "DOCX-справка по одному соглашению или всем соглашениям партнёра без факта.", hasCompanyContext && hasPartnerContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex5" })}`, "Приложение № 5", "Сводный отчёт и выполнение норматива 3%.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ report_type: "annex4", report_year: state.year, ...(state.partnerID ? { partner_id: state.partnerID } : {}) })}`, "Приложение № 4", hasMaySnapshot ? "13 граф формы приказа № 270; факт читается из неизменяемого снимка на 1 мая." : "Сначала сформируйте снимок на 1 мая в настройках.", hasCompanyContext && hasMaySnapshot)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement2" })}`, "Типовое соглашение № 2", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement3" })}`, "Типовое соглашение № 3", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
     <div class="card"><h2>Реестр сформированных файлов</h2>${generatedReports.length ? `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Форма</th><th>Год</th><th>Файл</th><th>SHA-256</th><th>Размер</th><th></th></tr></thead><tbody>${generatedReports.map((item) => `<tr><td>${new Date(item.generated_at).toLocaleString("ru-RU")}</td><td>${escapeHTML(item.report_type)}</td><td>${item.report_year}</td><td>${escapeHTML(item.file_name)}</td><td><code>${escapeHTML(item.content_sha256.slice(0, 16))}…</code></td><td>${Number(item.size_bytes).toLocaleString("ru-RU")} Б</td><td><a class="btn secondary" href="/api/reports/generated/${encodeURIComponent(item.id)}">Скачать</a></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Файлы ещё не формировались.</p>'}</div>
     ${regulatoryTimelineMarkup(milestones)}
-    <div class="grid cols-2"><div class="card"><h2>Комплектность и согласование</h2>${workflow ? `<div class="readiness-list">${workflow.automatic_checks.map((check) => `<div><span class="risk-dot ${check.complete ? "green" : "red"}"></span><span>${escapeHTML(check.label)}</span><b>${check.complete ? "Готово" : "Не выполнено"}</b></div>`).join("")}</div>${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : '<p class="notice">Автоматические проверки пройдены.</p>'}` : '<p class="muted">После выбора соглашения здесь появится готовность комплекта.</p>'}</div><div class="card"><h2>Обменные пакеты .pkg</h2><p>Шифрованный обмен и Diff Engine предусмотрены ТЗ, но требуют серверного CryptoEngine и API сверки.</p><div class="field"><label>Пакет для сверки</label><input type="file" accept=".pkg" disabled></div><div class="flex"><button class="btn" disabled>Сформировать .pkg</button><button class="btn secondary" disabled>Сверить пакет</button></div><p class="field-hint">Контролы заранее размещены в отдельном контуре и не имитируют ещё не реализованную серверную операцию.</p></div></div>`;
+    <div class="grid cols-2"><div class="card"><h2>Комплектность и согласование</h2>${workflow ? `<div class="readiness-list">${workflow.automatic_checks.map((check) => `<div><span class="risk-dot ${check.complete ? "green" : "red"}"></span><span>${escapeHTML(check.label)}</span><b>${check.complete ? "Готово" : "Не выполнено"}</b></div>`).join("")}</div>${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : '<p class="notice">Автоматические проверки пройдены.</p>'}` : '<p class="muted">После выбора соглашения здесь появится готовность комплекта.</p>'}</div><div class="card"><h2>Обменные пакеты .pkg</h2><div class="field"><label>Пакет для сверки</label><input type="file" accept=".pkg" disabled></div><div class="flex"><button class="btn" disabled>Сформировать .pkg</button><button class="btn secondary" disabled>Сверить пакет</button></div></div></div>`;
 
   const rerender = () => renderReportsScreen(root).catch((error) => showToast(error.message));
   root.querySelector("#report-year").onchange = (event) => { const year = Number(event.target.value); if (!validYear(year)) return event.target.reportValidity(); state.year = year; rerender(); };
@@ -446,7 +450,7 @@ async function renderSettingsOverview(box) {
   }
   const canSealSnapshot = ["super_admin", "holding_admin", "org_admin"].includes(state.me.role) && state.me.entity_type === "organization" && state.me.it_company_id;
   const canDownloadSnapshot = ["super_admin", "holding_admin", "org_admin", "auditor_viewer"].includes(state.me.role);
-  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>В текущем контексте доступно договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p><p class="field-hint">Состав группы применяется в соглашениях и консолидированной оценке норматива.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить CryptoEngine</button></div><p class="field-hint">Снимок формируется только 1 мая отчётного года по московскому времени и защищается SHA-256.</p></div></div>`;
+  box.innerHTML = `<div class="grid cols-2"><div class="card"><h2>Контекст экземпляра</h2><div class="settings-facts"><div><span>Режим</span><b>${state.me.entity_type === "organization" ? "IT_COMPANY" : "HEI"}</b></div><div><span>Отчётный год</span><b>${state.year}</b></div><div><span>Организация</span><b>${escapeHTML(state.me.organization_name || state.me.entity_name || "Не назначена")}</b></div><div><span>Функциональные флаги</span><b>${enabledFlags} включено</b></div></div>${state.me.entity_type === "organization" && isStaffUser() ? '<button class="btn" id="settings-target">Настроить целевую сумму 3%</button>' : ""}</div><div class="card"><h2>Защита профиля</h2><div class="settings-facts"><div><span>Роль</span><b>${escapeHTML(valueLabel(state.me.role))}</b></div><div><span>Двухфакторная защита</span><b>${state.me.mfa_enabled ? "Включена" : "Не включена"}</b></div><div><span>Соединение</span><b>Защищено</b></div></div><div class="flex"><button class="btn secondary" id="settings-password">Изменить пароль</button>${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="btn" id="settings-mfa">Включить 2FA</button>' : ""}</div></div><div class="card"><h2>Договоры группы лиц</h2><p>Договоров взаимодействия: <b>${Number(state.legalEntityGroups?.length || 0)}</b>.</p></div><div class="card"><h2>Снимки на 1 мая</h2><p>${snapshots.length ? `Зафиксировано снимков: <b>${snapshots.length}</b>. Последний: ${escapeHTML(snapshots[0].snapshot_date)}.` : "Неизменяемых снимков пока нет."}</p><div class="flex">${canSealSnapshot ? '<button class="btn secondary" id="settings-snapshot">Сформировать снимок</button>' : ""}${snapshots[0] && canDownloadSnapshot ? `<a class="btn secondary" href="/api/report-snapshots/${encodeURIComponent(snapshots[0].id)}">Скачать последний</a>` : ""}<button class="btn secondary" disabled>Проверить CryptoEngine</button></div></div></div>`;
   box.querySelector("#settings-target")?.addEventListener("click", (event) => openBudgetTargetDialog(event.currentTarget));
   box.querySelector("#settings-password").onclick = openPasswordDialog;
   box.querySelector("#settings-mfa")?.addEventListener("click", () => app.replaceChildren(renderMFASetup()));
@@ -468,7 +472,7 @@ async function renderSettingsScreen(root) {
   const isAdmin = state.me.role === "super_admin";
   const tabs = [{ id: "context", label: "Контекст и безопасность" }, ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
   if (!tabs.some((tab) => tab.id === state.settingsTab)) state.settingsTab = "context";
-  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1><p>${escapeHTML(screen.subtitle)}</p></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
+  root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
   const content = root.querySelector("#settings-content");
   const show = async (tab) => {
     state.settingsTab = tab;
@@ -627,7 +631,7 @@ async function renderDashboard(root) {
 
   root.innerHTML = `
     <section class="page-heading">
-      <div><span class="eyebrow">Экран 1</span><h1>Пульс проекта</h1><p>Выполнение норматива 3%, обязательный минимум и оперативная оценка рисков.</p></div>
+      <div><span class="eyebrow">Экран 1</span><h1>Пульс проекта</h1></div>
       <span class="year-badge">${state.year}</span>
     </section>
     <div class="card dashboard-filter-card">
@@ -648,25 +652,21 @@ async function renderDashboard(root) {
         <div class="dashboard-kpi-icon">${dashboardKPIIcon("target")}</div>
         <div class="dashboard-kpi-label">Целевой показатель</div>
         <div class="dashboard-kpi-value">${targetAmount == null ? "Не задан" : fmtMoney(targetAmount)}</div>
-        <div class="dashboard-kpi-meta">Минимальный объём — 3% от экономии</div>
       </article>
       <article class="dashboard-kpi confirmed">
         <div class="dashboard-kpi-icon">${dashboardKPIIcon("confirmed")}</div>
         <div class="dashboard-kpi-label">Подтверждённые расходы</div>
         <div class="dashboard-kpi-value">${fmtMoney(confirmedAmount)}</div>
-        <div class="dashboard-kpi-meta">Учтены только прошедшие проверку записи</div>
       </article>
       <article class="dashboard-kpi gap ${targetReached ? "reached" : ""}">
         <div class="dashboard-kpi-icon">${dashboardKPIIcon(targetReached ? "confirmed" : "gap")}</div>
         <div class="dashboard-kpi-label">${targetReached ? "Профицит" : "До выполнения цели"}</div>
         <div class="dashboard-kpi-value">${targetGap == null ? "—" : fmtMoney(targetReached ? targetSurplus : targetGap)}</div>
-        <div class="dashboard-kpi-meta">${targetAmount == null ? "Сначала задайте целевой показатель" : targetReached ? "Целевой показатель выполнен" : `Выполнено ${targetCompletionPct.toLocaleString("ru-RU")}% целевого показателя`}</div>
       </article>
       <article class="dashboard-kpi date">
         <div class="dashboard-kpi-icon">${dashboardKPIIcon("date")}</div>
         <div class="dashboard-kpi-label">Дата формирования отчёта</div>
         <div class="dashboard-kpi-value">${escapeHTML(fmtReportDate(d.generated_at))}</div>
-        <div class="dashboard-kpi-meta">Актуальный срез за ${Number(d.report_year || state.year)} год</div>
       </article>
     </div>
     <div class="dashboard-summary-strip" aria-label="Дополнительные показатели">
@@ -685,8 +685,8 @@ async function renderDashboard(root) {
       ${targetAmount ? `<div class="progress-header target"><span>Подтверждённые расходы к минимальному объёму 3%</span><strong>${targetCompletionPct.toLocaleString("ru-RU")}%</strong></div><div class="progress-track"><div class="progress-fill target" style="width:${targetPct}%"></div></div>` : ""}
     </div>
     <div class="grid cols-2 dashboard-risk-grid">
-      <div class="card"><h2>Распределение документальных рисков</h2><div class="risk-buckets"><div class="green"><span>${fmtMoney(riskBuckets.green?.amount_rub || 0)}</span><b>Гарантировано · ${Number(riskBuckets.green?.entry_count || 0)}</b><small>Комплект зелёный и отчёт утверждён</small></div><div class="yellow"><span>${fmtMoney(riskBuckets.yellow?.amount_rub || 0)}</span><b>Прогноз · ${Number(riskBuckets.yellow?.entry_count || 0)}</b><small>Нужна проверка или часть документов</small></div><div class="red"><span>${fmtMoney(riskBuckets.red?.amount_rub || 0)}</span><b>В зоне риска · ${Number(riskBuckets.red?.entry_count || 0)}</b><small>Есть объективные блокирующие причины</small></div></div><p class="field-hint">Расчёт по документам и правилам ${escapeHTML("mincifry-270-2026.1")}; ручной чекбокс не снимает объективную блокировку.</p></div>
-      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.selected)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div><p class="field-hint">Переключатель среза меняет основную колонку таблицы; дельта считается как факт минус план.</p></div>
+      <div class="card"><h2>Распределение документальных рисков</h2><div class="risk-buckets"><div class="green"><span>${fmtMoney(riskBuckets.green?.amount_rub || 0)}</span><b>Гарантировано · ${Number(riskBuckets.green?.entry_count || 0)}</b></div><div class="yellow"><span>${fmtMoney(riskBuckets.yellow?.amount_rub || 0)}</span><b>Прогноз · ${Number(riskBuckets.yellow?.entry_count || 0)}</b></div><div class="red"><span>${fmtMoney(riskBuckets.red?.amount_rub || 0)}</span><b>В зоне риска · ${Number(riskBuckets.red?.entry_count || 0)}</b></div></div></div>
+      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Риск</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${fmtMoney(item.selected)}</td><td>${fmtMoney(item.plan)}</td><td>${fmtMoney(item.fact)}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Гарантировано" : item.risk === "yellow" ? "В процессе" : "Риск"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
     <div class="card"><h2>План и факт по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
     <div class="grid cols-2">
@@ -1056,7 +1056,6 @@ async function openStaffMembersDialog() {
     mode: canManage ? "edit" : "view",
     wide: true,
     content: `
-    <p class="muted">Единый профиль должности, ОКЗ и подтверждённого ИТ-стажа за последние пять лет.</p>
     ${canManage ? `<form id="staff-form"><input type="hidden" name="id"><div class="grid cols-3">
       <div class="field"><label>ФИО *</label><input name="fio" maxlength="200" required></div>
       <div class="field"><label>Должность *</label><input name="company_position" maxlength="200" required></div>
@@ -1130,7 +1129,6 @@ async function openTeachingPayoutsDialog() {
     mode: canManage ? "edit" : "view",
     wide: true,
     content: `
-    <p class="muted">Квартальный план и подтверждение фактических выплат преподавателям.</p>
     ${canManage ? `<form id="payout-form"><input type="hidden" name="id"><div class="grid cols-3">
       <div class="field"><label>Педагогическая нагрузка *</label><select name="teaching_activity_id" required><option value="">— Выберите —</option>${teachingEntries.map((item) => `<option value="${item.id}">${escapeHTML(item.payload.teacher_full_name || "Преподаватель")} · ${escapeHTML(item.payload.course_name || "Курс")} · ${escapeHTML(item.period_type === "fact" ? "Факт" : "План")}</option>`).join("")}</select></div>
       <div class="field"><label>Квартал *</label><select name="target_quarter" required>${[1,2,3,4].map((q) => `<option value="Q${q}">Q${q}</option>`).join("")}</select></div>
@@ -1873,7 +1871,7 @@ async function renderAdminSettings(box) {
     <button class="btn" id="s-save">Сохранить</button>
     <p class="field-hint">Журнал изменений хранится не менее 60 дней.</p>
   </div>
-  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2><p class="muted">Снимок фиксирует фактические мероприятия и SHA-256 каждого документа в одной транзакции, защищён собственной контрольной суммой и после формирования не изменяется.</p></div><span class="status-badge">Europe/Moscow</span></div>
+  <div class="card"><div class="flex between"><div><h2>Неизменяемые снимки на 1 мая</h2></div><span class="status-badge">Europe/Moscow</span></div>
     <div class="grid cols-3">
       <div class="field"><label>ИТ-компания</label><select id="snapshot-company"><option value="">Выберите компанию</option>${companies.map((company) => `<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)} · ИНН ${escapeHTML(company.inn)}</option>`).join("")}</select></div>
       <div class="field"><label>Отчётный год</label><input id="snapshot-year" type="number" min="2000" max="2100" value="${state.year}"></div>

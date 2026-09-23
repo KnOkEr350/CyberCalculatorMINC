@@ -18,7 +18,7 @@
   async function render(root, dependencies) {
     const { api, escapeHTML, showToast } = dependencies;
     const today = new Date().toISOString().slice(0, 10);
-    root.innerHTML = `<div class="section-intro"><div><h2>Справочник ОКЗ</h2><p class="muted">ОК 010-2014 (МСКЗ-08): версионированный поиск и обновление классификатора занятий.</p></div></div>
+    root.innerHTML = `<div class="section-intro"><div><h2>Справочник ОКЗ</h2></div></div>
       <div class="card">
         <div class="flex between"><div><h2>Активная версия</h2><p class="muted" id="okz-active-summary">Загрузка…</p></div><a class="btn secondary" href="/api/admin/okz/template">Скачать CSV-шаблон</a></div>
         <form id="okz-import" enctype="multipart/form-data">

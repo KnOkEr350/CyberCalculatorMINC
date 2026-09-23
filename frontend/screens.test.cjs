@@ -116,7 +116,10 @@ test("every registered screen owns a lazy entrypoint", () => {
 test("all eleven screens expose accessible navigation text", () => {
   for (const screen of registry().all) {
     assert.match(screen.title, /\S/, `${screen.id}: title is required for h1 and nav label`);
-    assert.match(screen.subtitle, /\S/, `${screen.id}: subtitle is required for screen intro`);
+    assert.match(screen.label, /\S/, `${screen.id}: label is required for the navigation button`);
+    // Экран объясняется заголовком и подписью в меню: серых пояснений под
+    // заголовком в интерфейсе нет, поэтому и в реестре их держать нечего.
+    assert.ok(!("subtitle" in screen), `${screen.id}: subtitle is not rendered anywhere`);
     assert.match(screen.icon, /^[a-z][a-z0-9-]*$/, `${screen.id}: icon key must map to shared registry`);
     assert.ok(Number.isInteger(screen.number) && screen.number >= 1 && screen.number <= 11);
   }

@@ -87,9 +87,9 @@ function renderLayout() {
     <header class="topbar">
       <div class="topbar-brand">${brandMarkup(true)}</div>
       <button type="button" class="topbar-menu" id="sidebar-toggle" aria-label="Свернуть меню" aria-controls="primary-sidebar" aria-expanded="true"><span></span><span></span><span></span></button>
-      <div class="product-context"><strong>${escapeHTML(activeScreen.title)}</strong><span>${escapeHTML(activeScreen.subtitle)}</span></div>
+      <div class="product-context"><strong>${escapeHTML(activeScreen.title)}</strong></div>
       <div class="who">
-        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong><small>${profileLabel} · ${escapeHTML(valueLabel(state.me.role))}</small></span>
+        <span class="user-copy"><strong>${escapeHTML(state.me.full_name)}</strong></span>
         <span class="avatar">${escapeHTML(initials(state.me.full_name))}</span>
         <button class="header-action" id="change-password" title="Изменить пароль" aria-label="Изменить пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v10H4zM8 11V7a4 4 0 0 1 8 0v4"></path></svg></button>
         ${state.me.mfa_available && !state.me.mfa_enabled ? '<button class="header-action header-action-text" id="setup-mfa" title="Настроить двухфакторную аутентификацию">2FA</button>' : ''}
@@ -98,7 +98,7 @@ function renderLayout() {
     </header>
     <div class="app-body">
       <aside class="sidebar" id="primary-sidebar">
-        <div class="tenant-card"><span>Рабочее пространство</span><strong title="${escapeHTML(organizationName)}">${escapeHTML(organizationName)}</strong><small>${escapeHTML(profileLabel)}</small></div>
+        <div class="tenant-card"><strong title="${escapeHTML(organizationName)}">${escapeHTML(organizationName)}</strong></div>
         <nav class="primary-nav" aria-label="Основная навигация">
           <span class="nav-section-title">11 экранов системы</span>
           ${screens.map((screen) => {
@@ -107,7 +107,7 @@ function renderLayout() {
             return `<button data-view="${screen.id}" data-access-mode="${access.mode}" title="${escapeHTML(label)}" aria-label="${escapeHTML(label)}">${navigationIcon(screen.icon)}<span><small>${screen.number}</small>${escapeHTML(screen.label)}</span>${screen.id === "partners" ? '<span class="nav-count" data-directory-proposal-count aria-live="polite" hidden></span>' : ""}</button>`;
           }).join("")}
         </nav>
-        <div class="sidebar-footer"><span class="system-indicator"></span><div><b>Система доступна</b><small>Защищённое соединение</small></div></div>
+        <div class="sidebar-footer"><span class="system-indicator"></span><div><b>Система доступна</b></div></div>
       </aside>
       <main class="container" id="content"><div class="loading-state"><span class="spinner"></span>Загрузка раздела…</div></main>
     </div>
