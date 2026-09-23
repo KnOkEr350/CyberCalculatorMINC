@@ -23,6 +23,50 @@
     return `${safe.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
   }
 
+  const tokens = Object.freeze({
+    color: Object.freeze({
+      bg: "#f3f5f8",
+      panel: "#ffffff",
+      text: "#273445",
+      muted: "#68778a",
+      navy: "#17324f",
+      accent: "#4d91dc",
+      accentStrong: "#2875c7",
+      good: "#36a36f",
+      warn: "#c68721",
+      bad: "#d74d57",
+    }),
+    size: Object.freeze({
+      topbarHeight: 56,
+      sidebarWidth: 248,
+      radius: 3,
+      inputHeight: 38,
+      compactRowHeight: 39,
+    }),
+  });
+
+  function hexToRGB(hex) {
+    const normalized = String(hex || "").trim().replace(/^#/, "");
+    if (!/^[0-9a-f]{6}$/i.test(normalized)) return null;
+    return [0, 2, 4].map((index) => parseInt(normalized.slice(index, index + 2), 16) / 255);
+  }
+
+  function relativeLuminance(hex) {
+    const rgb = hexToRGB(hex);
+    if (!rgb) return null;
+    const linear = rgb.map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  }
+
+  function contrastRatio(foreground, background) {
+    const fg = relativeLuminance(foreground);
+    const bg = relativeLuminance(background);
+    if (fg == null || bg == null) return 0;
+    const lighter = Math.max(fg, bg);
+    const darker = Math.min(fg, bg);
+    return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
+  }
+
   function moneyInput(options = {}) {
     const id = options.id || options.name || "money";
     return `<div class="field ui-money-field"><label for="${escapeHTML(id)}">${escapeHTML(options.label || "Сумма, ₽")}${options.required ? " *" : ""}</label><input${attributes({
@@ -152,9 +196,35 @@
     return `<div class="ui-validation-summary ${errors.length ? "error" : "warning"}"${attributes({ role: errors.length ? "alert" : "status", tabindex: "-1" })}><strong>${escapeHTML(errors.length ? options.errorTitle || "Исправьте ошибки" : options.warningTitle || "Проверьте предупреждения")}</strong><ul>${errors.concat(warnings).map((item) => `<li>${escapeHTML(item)}</li>`).join("")}</ul></div>`;
   }
 
+  function normalizeSearch(value) {
+    return String(value ?? "").trim().toLocaleLowerCase("ru-RU");
+  }
+
+  function filterRows(rows = [], query = "", keys = []) {
+    const needle = normalizeSearch(query);
+    if (!needle) return [...rows];
+    return rows.filter((row) => {
+      const selectedKeys = keys.length ? keys : Object.keys(row || {});
+      return selectedKeys.some((key) => normalizeSearch(row?.[key]).includes(needle));
+    });
+  }
+
+  function paginateRows(rows = [], options = {}) {
+    const rawPageSize = options.pageSize ?? rows.length;
+    const pageSize = Math.max(1, Number.parseInt(rawPageSize || 1, 10));
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const page = Math.min(totalPages, Math.max(1, Number.parseInt(options.page ?? 1, 10)));
+    const start = (page - 1) * pageSize;
+    return { rows: rows.slice(start, start + pageSize), page, pageSize, total: rows.length, totalPages, start };
+  }
+
   function table(options = {}) {
     const columns = options.columns || [];
-    const rows = options.rows || [];
+    const sourceRows = options.rows || [];
+    const searchableKeys = options.search?.keys || columns.map((column) => column.key).filter(Boolean);
+    const filteredRows = options.search ? filterRows(sourceRows, options.search.query, searchableKeys) : [...sourceRows];
+    const page = options.pagination ? paginateRows(filteredRows, options.pagination) : { rows: filteredRows, page: 1, pageSize: filteredRows.length || 1, total: filteredRows.length, totalPages: 1, start: 0 };
+    const rows = page.rows;
     const rowKey = options.rowKey || "id";
     const heading = columns.map((column) => {
       const label = escapeHTML(column.label || column.key);
@@ -174,7 +244,12 @@
     }).join("");
     const empty = `<tr><td colspan="${Math.max(1, columns.length)}" class="ui-table-empty">${escapeHTML(options.empty || "Нет данных")}</td></tr>`;
     const caption = options.caption ? `<caption>${escapeHTML(options.caption)}</caption>` : "";
-    return `<div class="table-wrap ui-table"><table>${caption}<thead><tr>${heading}</tr></thead><tbody>${body || empty}</tbody></table></div>`;
+    const searchID = options.search?.id || "ui-table-search";
+    const toolbar = options.search ? `<div class="ui-table-toolbar"><label for="${escapeHTML(searchID)}">${escapeHTML(options.search.label || "Поиск по таблице")}</label><input id="${escapeHTML(searchID)}" type="search" value="${escapeHTML(options.search.query ?? "")}" placeholder="${escapeHTML(options.search.placeholder || "Введите текст")}" data-table-search></div>` : "";
+    const from = page.total === 0 ? 0 : page.start + 1;
+    const to = Math.min(page.total, page.start + rows.length);
+    const pager = options.pagination ? `<nav class="ui-table-pager" aria-label="Пагинация таблицы"><span>${from}–${to} из ${page.total}</span><button type="button" class="btn secondary" data-page="prev"${page.page <= 1 ? " disabled" : ""}>Назад</button><button type="button" class="btn secondary" data-page="next"${page.page >= page.totalPages ? " disabled" : ""}>Вперёд</button></nav>` : "";
+    return `${toolbar}<div class="table-wrap ui-table"><table>${caption}<thead><tr>${heading}</tr></thead><tbody>${body || empty}</tbody></table></div>${pager}`;
   }
 
   function drawerMarkup(options = {}) {
@@ -304,8 +379,8 @@
   }
 
   global.CyberCalcUI = Object.freeze({
-    escapeHTML, formatMoney, moneyInput, parseMoney, dateInput, riskBadge, icon, iconRegistry,
-    filters, toggle, inlineActions, compoundField, validationSummary, table,
+    escapeHTML, formatMoney, tokens, contrastRatio, moneyInput, parseMoney, dateInput, riskBadge, icon, iconRegistry,
+    filters, toggle, inlineActions, compoundField, validationSummary, filterRows, paginateRows, table,
     drawerMarkup, trapFocus, openDrawer, uploadField, bindUpload, moveItem, bindReorder, toast,
   });
 })(globalThis);

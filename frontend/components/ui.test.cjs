@@ -9,6 +9,15 @@ context.globalThis = context;
 vm.runInNewContext(readFileSync(join(__dirname, "ui.js"), "utf8"), context);
 const ui = context.CyberCalcUI;
 
+test("design tokens are exported and match theme css variables", () => {
+  const theme = readFileSync(join(__dirname, "..", "theme.css"), "utf8");
+  assert.match(theme, new RegExp(`--text:\\s*${ui.tokens.color.text}`, "i"));
+  assert.match(theme, new RegExp(`--accent-2:\\s*${ui.tokens.color.accentStrong}`, "i"));
+  assert.equal(ui.tokens.size.topbarHeight, 56);
+  assert.ok(ui.contrastRatio(ui.tokens.color.text, ui.tokens.color.panel) >= 4.5);
+  assert.ok(ui.contrastRatio(ui.tokens.color.navy, ui.tokens.color.panel) >= 7);
+});
+
 test("money input uses decimal contract and parses kopecks", () => {
   assert.equal(ui.parseMoney("1 250,40"), 125040);
   assert.equal(ui.parseMoney("12.345"), null);
@@ -75,6 +84,27 @@ test("table renders sort semantics, selected row and empty state", () => {
   assert.match(html, /aria-sort="ascending"/);
   assert.match(html, /aria-selected="true"/);
   assert.match(ui.table({ columns: [{ key: "name" }], rows: [] }), /Нет данных/);
+});
+
+test("table supports reusable search and pagination", () => {
+  const rows = [
+    { id: "1", name: "МГУ", city: "Москва" },
+    { id: "2", name: "МФТИ", city: "Долгопрудный" },
+    { id: "3", name: "Колледж связи", city: "Москва" },
+  ];
+  assert.deepEqual(Array.from(ui.filterRows(rows, "моск", ["city"]), (row) => row.id), ["1", "3"]);
+  const page = ui.paginateRows(rows, { page: 2, pageSize: 2 });
+  assert.equal(page.totalPages, 2);
+  assert.deepEqual(Array.from(page.rows, (row) => row.id), ["3"]);
+  const html = ui.table({
+    search: { id: "partners-search", query: "моск", keys: ["city"] },
+    pagination: { page: 1, pageSize: 1 },
+    columns: [{ key: "name", label: "Партнёр" }, { key: "city", label: "Город" }],
+    rows,
+  });
+  assert.match(html, /data-table-search/);
+  assert.match(html, /1–1 из 2/);
+  assert.doesNotMatch(html, /МФТИ/);
 });
 
 test("drawer is modal and exposes a labelled close action", () => {

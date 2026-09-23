@@ -400,10 +400,13 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 /* BASE-06 shared component library. */
 .ui-filters { margin: 0 0 16px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); }
 .ui-filters legend { padding: 0 6px; font-weight: 700; color: var(--ink); }
+.ui-table-toolbar { display: grid; grid-template-columns: minmax(160px, 280px); gap: 5px; margin: 0 0 8px; }
 .ui-table caption { padding: 10px 0; text-align: left; font-weight: 700; color: var(--ink); }
 .ui-table-sort { padding: 0; border: 0; background: transparent; color: inherit; text-transform: inherit; cursor: pointer; }
 .ui-table tr.selected td { background: var(--selection, #e9f2fb); }
 .ui-table-empty { padding: 24px; text-align: center; color: var(--muted); }
+.ui-table-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 10px; }
+.ui-table-pager .btn { min-height: 28px; padding: 4px 8px; font-size: 10px; }
 .ui-toggle { display: grid; gap: 4px; margin-bottom: 11px; }
 .ui-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .ui-toggle label { display: inline-flex; align-items: center; gap: 9px; min-height: 32px; margin: 0; cursor: pointer; }

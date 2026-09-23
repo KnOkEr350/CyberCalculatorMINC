@@ -83,12 +83,12 @@ func TestMentorReportReconcilesWithTotals(t *testing.T) {
 		{PartnerID: "p2", Partner: "МФТИ", Category: "internship", Period: "fact", Amount: money.Amount(41925000), Payload: payload("Григорьев П.С.", "Зайцев Н.А.", 15)},
 	}
 	rows := buildMentorRows(data)
-	if len(rows) != 3 { // два наставника плюс ИТОГО
-		t.Fatalf("ожидали две строки наставников и итог, получили %d: %+v", len(rows), rows)
+	if len(rows) < 3 { // два наставника плюс ИТОГО, после них может идти подписной блок
+		t.Fatalf("ожидали строки наставников и итог, получили %d: %+v", len(rows), rows)
 	}
-	totals := rows[len(rows)-1]
-	if totals[1] != "ИТОГО" {
-		t.Fatalf("последняя строка должна быть итоговой: %+v", totals)
+	totals := findRowByCell(t, rows, 1, "ИТОГО")
+	if totals == nil {
+		t.Fatalf("нет итоговой строки: %+v", rows)
 	}
 
 	// Итог среза обязан совпасть с суммой исходных мероприятий.
@@ -102,7 +102,10 @@ func TestMentorReportReconcilesWithTotals(t *testing.T) {
 	// Сходимость построчно: сумма строк равна итогу.
 	var rowSum float64
 	students, hours := 0, 0.0
-	for _, row := range rows[:len(rows)-1] {
+	for _, row := range rows {
+		if _, ok := row[0].(int); !ok {
+			continue
+		}
 		rowSum += row[5].(float64)
 		students += row[3].(int)
 		hours += row[4].(float64)

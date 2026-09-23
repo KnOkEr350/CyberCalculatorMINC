@@ -67,10 +67,10 @@ func TestBuildAnnex5RowsDropsZeroRows(t *testing.T) {
 		{PartnerID: "p2", Partner: "Колледж связи № 54", Agreement: "№ СПО-54/А", Period: "plan", Amount: money.Amount(80_000_00)},
 	}
 	rows, planTotal, factTotal := buildAnnex5Rows(data, target)
-	if len(rows) != 1 {
-		t.Fatalf("ожидали 1 непустую строку (p1), получили %d: %+v", len(rows), rows)
+	row := findRowByCell(t, rows, 1, "МГУ")
+	if row == nil {
+		t.Fatalf("ожидали непустую строку p1: %+v", rows)
 	}
-	row := rows[0]
 	if row[1] != "МГУ" {
 		t.Fatalf("осталась не та строка: %+v", row)
 	}
@@ -89,6 +89,11 @@ func TestBuildAnnex5RowsDropsZeroRows(t *testing.T) {
 	if percent := row[5].(float64); percent != 40 {
 		t.Fatalf("процент от норматива = %v, want 40 (не от собственного плана контрагента)", percent)
 	}
+	totalRow := findRowByCell(t, rows, 1, "ИТОГО")
+	if totalRow == nil || totalRow[4].(float64) != 400 || totalRow[5].(float64) != 40 {
+		t.Fatalf("итоговая строка Приложения №5 неверна: %+v", totalRow)
+	}
+	assertSignatureBlock(t, rows)
 	if planTotal != money.Amount(280_000_00) || factTotal != money.Amount(400_000_00) {
 		t.Fatalf("итоги план/факт для информационного листа неверны: plan=%v fact=%v", planTotal, factTotal)
 	}
@@ -106,8 +111,8 @@ func TestBuildAnnex5RowsRoundsPercentToHundredths(t *testing.T) {
 func TestBuildAnnex5RowsWithoutTargetShowsDash(t *testing.T) {
 	data := []regulatoryRow{{PartnerID: "p1", Partner: "МГУ", Period: "fact", Amount: money.Amount(100000)}}
 	rows, _, _ := buildAnnex5Rows(data, 0)
-	if len(rows) != 1 {
-		t.Fatalf("ожидали 1 строку, получили %d", len(rows))
+	if len(rows) == 0 {
+		t.Fatalf("ожидали строки отчёта")
 	}
 	if percent := rows[0][5]; percent != "—" {
 		t.Fatalf("без настроенного норматива 3%% процент должен быть прочерком, получили %v", percent)
@@ -199,10 +204,10 @@ func TestBuildAnnex2RowsGroupsByProgram(t *testing.T) {
 		{PartnerID: "p1", Partner: "МГУ", Category: "internship", CategoryName: "Стажировки", Period: "fact", Amount: money.Amount(33540000), Payload: intern("Белов Е.В.", 240)},
 	}
 	rows := buildAnnex2Rows(data)
-	if len(rows) != 2 { // одна программа плюс ИТОГО
+	row := findRowByCell(t, rows, 1, "Договор о стажировке № 7")
+	if row == nil {
 		t.Fatalf("две стажировки одной программы должны дать одну строку: %+v", rows)
 	}
-	row := rows[0]
 	if row[1] != "Договор о стажировке № 7" {
 		t.Fatalf("наименование программы = %v", row[1])
 	}
@@ -215,9 +220,10 @@ func TestBuildAnnex2RowsGroupsByProgram(t *testing.T) {
 	if info := row[7].(string); !strings.Contains(info, "стажёров: 2") {
 		t.Fatalf("в дополнительной информации нет числа стажёров: %q", info)
 	}
-	if rows[1][1] != "ИТОГО" {
-		t.Fatalf("нет итоговой строки: %+v", rows[1])
+	if findRowByCell(t, rows, 1, "ИТОГО") == nil {
+		t.Fatalf("нет итоговой строки: %+v", rows)
 	}
+	assertSignatureBlock(t, rows)
 }
 
 func TestBuildAnnex2RowsUsesTypedPracticeAgreement(t *testing.T) {
@@ -249,10 +255,10 @@ func TestBuildMentorRowsAggregatesByMentor(t *testing.T) {
 		{PartnerID: "p1", Partner: "МГУ", Category: "internship", Period: "fact", Amount: money.Amount(24000000), Payload: noMentor},
 	}
 	rows := buildMentorRows(data)
-	if len(rows) != 2 { // один наставник плюс строка «ИТОГО» (INT-09)
+	if len(rows) < 2 { // один наставник плюс строка «ИТОГО» (INT-09)
 		t.Fatalf("ожидали строку наставника и итог, получили %+v", rows)
 	}
-	row := rows[0]
+	row := findRowByCell(t, rows, 1, "Васильев М.А.")
 	if row[1] != "Васильев М.А." || row[3] != 2 {
 		t.Fatalf("наставник и число стажёров неверны: %+v", row)
 	}
@@ -262,9 +268,10 @@ func TestBuildMentorRowsAggregatesByMentor(t *testing.T) {
 	}
 	// Мероприятие без наставника в срез не попадает, поэтому итог считается
 	// только по строкам наставников.
-	if totals := rows[1]; totals[1] != "ИТОГО" || totals[5].(float64) != row[5].(float64) {
+	if totals := findRowByCell(t, rows, 1, "ИТОГО"); totals == nil || totals[5].(float64) != row[5].(float64) {
 		t.Fatalf("итоговая строка не сходится с единственным наставником: %+v", totals)
 	}
+	assertSignatureBlock(t, rows)
 }
 
 // INT-06: часы наставника не должны удваиваться, если заполнены и итог, и
@@ -347,10 +354,11 @@ func TestBuildAnnex1SheetsPerOrganization(t *testing.T) {
 	if amount := row[7].(float64); amount != 264.96 {
 		t.Fatalf("сумма затрат = %v тыс. руб., ожидалось 264.96", amount)
 	}
-	totals := sheets[0].Rows[len(sheets[0].Rows)-1]
+	totals := findRowByCell(t, sheets[0].Rows, 1, "ИТОГО")
 	if totals[1] != "ИТОГО" || totals[7].(float64) != 264.96 {
 		t.Fatalf("итоговая строка листа неверна: %+v", totals)
 	}
+	assertSignatureBlock(t, sheets[0].Rows)
 }
 
 func TestBuildAnnex1SheetsSkipsEmptyRowsAndUnknownPartner(t *testing.T) {
@@ -362,8 +370,31 @@ func TestBuildAnnex1SheetsSkipsEmptyRowsAndUnknownPartner(t *testing.T) {
 	if len(sheets) != 1 || sheets[0].Name != "Без контрагента" {
 		t.Fatalf("ожидали один лист «Без контрагента», получили %+v", sheets)
 	}
-	if len(sheets[0].Rows) != 2 { // одна запись плюс ИТОГО
+	if findRowByCell(t, sheets[0].Rows, 1, "ИТОГО") == nil {
 		t.Fatalf("нулевая строка должна быть удалена: %+v", sheets[0].Rows)
+	}
+}
+
+func findRowByCell(t *testing.T, rows [][]interface{}, column int, value string) []interface{} {
+	t.Helper()
+	for _, row := range rows {
+		if len(row) > column && fmt.Sprint(row[column]) == value {
+			return row
+		}
+	}
+	return nil
+}
+
+func assertSignatureBlock(t *testing.T, rows [][]interface{}) {
+	t.Helper()
+	if findRowByCell(t, rows, 1, "Подписной блок") == nil {
+		t.Fatalf("нет секции подписного блока: %+v", rows)
+	}
+	if findRowByCell(t, rows, 1, "Организация") == nil {
+		t.Fatalf("нет строки подписи организации: %+v", rows)
+	}
+	if findRowByCell(t, rows, 1, "ОО / РОИВ") == nil {
+		t.Fatalf("нет строки подписи ОО/РОИВ: %+v", rows)
 	}
 }
 

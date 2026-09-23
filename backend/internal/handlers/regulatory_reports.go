@@ -486,6 +486,14 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 			percent,
 		})
 	}
+	if len(out) > 0 {
+		var totalPercent interface{} = "—"
+		if target > 0 {
+			totalPercent = math.Round(float64(factTotal)/float64(target)*100*100) / 100
+		}
+		out = append(out, []interface{}{"", "ИТОГО", "", targetThousandRub, thousandRub(factTotal), totalPercent})
+		out = appendSignatureBlock(out, len(regulatoryHeaders["annex5"]))
+	}
 	return out, planTotal, factTotal
 }
 
@@ -521,6 +529,33 @@ func tableCSV(headers []string, rows [][]interface{}) ([]byte, error) {
 	}
 	writer.Flush()
 	return buf.Bytes(), writer.Error()
+}
+
+func appendSignatureBlock(rows [][]interface{}, width int) [][]interface{} {
+	if len(rows) == 0 {
+		return rows
+	}
+	if width < 4 {
+		width = 4
+	}
+	makeRow := func(values map[int]interface{}) []interface{} {
+		row := make([]interface{}, width)
+		for i := range row {
+			row[i] = ""
+		}
+		for index, value := range values {
+			if index >= 0 && index < width {
+				row[index] = value
+			}
+		}
+		return row
+	}
+	return append(rows,
+		makeRow(nil),
+		makeRow(map[int]interface{}{1: "Подписной блок", width - 1: "Дата подписания: ____.__.____"}),
+		makeRow(map[int]interface{}{1: "Организация", 2: "Уполномоченное лицо", width - 1: "Подпись / расшифровка"}),
+		makeRow(map[int]interface{}{1: "ОО / РОИВ", 2: "Уполномоченное лицо", width - 1: "Подпись / расшифровка"}),
+	)
 }
 
 // annex1Sheet — один лист Приложения № 1: форма заполняется отдельно по
@@ -598,6 +633,7 @@ func buildAnnex1Sheets(data []regulatoryRow) []annex1Sheet {
 			})
 		}
 		rows = append(rows, []interface{}{"", "ИТОГО", "", "", "", "", "", thousandRub(total), ""})
+		rows = appendSignatureBlock(rows, len(regulatoryHeaders["annex1"]))
 		sheets = append(sheets, annex1Sheet{Name: name, Rows: rows})
 	}
 	return sheets
@@ -687,6 +723,7 @@ func buildAnnex2Rows(data []regulatoryRow) [][]interface{} {
 	}
 	if len(out) > 0 {
 		out = append(out, []interface{}{"", "ИТОГО", "", "", "", "", thousandRub(total), ""})
+		out = appendSignatureBlock(out, len(regulatoryHeaders["annex2"]))
 	}
 	return out
 }
@@ -741,6 +778,7 @@ func buildMentorRows(data []regulatoryRow) [][]interface{} {
 	// сходиться с суммой тех же мероприятий в других формах.
 	if len(out) > 0 {
 		out = append(out, []interface{}{"", "ИТОГО", "", totalStudents, totalHours, thousandRub(totalAmount)})
+		out = appendSignatureBlock(out, len(regulatoryHeaders["annex2_mentors"]))
 	}
 	return out
 }
