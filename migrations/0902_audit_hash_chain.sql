@@ -73,7 +73,11 @@ BEGIN
   RETURN NEW;
 END $$;
 
--- Исторические записи получают звенья в порядке их появления.
+-- Исторические записи получают звенья в порядке их появления. Запрет из 0901
+-- на время расстановки снимается: он защищает журнал от правок приложением, а
+-- здесь схема сама достраивает недостающие поля существующих строк.
+DROP TRIGGER audit_log_append_only ON audit_log;
+
 DO $$
 DECLARE item RECORD; previous CHAR(64);
 BEGIN
@@ -87,6 +91,10 @@ BEGIN
       RETURNING row_hash INTO previous;
   END LOOP;
 END $$;
+
+CREATE TRIGGER audit_log_append_only
+BEFORE UPDATE OR DELETE ON audit_log
+FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
 
 ALTER TABLE audit_log ALTER COLUMN row_hash SET NOT NULL;
 CREATE UNIQUE INDEX audit_log_chain_seq_idx ON audit_log(chain_seq);

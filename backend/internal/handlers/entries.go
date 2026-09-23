@@ -5,6 +5,7 @@ import (
 	"cybercalc/internal/money"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -232,6 +233,13 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
 	).Scan(&id)
 	if err != nil {
+		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
+		// попытка внести уже учтённую нагрузку, и сказать об этом надо прямо.
+		if isDuplicateTeachingLoad(err) {
+			middleware.WriteError(w, http.StatusConflict,
+				"такая нагрузка уже внесена: сотрудник, учебное заведение, дисциплина, семестр и период совпадают")
+			return
+		}
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
 	}
@@ -795,4 +803,13 @@ func (h *EntryHandlers) validateAgreementContext(r *http.Request, agreementID, p
 		return fmt.Errorf("выбранный вид мероприятия не включён в перечень соглашения")
 	}
 	return nil
+}
+
+// isDuplicateTeachingLoad распознаёт нарушение атомарного ключа педнагрузки.
+func isDuplicateTeachingLoad(err error) bool {
+	var pgErr *pq.Error
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "23505" && pgErr.Constraint == "teaching_load_atomic_key_idx"
 }

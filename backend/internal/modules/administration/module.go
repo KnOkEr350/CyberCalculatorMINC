@@ -25,6 +25,10 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/admin/settings", middleware.RequireAdmin(m.db, m.handler.GetSettings))
 	mux.HandleFunc("POST /api/admin/settings", middleware.RequireAdmin(m.db, m.handler.UpdateSetting))
+	mux.HandleFunc("POST /api/admin/users/{id}/mfa-reset", middleware.RequireAdmin(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.handler.ResetMFA(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/admin/metrics", middleware.RequireAdmin(m.db, m.handler.Metrics))
 	mux.HandleFunc("GET /api/admin/logs", middleware.RequireAdmin(m.db, m.handler.AuditLog))
 	mux.HandleFunc("GET /api/admin/logs/export", middleware.RequireAdmin(m.db, m.handler.ExportAuditLog))
 }

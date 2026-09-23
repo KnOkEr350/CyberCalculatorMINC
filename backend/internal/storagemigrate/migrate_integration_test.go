@@ -105,6 +105,13 @@ func TestLegacyUploadsMigrateIntoContentAddressedStorage(t *testing.T) {
 		return id, path
 	}
 
+	// Замер до создания собственных строк: в общей базе могут быть вложения
+	// соседних тестов, и их исходы не должны влиять на проверку.
+	baseline, err := Run(ctx, db, root, 20<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	shared := []byte("один и тот же трудовой договор, загруженный дважды")
 	sharedSum := sha256.Sum256(shared)
 	firstID, firstPath := legacy("a.bin", shared, "")
@@ -122,14 +129,20 @@ func TestLegacyUploadsMigrateIntoContentAddressedStorage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Total() != 5 {
-		t.Fatalf("отчёт не сходится с числом вложений: %s", report)
+	// База общая для пакета, поэтому считаются изменения относительно замера
+	// до создания строк этого теста.
+	migrated := report.Migrated - baseline.Migrated
+	deduplicated := report.Deduplicated - baseline.Deduplicated
+	mismatched := report.Mismatched - baseline.Mismatched
+	missing := report.Missing - baseline.Missing
+	if migrated+deduplicated+mismatched+missing != 5 {
+		t.Fatalf("отчёт не сходится с числом вложений этого теста: %s (было %s)", report, baseline)
 	}
-	if report.Migrated != 2 || report.Deduplicated != 1 {
-		t.Fatalf("ожидались два новых blob и одна дедупликация: %s", report)
+	if migrated != 2 || deduplicated != 1 {
+		t.Fatalf("ожидались два новых blob и одна дедупликация: %s (было %s)", report, baseline)
 	}
-	if report.Mismatched != 1 || report.Missing != 1 {
-		t.Fatalf("строки для ручного разбора посчитаны неверно: %s", report)
+	if mismatched != 1 || missing != 1 {
+		t.Fatalf("строки для ручного разбора посчитаны неверно: %s (было %s)", report, baseline)
 	}
 
 	pathOf := func(id string) string {
@@ -185,7 +198,7 @@ func TestLegacyUploadsMigrateIntoContentAddressedStorage(t *testing.T) {
 	if again.Migrated != 0 || again.Deduplicated != 0 {
 		t.Fatalf("повторный перенос должен быть пустым: %s", again)
 	}
-	if again.AlreadyAddressed != 3 {
-		t.Fatalf("повторный прогон должен признать три вложения перенесёнными: %s", again)
+	if again.AlreadyAddressed-baseline.AlreadyAddressed < 3 {
+		t.Fatalf("повторный прогон должен признать три вложения перенесёнными: %s (было %s)", again, baseline)
 	}
 }

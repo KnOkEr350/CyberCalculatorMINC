@@ -358,9 +358,41 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 		middleware.WriteError(w, http.StatusBadRequest, "key обязателен")
 		return
 	}
-	if req.Key != "audit_log_retention_days" && req.Key != "attachment_retention_days" {
+	if req.Key != "audit_log_retention_days" && req.Key != "attachment_retention_days" &&
+		req.Key != "system_owner_role" && req.Key != settingMFARequired && req.Key != settingMFAGraceHours {
 		middleware.WriteError(w, http.StatusBadRequest, "неизвестная настройка")
 		return
+	}
+	// SEC-02: режим инстанса определяет, кого система считает контрагентом, и
+	// меняет смысл всего реестра партнёров. Такое переключение — полномочие
+	// системного администратора, а не любого администратора организации.
+	if req.Key == "system_owner_role" {
+		if admin.Role != models.RoleSuperAdmin {
+			middleware.WriteError(w, http.StatusForbidden, "режим инстанса переключает только системный администратор")
+			return
+		}
+		if req.Value != "IT_COMPANY" && req.Value != "HEI" {
+			middleware.WriteError(w, http.StatusBadRequest, "режим инстанса должен быть IT_COMPANY или HEI")
+			return
+		}
+	}
+	// SEC-07: требование второго фактора и льготный период — политика доступа
+	// ко всей системе, поэтому их задаёт только системный администратор.
+	if req.Key == settingMFARequired || req.Key == settingMFAGraceHours {
+		if admin.Role != models.RoleSuperAdmin {
+			middleware.WriteError(w, http.StatusForbidden, "политику второго фактора задаёт только системный администратор")
+			return
+		}
+		if req.Key == settingMFARequired && req.Value != "true" && req.Value != "false" {
+			middleware.WriteError(w, http.StatusBadRequest, "требование второго фактора задаётся как true или false")
+			return
+		}
+		if req.Key == settingMFAGraceHours {
+			if hours, err := strconv.Atoi(req.Value); err != nil || hours < 0 || hours > 720 {
+				middleware.WriteError(w, http.StatusBadRequest, "льготный период задаётся часами от 0 до 720")
+				return
+			}
+		}
 	}
 	if req.Key == "audit_log_retention_days" || req.Key == "attachment_retention_days" {
 		if v, err := strconv.Atoi(req.Value); err != nil || v <= 0 || v > 3650 {

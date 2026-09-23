@@ -12,7 +12,9 @@ import (
 type Options struct {
 	UploadDir      string
 	ScannerAddress string
-	QuotaBytes     int64
+	// STORE-05: поведение при недоступном антивирусе — reject или quarantine.
+	ScannerPolicy string
+	QuotaBytes    int64
 }
 
 type Module struct {
@@ -22,7 +24,7 @@ type Module struct {
 
 func New(db *sql.DB, options Options) *Module {
 	return &Module{db: db, attachments: &handlers.AttachmentHandlers{
-		DB: db, UploadDir: options.UploadDir, ScannerAddress: options.ScannerAddress, QuotaBytes: options.QuotaBytes,
+		DB: db, UploadDir: options.UploadDir, ScannerAddress: options.ScannerAddress, ScannerPolicy: options.ScannerPolicy, QuotaBytes: options.QuotaBytes,
 	}}
 }
 

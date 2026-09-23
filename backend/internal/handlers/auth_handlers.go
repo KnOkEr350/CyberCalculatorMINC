@@ -226,11 +226,18 @@ func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request, u middleware.A
 		id := itCompanyID.String
 		user.ITCompanyID = &id
 	}
-	if err := h.DB.QueryRowContext(r.Context(), `SELECT mfa_secret IS NOT NULL FROM users WHERE id=$1`, u.ID).Scan(&user.MFAEnabled); err != nil {
+	var createdAt time.Time
+	if err := h.DB.QueryRowContext(r.Context(), `SELECT mfa_secret IS NOT NULL,created_at FROM users WHERE id=$1`, u.ID).
+		Scan(&user.MFAEnabled, &createdAt); err != nil {
 		middleware.WriteError(w, 500, "ошибка сервера")
 		return
 	}
-	user.MFARequired = h.RequireMFA && !user.MFAEnabled
+	// SEC-07: требование второго фактора берётся из политики инстанса; флаг
+	// окружения остаётся нижней границей, чтобы продакшен нельзя было
+	// смягчить настройкой.
+	policy := mfaPolicy(r, h.DB)
+	enforced := h.RequireMFA || MFAEnforcedFor(policy, createdAt, time.Now())
+	user.MFARequired = enforced && !user.MFAEnabled
 	user.MFAAvailable = h.MFAKey != ""
 	middleware.WriteJSON(w, http.StatusOK, user)
 }

@@ -64,7 +64,7 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: Lint extracted shell scripts
-        run: shellcheck scripts/run-zap.sh scripts/verify-deployment.sh
+        run: shellcheck scripts/run-zap.sh scripts/verify-deployment.sh scripts/verify.sh
 
   backend:
     name: Module / backend

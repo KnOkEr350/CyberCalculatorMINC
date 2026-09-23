@@ -46,6 +46,7 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 func (m *Module) registerDashboardRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/dashboard", middleware.RequireAuth(m.db, m.dashboard.Get))
 	mux.HandleFunc("POST /api/dashboard/target", middleware.RequireAuth(m.db, m.dashboard.SetBudgetTarget))
+	mux.HandleFunc("GET /api/dashboard/target-history", middleware.RequireAuth(m.db, m.dashboard.BudgetTargetHistory))
 }
 
 func (m *Module) registerReportRoutes(mux *http.ServeMux) {

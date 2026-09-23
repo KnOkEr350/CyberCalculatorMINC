@@ -23,7 +23,11 @@ type AttachmentHandlers struct {
 	DB             *sql.DB
 	UploadDir      string
 	ScannerAddress string
-	QuotaBytes     int64
+	// ScannerPolicy — что делать, если антивирус не ответил: "reject" (по
+	// умолчанию) не принимает файл, "quarantine" принимает и держит его
+	// недоступным до повторной проверки.
+	ScannerPolicy string
+	QuotaBytes    int64
 }
 
 const maxAttachmentSize int64 = 20 << 20
@@ -86,6 +90,8 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 		size                      int64
 		// shared — байты уже лежали в хранилище до этой загрузки.
 		shared bool
+		// scanStatus — исход антивирусной проверки этого файла.
+		scanStatus, scanSignature string
 	}
 	staged := make([]stagedFile, 0, len(headers))
 	// Files are unreferenced until the short metadata transaction commits.
@@ -140,10 +146,28 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 400, err.Error())
 			return
 		}
-		if err := filestore.Scan(r.Context(), h.ScannerAddress, path, h.UploadDir); err != nil {
-			middleware.WriteError(w, 422, "файл не прошёл проверку или антивирус недоступен")
+		// STORE-05: угроза и недоступный сканер — разные исходы. Заражённый
+		// файл не сохраняется никогда; непроверенный принимается только если
+		// это разрешено политикой, и тогда лежит в карантине.
+		scan, scanErr := filestore.Inspect(r.Context(), h.ScannerAddress, path, h.UploadDir)
+		if scanErr != nil {
+			middleware.WriteError(w, 500, "ошибка антивирусной проверки")
 			return
 		}
+		switch scan.Verdict {
+		case filestore.VerdictInfected:
+			middleware.WriteError(w, 422, "файл не прошёл антивирусную проверку")
+			return
+		case filestore.VerdictUnavailable:
+			if h.ScannerPolicy != "quarantine" {
+				middleware.WriteError(w, 422, "антивирус недоступен, файл не принят")
+				return
+			}
+			staged[len(staged)-1].scanStatus = "quarantined"
+		default:
+			staged[len(staged)-1].scanStatus = "clean"
+		}
+		staged[len(staged)-1].scanSignature = scan.Signature
 	}
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -207,11 +231,11 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	out := make([]map[string]interface{}, 0, len(staged))
 	for _, f := range staged {
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at,document_type,content_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires, documentType, f.contentSHA256).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at,document_type,content_sha256,scan_status,scan_signature,scanned_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),now()) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires, documentType, f.contentSHA256, f.scanStatus, f.scanSignature).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка метаданных")
 			return
 		}
-		item := map[string]interface{}{"id": id, "file_name": f.name, "size_bytes": f.size, "content_sha256": f.contentSHA256, "retention_expires_at": expires, "document_type": documentType, "review_status": "pending"}
+		item := map[string]interface{}{"id": id, "file_name": f.name, "size_bytes": f.size, "content_sha256": f.contentSHA256, "retention_expires_at": expires, "document_type": documentType, "review_status": "pending", "scan_status": f.scanStatus}
 		if logAudit(r.Context(), tx, "attachment", id, "upload", u.ID, fmt.Sprintf("файл %s", f.name), nil, item) != nil {
 			middleware.WriteError(w, 500, "ошибка аудита")
 			return
@@ -237,7 +261,7 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}
-	rows, err := h.DB.QueryContext(r.Context(), "SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at,document_type,review_status,COALESCE(review_comment,''),COALESCE(content_sha256,'') FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id"+page, entryID)
+	rows, err := h.DB.QueryContext(r.Context(), "SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at,document_type,review_status,COALESCE(review_comment,''),COALESCE(content_sha256,''),scan_status FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id"+page, entryID)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка запроса")
 		return
@@ -245,14 +269,14 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 	defer rows.Close()
 	list := []map[string]interface{}{}
 	for rows.Next() {
-		var id, name, documentType, reviewStatus, reviewComment, contentSHA256 string
+		var id, name, documentType, reviewStatus, reviewComment, contentSHA256, scanStatus string
 		var size int64
 		var uploaded, expires time.Time
-		if rows.Scan(&id, &name, &size, &uploaded, &expires, &documentType, &reviewStatus, &reviewComment, &contentSHA256) != nil {
+		if rows.Scan(&id, &name, &size, &uploaded, &expires, &documentType, &reviewStatus, &reviewComment, &contentSHA256, &scanStatus) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
-		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "file_name": name, "size_bytes": size, "content_sha256": contentSHA256, "uploaded_at": uploaded, "retention_expires_at": expires, "document_type": documentType, "review_status": reviewStatus, "review_comment": reviewComment})
+		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "file_name": name, "size_bytes": size, "content_sha256": contentSHA256, "uploaded_at": uploaded, "retention_expires_at": expires, "document_type": documentType, "review_status": reviewStatus, "review_comment": reviewComment, "scan_status": scanStatus})
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения")
@@ -312,10 +336,10 @@ func (h *AttachmentHandlers) Review(w http.ResponseWriter, r *http.Request, u mi
 }
 
 func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {
-	var name, path, entry string
+	var name, path, entry, scanStatus string
 	var expectedSHA256 sql.NullString
 	var expires time.Time
-	err := h.DB.QueryRowContext(r.Context(), "SELECT file_name,storage_path,entry_id,retention_expires_at,content_sha256 FROM attachments WHERE id::text=$1", attachmentID).Scan(&name, &path, &entry, &expires, &expectedSHA256)
+	err := h.DB.QueryRowContext(r.Context(), "SELECT file_name,storage_path,entry_id,retention_expires_at,content_sha256,scan_status FROM attachments WHERE id::text=$1", attachmentID).Scan(&name, &path, &entry, &expires, &expectedSHA256, &scanStatus)
 	if err == sql.ErrNoRows {
 		middleware.WriteError(w, 404, "файл не найден")
 		return
@@ -329,6 +353,12 @@ func (h *AttachmentHandlers) Download(w http.ResponseWriter, r *http.Request, u 
 	}
 	if !expires.After(time.Now()) {
 		middleware.WriteError(w, 410, "срок хранения файла истёк")
+		return
+	}
+	// STORE-05: файл, принятый без антивирусной проверки, не выдаётся, пока
+	// проверка не пройдена: иначе карантин ничего не значит.
+	if scanStatus == "quarantined" {
+		middleware.WriteError(w, http.StatusConflict, "файл в карантине: антивирусная проверка не пройдена")
 		return
 	}
 	f, err := filestore.Open(h.UploadDir, path)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cybercalc/internal/auth"
+	"cybercalc/internal/bootstrap"
 	"cybercalc/internal/config"
 	"cybercalc/internal/dbx"
 	"cybercalc/internal/handlers"
@@ -154,30 +155,21 @@ func main() {
 }
 
 func ensureBootstrapAdmin(db *sql.DB, cfg config.Config) error {
-	var count int
-	if err := db.QueryRow(`SELECT count(*) FROM users WHERE role = 'super_admin'`).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		_, err := db.Exec(`UPDATE users SET entity_type='organization',updated_at=now()
-			WHERE role='super_admin' AND entity_type IS NULL`)
-		return err
-	}
 	hash, err := auth.HashPassword(cfg.AdminBootPassword)
 	if err != nil {
 		return err
 	}
-	result, err := db.Exec(
-		`INSERT INTO users (email, password_hash, full_name, role, entity_type)
-			 VALUES ($1,$2,$3,'super_admin','organization')
-		 ON CONFLICT (email) DO NOTHING`,
-		cfg.AdminBootEmail, hash, "Администратор",
-	)
+	outcome, err := bootstrap.EnsureAdmin(context.Background(), db, bootstrap.Params{
+		Email: cfg.AdminBootEmail, FullName: "Системный администратор", PasswordHash: hash,
+	})
 	if err != nil {
 		return err
 	}
-	if created, rowsErr := result.RowsAffected(); rowsErr == nil && created == 1 {
-		log.Printf("создан администратор по умолчанию: %s (смените пароль после первого входа!)", cfg.AdminBootEmail)
+	switch outcome {
+	case bootstrap.OutcomeCreated:
+		log.Printf("создан системный администратор: %s (смените пароль после первого входа!)", cfg.AdminBootEmail)
+	case bootstrap.OutcomeRestored:
+		log.Printf("восстановлен доступ системного администратора: %s (прежние сессии закрыты, смените пароль)", cfg.AdminBootEmail)
 	}
 	return nil
 }

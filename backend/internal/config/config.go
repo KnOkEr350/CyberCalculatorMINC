@@ -22,22 +22,26 @@ type Config struct {
 	DBName     string
 	DBSSLMode  string
 
-	HTTPAddr               string
-	UploadDir              string
-	SessionTTLh            int
-	AdminBootEmail         string
-	AdminBootPassword      string
-	PublicURL              string
-	Environment            string
-	CookieSecure           bool
-	ScannerAddress         string
-	UploadQuotaBytes       int64
-	MFAKey                 string
-	DirectorySyncURL       string
-	DirectorySyncHours     int
-	DirectoryEnrichOnStart bool
-	DirectoryEnrichLimit   int
-	DirectoryEnrichDelayMS int
+	HTTPAddr          string
+	UploadDir         string
+	SessionTTLh       int
+	AdminBootEmail    string
+	AdminBootPassword string
+	PublicURL         string
+	Environment       string
+	CookieSecure      bool
+	ScannerAddress    string
+	// STORE-05: что делать, когда антивирус не ответил. По умолчанию
+	// "reject" — непроверенный файл не принимается; "quarantine" принимает
+	// его, но держит недоступным до повторной проверки.
+	ScannerUnavailablePolicy string
+	UploadQuotaBytes         int64
+	MFAKey                   string
+	DirectorySyncURL         string
+	DirectorySyncHours       int
+	DirectoryEnrichOnStart   bool
+	DirectoryEnrichLimit     int
+	DirectoryEnrichDelayMS   int
 
 	BackendFeatureFlags  featureflags.Set
 	FrontendFeatureFlags featureflags.Set
@@ -75,6 +79,7 @@ func Load() Config {
 	}
 	c.CookieSecure = strings.HasPrefix(c.PublicURL, "https://")
 	c.ScannerAddress = os.Getenv("CLAMAV_ADDRESS")
+	c.ScannerUnavailablePolicy = getenv("SCANNER_UNAVAILABLE_POLICY", "reject")
 	c.MFAKey = os.Getenv("MFA_ENCRYPTION_KEY")
 	c.DirectorySyncURL = strings.TrimSpace(os.Getenv("DIRECTORY_SYNC_URL"))
 	c.DirectorySyncHours = 24
@@ -155,6 +160,9 @@ func (c Config) Validate() error {
 	}
 	if _, err := mail.ParseAddress(c.AdminBootEmail); err != nil {
 		return fmt.Errorf("некорректный ADMIN_BOOTSTRAP_EMAIL")
+	}
+	if c.ScannerUnavailablePolicy != "reject" && c.ScannerUnavailablePolicy != "quarantine" {
+		return fmt.Errorf("SCANNER_UNAVAILABLE_POLICY должен быть reject или quarantine")
 	}
 	if c.PublicURL != "" {
 		u, err := url.Parse(c.PublicURL)

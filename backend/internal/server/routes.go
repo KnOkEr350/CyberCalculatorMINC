@@ -58,6 +58,7 @@ func BuildRoutes(db *sql.DB, cfg config.Config) http.Handler {
 		routing.When(activityEnabled, documents.New(db, documents.Options{
 			UploadDir:      cfg.UploadDir,
 			ScannerAddress: cfg.ScannerAddress,
+			ScannerPolicy:  cfg.ScannerUnavailablePolicy,
 			QuotaBytes:     cfg.UploadQuotaBytes,
 		})),
 		reporting.New(db, reporting.Options{

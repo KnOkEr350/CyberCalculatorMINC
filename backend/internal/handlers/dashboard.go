@@ -525,6 +525,11 @@ type setBudgetTargetRequest struct {
 	SavingsBaseRub  *money.Amount `json:"savings_base_rub,omitempty"`
 	SourceReference string        `json:"source_reference"`
 	NotifiedAt      string        `json:"notified_at"`
+	// DATA-11: год базы задаётся явно и сверяется с отчётным, а подтверждение
+	// ФНС — это дата и реквизит документа вместе.
+	BasisYear      int    `json:"basis_year,omitempty"`
+	FNSConfirmedAt string `json:"fns_confirmed_at,omitempty"`
+	FNSReference   string `json:"fns_reference,omitempty"`
 }
 
 func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -562,6 +567,35 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 		middleware.WriteError(w, 400, "дата доведения Минцифры должна быть корректной и не из будущего")
 		return
 	}
+	// База относится к году N-2. Переданный год сверяется, а не принимается
+	// на веру: ошибка в нём означала бы норматив, посчитанный по чужой базе.
+	if req.BasisYear == 0 {
+		req.BasisYear = req.ReportYear - 2
+	}
+	if req.BasisYear != req.ReportYear-2 {
+		middleware.WriteError(w, 400, "база экономии берётся за год N-2 от отчётного")
+		return
+	}
+	req.FNSReference = strings.TrimSpace(req.FNSReference)
+	if (req.FNSConfirmedAt == "") != (req.FNSReference == "") {
+		middleware.WriteError(w, 400, "подтверждение ФНС указывается датой и реквизитом документа вместе")
+		return
+	}
+	if req.FNSConfirmedAt != "" {
+		if _, err := time.Parse("2006-01-02", req.FNSConfirmedAt); err != nil ||
+			req.FNSConfirmedAt > time.Now().In(businessLocation).Format("2006-01-02") {
+			middleware.WriteError(w, 400, "дата подтверждения ФНС должна быть корректной и не из будущего")
+			return
+		}
+		if req.FNSConfirmedAt < req.NotifiedAt {
+			middleware.WriteError(w, 400, "ФНС не может подтвердить базу раньше её доведения Минцифры")
+			return
+		}
+		if len([]rune(req.FNSReference)) > 2000 {
+			middleware.WriteError(w, 400, "реквизит подтверждения ФНС не должен превышать 2000 символов")
+			return
+		}
+	}
 	if int64(*req.SavingsBaseRub) > (math.MaxInt64-50)/3 {
 		middleware.WriteError(w, 400, "база экономии превышает допустимый предел")
 		return
@@ -578,10 +612,11 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 	}
 	defer tx.Rollback()
 	_, err = tx.ExecContext(r.Context(),
-		`INSERT INTO organization_budget_targets (report_year,it_company_id,target_amount_rub,savings_base_rub,source_reference,notified_at,updated_by)
-		 VALUES ($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::date,$7)
-		 ON CONFLICT (report_year,it_company_id) DO UPDATE SET target_amount_rub=$3,savings_base_rub=$4,source_reference=NULLIF($5,''),notified_at=NULLIF($6,'')::date,updated_by=$7,updated_at=now()`,
+		`INSERT INTO organization_budget_targets (report_year,it_company_id,target_amount_rub,savings_base_rub,source_reference,notified_at,updated_by,basis_year,fns_confirmed_at,fns_reference)
+		 VALUES ($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::date,$7,$8,NULLIF($9,'')::date,NULLIF($10,''))
+		 ON CONFLICT (report_year,it_company_id) DO UPDATE SET target_amount_rub=$3,savings_base_rub=$4,source_reference=NULLIF($5,''),notified_at=NULLIF($6,'')::date,updated_by=$7,updated_at=now(),basis_year=$8,fns_confirmed_at=NULLIF($9,'')::date,fns_reference=NULLIF($10,'')`,
 		req.ReportYear, companyID, req.TargetAmountRub, req.SavingsBaseRub, req.SourceReference, req.NotifiedAt, u.ID,
+		req.BasisYear, req.FNSConfirmedAt, req.FNSReference,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")

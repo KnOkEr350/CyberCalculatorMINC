@@ -1497,6 +1497,44 @@
         }
       }
     },
+    "/api/dashboard/target-history": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "История норматива 3% с основанием и подтверждением ФНС",
+        "parameters": [
+          {
+            "name": "report_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Редакции норматива, новые первыми",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/reports/export": {
       "get": {
         "tags": [
@@ -1711,6 +1749,48 @@
         }
       }
     },
+    "/api/admin/users/{id}/mfa-reset": {
+      "post": {
+        "tags": [
+          "administration"
+        ],
+        "summary": "Сброс второго фактора пользователя системным администратором",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Второй фактор снят, сессии пользователя закрыты",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/admin/it-company-options": {
       "get": {
         "tags": [
@@ -1750,6 +1830,29 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/admin/metrics": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "summary": "Показатели эксплуатации: сроки, снимок, хранилище, журнал, база",
+        "responses": {
+          "200": {
+            "description": "Срез состояния подсистем",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Error"
@@ -2324,7 +2427,24 @@
           "target_amount_rub": true,
           "savings_base_rub": true,
           "source_reference": true,
-          "notified_at": true
+          "notified_at": true,
+          "basis_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100,
+            "description": "Год базы экономии; должен равняться report_year - 2"
+          },
+          "fns_confirmed_at": {
+            "type": "string",
+            "format": "date",
+            "description": "Дата подтверждения базы ФНС; указывается вместе с реквизитом"
+          },
+          "fns_reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Реквизит документа ФНС, подтверждающего базу"
+          }
         },
         "additionalProperties": false
       },
