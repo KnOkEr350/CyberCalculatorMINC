@@ -71,7 +71,7 @@ func (r *ActivityProjection) List(ctx context.Context, filter activityprojection
 		COALESCE((SELECT d.reason FROM legal_disputes d WHERE d.entry_id=e.id AND d.lifted_at IS NULL),'')
 		FROM entries e LEFT JOIN entry_eligibility eligibility ON eligibility.id=e.id
 		WHERE ($1=0 OR e.report_year=$1) AND ($2='' OR e.period_type=$2)
-		AND ($3='' OR e.it_company_id=NULLIF($3,'')::uuid) AND ($4='' OR e.partner_id::text=$4)
+		AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.partner_id::text=$4)
 		AND ($5='' OR e.agreement_id::text=$5) AND ($6='' OR e.category_code=$6)
 		AND ($7='' OR e.audience=$7)
 		AND ($8=0 OR (CASE WHEN e.payload->>'semester' ~ '^[0-9]{1,2}$' THEN (e.payload->>'semester')::int END)=$8)

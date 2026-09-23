@@ -25,20 +25,20 @@
 
   const tokens = Object.freeze({
     color: Object.freeze({
-      bg: "#f3f5f8",
+      bg: "#e8ecf5",
       panel: "#ffffff",
-      text: "#273445",
+      text: "#2c3440",
       muted: "#68778a",
-      navy: "#17324f",
-      accent: "#4d91dc",
-      accentStrong: "#2875c7",
+      navy: "#00214e",
+      accent: "#0466e5",
+      accentStrong: "#216bc4",
       good: "#36a36f",
       warn: "#c68721",
       bad: "#d74d57",
     }),
     size: Object.freeze({
-      topbarHeight: 56,
-      sidebarWidth: 248,
+      topbarHeight: 64,
+      sidebarWidth: 256,
       radius: 3,
       inputHeight: 38,
       compactRowHeight: 39,

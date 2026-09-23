@@ -112,3 +112,17 @@ func TestDashboardSemesterTermAndLightSlices(t *testing.T) {
 		}
 	}
 }
+
+// Профиль организации без назначенной ИТ-компании (только что созданный
+// системный администратор) видит пустой дашборд, а не ошибку 500: область
+// «unassigned» не совпадает ни с одним арендатором и не приводится к uuid.
+func TestDashboardForUnassignedOrganizationProfileIsEmptyNotAnError(t *testing.T) {
+	db, year := integrationDB(t)
+	handlers := DashboardHandlers{DB: db, Projection: reportrepository.NewActivityProjection(db)}
+	user := middleware.AuthUser{ID: "00000000-0000-0000-0000-000000000001", Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization}
+	recorder := httptest.NewRecorder()
+	handlers.Get(recorder, httptest.NewRequest("GET", fmt.Sprintf("/api/dashboard?report_year=%d", year), nil), user)
+	if recorder.Code != 200 {
+		t.Fatalf("дашборд без ИТ-компании вернул %d: %s", recorder.Code, recorder.Body.String())
+	}
+}

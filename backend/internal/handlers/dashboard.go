@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"strconv"
@@ -132,6 +133,7 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 			CategoryCode: categoryFilter, Audience: audienceFilter, Semester: semester, Term: term,
 		})
 		if projectionErr != nil {
+			slog.Error("dashboard projection failed", "error", projectionErr)
 			middleware.WriteError(w, 500, "ошибка чтения аналитической проекции")
 			return
 		}

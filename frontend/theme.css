@@ -1,27 +1,27 @@
 :root {
-  --bg: #f3f5f8;
+  --bg: #e8ecf5;
   --panel: #ffffff;
   --panel-2: #f7f8fa;
   --surface-alt: #f7f9fc;
-  --border: #d9dee7;
+  --border: #dde3ee;
   --border-strong: #bbc5d2;
-  --text: #273445;
+  --text: #2c3440;
   --muted: #68778a;
-  --navy: #17324f;
-  --navy-2: #203d5b;
-  --sidebar: #263d55;
-  --sidebar-deep: #1f344a;
-  --accent: #4d91dc;
-  --accent-2: #2875c7;
-  --blue-soft: #eaf3fc;
+  --navy: #00214e;
+  --navy-2: #00214e;
+  --sidebar: #00214e;
+  --sidebar-deep: #001a3d;
+  --accent: #0466e5;
+  --accent-2: #216bc4;
+  --blue-soft: #d1dded;
   --good: #36a36f;
   --warn: #c68721;
   --bad: #d74d57;
   --radius: 3px;
   --shadow: 0 14px 36px rgba(27, 48, 74, .16);
   --shadow-small: 0 2px 8px rgba(35, 56, 80, .08);
-  --topbar-height: 56px;
-  --sidebar-width: 248px;
+  --topbar-height: 64px;
+  --sidebar-width: 256px;
 }
 
 html { min-width: 320px; background: var(--bg); }
@@ -622,3 +622,93 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
 .top-scale.yellow .top-scale-bar i { background: #d9a520; }
 .top-scale.green .top-scale-bar i { background: #267a55; }
 .top-scale.unknown .top-scale-bar i { background: transparent; }
+
+/* ==== Оформление консоли «Кибер Бэкап» (референсы tz/cyber-backup-ui-reference) ====
+   Палитра, снятая с референсов: боковая колонка #00214e, активный пункт #0466e5,
+   рабочее поле #e8ecf5, выбранная строка #d1dded, основная кнопка #216bc4,
+   переключатель #9ac02f, панель справа #f5f6f8. Разметка оболочки прежняя. */
+body { font-family: "Noto Sans", "Open Sans", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 14px; color: var(--text); }
+a { color: #216bc4; }
+
+/* Шапка: белая полоса справа от тёмной колонки, заголовок раздела крупно, как «Все устройства» */
+.topbar { background: #fff; color: var(--text); border-bottom: 1px solid #e8e9eb; box-shadow: none; }
+.topbar-brand { background: var(--sidebar); border-right: 0; padding: 0 24px; }
+.brand-lockup { color: #fff; }
+.brand-copy strong { font-size: 15px; letter-spacing: .12em; font-weight: 800; }
+.topbar-menu { color: #00214e; }
+.topbar-menu:hover { background: #e8ecf5; }
+.product-context { padding: 0 8px; }
+.product-context strong { font-size: 24px; font-weight: 400; color: var(--text); }
+.topbar .who { color: var(--text); }
+.user-copy strong { color: var(--text); font-size: 12px; font-weight: 600; }
+.avatar { border: 0; background: #d1dded; color: #00214e; }
+.topbar .header-action { border: 1px solid #c9d6e8; background: #fff; color: #216bc4; border-radius: 2px; }
+.topbar .header-action:hover { background: #e8ecf5; color: #00214e; }
+
+/* Боковая колонка: крупные значки, прописные названия, активный пункт ярко-синий на всю ширину */
+.sidebar { background: var(--sidebar); }
+.tenant-card { min-height: 46px; background: transparent; border-bottom: 1px solid rgba(255,255,255,.14); }
+.tenant-card strong { color: rgba(255,255,255,.82); font-size: 12px; font-weight: 600; }
+.nav-section-title { display: none; }
+.primary-nav { padding: 6px 0; }
+.primary-nav button { min-height: 60px; padding: 10px 16px; gap: 18px; color: #fff; }
+.primary-nav button svg { width: 30px; height: 30px; stroke-width: 1.35; }
+.primary-nav button > span:not(.nav-count) { font-size: 14px; font-weight: 700; line-height: 1.32; letter-spacing: .01em; text-transform: uppercase; white-space: normal; }
+.primary-nav button > span:not(.nav-count) small { display: none; }
+.primary-nav button:hover, .primary-nav button:focus-visible { background: rgba(255,255,255,.08); }
+.primary-nav button.active { background: #0466e5; }
+.primary-nav button.active::before { background: transparent; }
+.sidebar-footer { border-top: 1px solid rgba(255,255,255,.14); }
+.sidebar-collapsed .primary-nav button { padding: 10px; }
+
+/* Рабочее поле и карточки: плоские белые панели с тонкой рамкой */
+.container { background: var(--bg); }
+.page-heading { margin-bottom: 14px; }
+.page-heading h1 { color: var(--text); font-size: 20px; font-weight: 400; letter-spacing: 0; }
+.card { border-color: #e8e9eb; border-radius: 0; box-shadow: none; }
+.card h2 { color: var(--text); font-size: 15px; font-weight: 600; }
+
+/* Списки: строки на рабочем поле, жирные заголовки, выбранная строка #d1dded */
+.table-wrap { border: 0; background: var(--bg); }
+table th { color: var(--text); font-size: 14px; font-weight: 700; background: transparent; border-bottom: 1px solid #d3dbe8; }
+table td { border-bottom: 1px solid #dde3ee; }
+table tbody tr:hover td { background: #dde6f3; }
+table tbody tr[aria-selected="true"] td, table tbody tr.selected td { background: #d1dded; }
+
+/* Кнопки: основная — #216bc4, вторичная — светло-голубая, как кнопка-стрелка в референсе */
+.btn { min-height: 34px; padding: 6px 16px; border-color: #216bc4; background: #216bc4; font-size: 14px; font-weight: 600; border-radius: 2px; }
+.btn:hover { border-color: #1a58a3; background: #1a58a3; }
+.btn.secondary { border-color: #d2e1f6; background: #d2e1f6; color: #216bc4; }
+.btn.secondary:hover { border-color: #bdd3f0; background: #bdd3f0; }
+.btn.danger { border-color: var(--bad); background: var(--bad); }
+
+/* Переключатель: зелёный, как «Резервное копирование» */
+.ui-toggle-track { width: 48px; height: 24px; border-color: #b7c4d8; background: #b7c4d8; }
+.ui-toggle-track span { width: 18px; height: 18px; }
+.ui-toggle input:checked + label .ui-toggle-track { border-color: #9ac02f; background: #9ac02f; }
+.ui-toggle input:checked + label .ui-toggle-track span { transform: translateX(24px); }
+
+/* Панель справа: белая шапка с крупным заголовком и синим крестом, тело #f5f6f8 */
+.ui-drawer-backdrop { background: rgba(0,0,0,.5); }
+.ui-drawer { background: #f5f6f8; box-shadow: none; }
+.ui-drawer > header { padding: 0 24px; min-height: 64px; background: #fff; border-bottom: 1px solid #e8e9eb; }
+.ui-drawer > header h2 { color: var(--text); font-size: 24px; font-weight: 400; }
+.ui-drawer > header [data-drawer-close] { position: relative; width: 36px; height: 36px; padding: 0; overflow: hidden; border: 0; background: transparent; color: transparent; font-size: 0; }
+.ui-drawer > header [data-drawer-close]::before { content: ""; position: absolute; inset: 6px; background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23216bc4' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 4l16 16M20 4L4 20'/%3E%3C/svg%3E"); }
+.ui-drawer > header [data-drawer-close]:hover { background: #e8ecf5; }
+.ui-drawer-body { padding: 24px; }
+.ui-drawer[data-drawer-mode="view"] .ui-drawer-body { background: #f5f6f8; }
+.modal { border-radius: 0; }
+.modal h2 { color: var(--text); font-size: 22px; font-weight: 400; }
+
+/* Уточнения по сверке с референсом */
+.topbar-brand { height: 100%; }
+.container > .page-heading h1, .container > .page-heading .eyebrow, .container > .page-heading > div > .eyebrow { display: none; }
+.container > .page-heading { min-height: 0; margin-bottom: 10px; padding-bottom: 0; border-bottom: 0; justify-content: flex-end; }
+table th, .card h2, .dashboard-toolbar h2 { text-transform: none; letter-spacing: 0; }
+.dashboard-toolbar h2 { font-size: 15px; font-weight: 600; }
+.field label, .field > label { font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text); }
+.check-row input[type="checkbox"], input[type="checkbox"] { width: 16px; height: 16px; min-height: 0; padding: 0; accent-color: #216bc4; }
+.admin-nav button.active { background: #d1dded; border-left-color: #0466e5; }
+.container .page-heading h1, .container .eyebrow { display: none; }
+.card .grid > button.btn, .card .grid > .btn { align-self: end; }

@@ -13,7 +13,7 @@
 | ADR-14 | Знаменатель процентов ТОП-ИТ | не начато | `backend/internal/compliance/readiness.go`<br>`backend/internal/handlers/ano_ac_report.go`<br>`backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go` и ещё 3 | `backend/internal/handlers/top_program_integration_test.go`<br>`backend/internal/topit/scale_test.go`<br>`frontend/architecture.test.cjs` | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-14-top-it-percent-denominator.md`<br>`docs/adr/README.md` |
 | ADR-16 | Расчёт ИТ-стажа за последние пять лет | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-16-it-experience.md`<br>`docs/adr/README.md` |
 | ADR-20 | Snapshot cutoff и часовой пояс | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-20-snapshot-cutoff.md`<br>`docs/adr/README.md` |
-| ADR-21 | Допустимое название и эмблема продукта | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/ADR-21-product-brand.md`<br>`docs/adr/README.md` |
+| ADR-21 | Допустимое название и эмблема продукта | не начато | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/UI_COMPONENTS.md`<br>`docs/adr/ADR-21-product-brand.md`<br>`docs/adr/README.md` |
 | BASE-01 | Каталог архитектурных решений | выполнено | — | — | `docs/ORDER_270_ADR_ANALYSIS.md`<br>`docs/adr/README.md` |
 | BASE-02 | Версионированный API-контракт | выполнено | `backend/internal/platform/httpx/response.go` | — | — |
 | BASE-03 | Стандарт модулей backend | выполнено | `backend/internal/modules/health` | — | `backend/internal/modules/README.md` |
@@ -160,10 +160,10 @@
 | AUDIT-02 | Защита целостности | выполнено | `migrations/0902_audit_hash_chain.sql` | `backend/internal/handlers/audit_chain_integration_test.go` | — |
 | AUDIT-03 | Архивирование | выполнено | `migrations/0902_audit_hash_chain.sql` | `backend/internal/handlers/audit_chain_integration_test.go` | `docs/adr/ADR-07-retention-policy.md` |
 | AUDIT-04 | Экспорт JSON | выполнено | `backend/internal/handlers/audit_export.go` | `backend/internal/handlers/audit_chain_integration_test.go` | — |
-| UIR-01 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js`<br>`frontend/theme.css` | — | — |
-| UIR-02 | ВЫПОЛНЕНО | выполнено | `frontend/shell/app-shell.js`<br>`frontend/theme.css` | — | — |
+| UIR-01 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js`<br>`frontend/theme.css` | `frontend/architecture.test.cjs` | — |
+| UIR-02 | ВЫПОЛНЕНО | выполнено | `frontend/shell/app-shell.js`<br>`frontend/theme.css` | `frontend/architecture.test.cjs` | — |
 | UIR-03 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js` | — | — |
-| UIR-04 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js` | — | — |
+| UIR-04 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js` | `frontend/architecture.test.cjs` | — |
 | UIR-05 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js` | — | — |
 | UIR-06 | ВЫПОЛНЕНО | выполнено | `frontend/components/ui.js` | — | `docs/adr/ADR-21-product-brand.md` |
 | UIR-07 | НЕ НАЧАТО | не начато | — | — | — |

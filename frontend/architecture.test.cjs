@@ -108,8 +108,8 @@ test("product shell locks page scroll and delegates overflow to workspace", () =
 test("enterprise shell keeps topbar/sidebar proportions and active hierarchy", () => {
   const theme = source("./theme.css");
   const shell = source("./shell/app-shell.js");
-  assert.match(theme, /--topbar-height:\s*56px/);
-  assert.match(theme, /--sidebar-width:\s*248px/);
+  assert.match(theme, /--topbar-height:\s*64px/);
+  assert.match(theme, /--sidebar-width:\s*256px/);
   assert.match(theme, /\.topbar\s*\{[^}]*grid-template-columns:\s*var\(--sidebar-width\)\s+52px\s+minmax\(220px,\s*1fr\)\s+auto/s);
   assert.match(theme, /\.sidebar\s*\{[^}]*position:\s*fixed[^}]*top:\s*var\(--topbar-height\)[^}]*overflow:\s*hidden auto/s);
   assert.match(theme, /\.primary-nav button\.active\s*\{[^}]*background:\s*rgba\(77,145,220,\.23\)[^}]*color:\s*#fff/s);
@@ -262,4 +262,18 @@ test("REPORT-09: TOP-IT card links to the six-sheet АНО АЦ report", () => {
   const app = source("./app.js");
   assert.match(app, /report_type=ano_ac&report_year=/);
   assert.match(app, /Отчёт АНО АЦ \(XLSX, 6 листов\)/);
+});
+
+test("UIR-01 UIR-02 UIR-04: console skin keeps the palette sampled from the Cyber Backup references", () => {
+  const theme = source("./theme.css");
+  // Значения сняты с tz/cyber-backup-ui-reference: колонка #00214e, активный пункт #0466e5,
+  // рабочее поле #e8ecf5, выбранная строка #d1dded, основная кнопка #216bc4, переключатель #9ac02f.
+  for (const [token, color] of [["--sidebar", "#00214e"], ["--accent", "#0466e5"], ["--bg", "#e8ecf5"], ["--blue-soft", "#d1dded"], ["--accent-2", "#216bc4"]]) {
+    assert.match(theme, new RegExp(`${token}:\\s*${color}`, "i"), token);
+  }
+  assert.match(theme, /\.ui-toggle input:checked \+ label \.ui-toggle-track \{[^}]*#9ac02f/);
+  assert.match(theme, /\.primary-nav button\.active \{ background: #0466e5; \}/);
+  assert.match(theme, /\.primary-nav button > span:not\(\.nav-count\) \{[^}]*text-transform: uppercase/);
+  assert.match(theme, /\.ui-drawer > header h2 \{[^}]*font-size: 24px/);
+  assert.match(theme, /\.topbar \{ background: #fff;/);
 });

@@ -13,7 +13,7 @@ test("design tokens are exported and match theme css variables", () => {
   const theme = readFileSync(join(__dirname, "..", "theme.css"), "utf8");
   assert.match(theme, new RegExp(`--text:\\s*${ui.tokens.color.text}`, "i"));
   assert.match(theme, new RegExp(`--accent-2:\\s*${ui.tokens.color.accentStrong}`, "i"));
-  assert.equal(ui.tokens.size.topbarHeight, 56);
+  assert.equal(ui.tokens.size.topbarHeight, 64);
   assert.ok(ui.contrastRatio(ui.tokens.color.text, ui.tokens.color.panel) >= 4.5);
   assert.ok(ui.contrastRatio(ui.tokens.color.navy, ui.tokens.color.panel) >= 7);
 });
