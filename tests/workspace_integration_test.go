@@ -470,7 +470,9 @@ func TestWorkspaceIntegration(t *testing.T) {
 	create(admin, p2, agreement2, "internship", "plan", map[string]interface{}{"org_name": p2, "mentor_id": mentor2, "student_full_name": "Орлов Студент", "duration_months": 1, "student_load_hours_per_month": 2, "mentor_load_hours_per_month": 1, "mentor_assignment_start": "2026-01-01", "mentor_assignment_end": "2026-01-31", "mentor_order_number": "1-ОК", "mentor_order_date": "2025-12-30"}, 201)
 	create(admin, p2, agreement2, "minc_decision", "plan", map[string]interface{}{
 		"org_name": p2, "decision_reference": "Решение МЦ-1", "instruction_authority": "president",
-		"instruction_reference": "Поручение П-1", "implementation_deadline": "2026-12-31",
+		"instruction_type": "president_instruction", "instruction_reference": "Поручение П-1",
+		"decision_number": "МЦ-1", "decision_date": "2026-01-01", "implementation_start": "2026-01-01",
+		"implementation_deadline": "2026-12-31", "implementation_conditions": "Передать результат по акту",
 		"activity_description": "Тестовое мероприятие", "metric_description": "Одна единица",
 		"metric_unit": "ед.", "actual_volume": 1, "calculation_basis": "Фактическая стоимость", "amount_manual": 1000,
 		"decision_required_documents": "Акт", "decision_provided_documents": "",

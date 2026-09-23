@@ -335,12 +335,18 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 	for _, row := range result.Rows {
 		payload, _ := json.Marshal(row.Payload)
 		mentor := mentorColumns(category, row.Payload)
+		ministry := ministryCardColumns(category, row.Payload)
 		var id string
 		if tx.QueryRowContext(r.Context(), `INSERT INTO entries(category_code,partner_id,agreement_id,period_type,report_year,audience,payload,amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,created_by,
-			mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,'')::uuid,NULLIF($15,'')::date,NULLIF($16,'')::date,NULLIF($17,''),NULLIF($18,'')::date,NULLIF(lower($19),'')) RETURNING id`,
+			mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
+			ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
+			ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,'')::uuid,NULLIF($15,'')::date,NULLIF($16,'')::date,NULLIF($17,''),NULLIF($18,'')::date,NULLIF(lower($19),''),
+			NULLIF($20,''),NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,'')::date,NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,''),NULLIF($28,''),NULLIF($29,'')) RETURNING id`,
 			category, partner, agreementID, period, year, audience, payload, row.Amount, row.FormulaAmount, row.ActualAmount, row.CostMethod, companyID, u.ID,
-			mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student).Scan(&id) != nil {
+			mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
+			ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
+			ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения; импорт отменён целиком")
 			return
 		}

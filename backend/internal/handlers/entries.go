@@ -228,12 +228,18 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 
 	var id string
 	mentor := mentorColumns(req.CategoryCode, req.Payload)
+	ministry := ministryCardColumns(req.CategoryCode, req.Payload)
 	err = tx.QueryRowContext(r.Context(),
 		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,created_by,
-		 mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,NULLIF($15,'')::uuid,NULLIF($16,'')::date,NULLIF($17,'')::date,NULLIF($18,''),NULLIF($19,'')::date,NULLIF(lower($20),'')) RETURNING id`,
+		 mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
+		 ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
+		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,NULLIF($15,'')::uuid,NULLIF($16,'')::date,NULLIF($17,'')::date,NULLIF($18,''),NULLIF($19,'')::date,NULLIF(lower($20),''),
+		 NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,'')) RETURNING id`,
 		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
+		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
+		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
 	).Scan(&id)
 	if err != nil {
 		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
@@ -317,7 +323,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 	}
 	// SQL structure comes only from fixed fragments; values remain positional parameters.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	query := `SELECT id,COALESCE(it_company_id::text,''), category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,
+	query := `SELECT id,COALESCE(it_company_id::text,''), category_code, partner_id, COALESCE(agreement_id::text,''), period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,COALESCE(ministry_card_backfill_status,''),
 		created_by, updated_by, created_at, updated_at,
 		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a WHERE a.entry_id=entries.id AND a.retention_expires_at>now())
 		FROM entries WHERE ` + joinAnd(conds) + ` ORDER BY updated_at DESC,id LIMIT 201 OFFSET ` + arg(offset)
@@ -336,7 +342,7 @@ func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middlewar
 		var payloadRaw []byte
 		var documentTypes pq.StringArray
 		if err := rows.Scan(&e.ID, &e.ITCompanyID, &e.CategoryCode, &partnerID, &e.AgreementID, &e.PeriodType, &e.ReportYear, &e.Audience,
-			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt, &documentTypes); err != nil {
+			&payloadRaw, &e.AmountRub, &e.FormulaAmountRub, &actualAmount, &e.CostMethod, &e.MinistryCardBackfillStatus, &e.CreatedBy, &updatedBy, &e.CreatedAt, &e.UpdatedAt, &documentTypes); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
@@ -620,12 +626,18 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	newPayloadJSON, _ := json.Marshal(req.Payload)
 
 	mentor := mentorColumns(categoryCode, req.Payload)
+	ministry := ministryCardColumns(categoryCode, req.Payload)
 	_, err = tx.ExecContext(r.Context(),
 		`UPDATE entries SET payload=$1,audience=$2,partner_id=$3,agreement_id=$4,amount_rub=$5,formula_amount_rub=$6,actual_amount_rub=$7,cost_method=$8,staff_member_id=COALESCE(NULLIF($9,'')::uuid,staff_member_id),updated_by=$10,updated_at=now(),
-		 mentor_id=NULLIF($12,'')::uuid,mentor_assignment_start=NULLIF($13,'')::date,mentor_assignment_end=NULLIF($14,'')::date,mentor_order_number=NULLIF($15,''),mentor_order_date=NULLIF($16,'')::date,assigned_student_name=NULLIF(lower($17),'')
+		 mentor_id=NULLIF($12,'')::uuid,mentor_assignment_start=NULLIF($13,'')::date,mentor_assignment_end=NULLIF($14,'')::date,mentor_order_number=NULLIF($15,''),mentor_order_date=NULLIF($16,'')::date,assigned_student_name=NULLIF(lower($17),''),
+		 ministry_instruction_type=NULLIF($18,''),ministry_instruction_authority=NULLIF($19,''),ministry_instruction_reference=NULLIF($20,''),ministry_decision_number=NULLIF($21,''),
+		 ministry_decision_date=NULLIF($22,'')::date,ministry_implementation_start=NULLIF($23,'')::date,ministry_implementation_deadline=NULLIF($24,'')::date,
+		 ministry_implementation_conditions=NULLIF($25,''),ministry_activity_description=NULLIF($26,''),ministry_card_backfill_status=NULLIF($27,'')
 		 WHERE id=$11`,
 		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, u.ID, entryID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
+		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
+		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
@@ -682,6 +694,26 @@ func mentorColumns(category string, payload map[string]interface{}) mentorEntryC
 	return mentorEntryColumns{
 		ID: value("mentor_id"), Start: value("mentor_assignment_start"), End: value("mentor_assignment_end"),
 		OrderNumber: value("mentor_order_number"), OrderDate: value("mentor_order_date"), Student: strings.Join(strings.Fields(value("student_full_name")), " "),
+	}
+}
+
+type ministryEntryColumns struct {
+	InstructionType, Authority, InstructionReference string
+	DecisionNumber, DecisionDate, Start, Deadline    string
+	Conditions, Description, Status                  string
+}
+
+func ministryCardColumns(category string, payload map[string]interface{}) ministryEntryColumns {
+	if category != "minc_decision" {
+		return ministryEntryColumns{}
+	}
+	value := func(key string) string { return strings.TrimSpace(fmt.Sprint(payload[key])) }
+	return ministryEntryColumns{
+		InstructionType: value("instruction_type"), Authority: value("instruction_authority"),
+		InstructionReference: value("instruction_reference"), DecisionNumber: value("decision_number"),
+		DecisionDate: value("decision_date"), Start: value("implementation_start"),
+		Deadline: value("implementation_deadline"), Conditions: value("implementation_conditions"),
+		Description: value("activity_description"), Status: "complete",
 	}
 }
 

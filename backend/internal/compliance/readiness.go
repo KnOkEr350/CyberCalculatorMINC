@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const RulesetVersion = "mincifry-270-2026.2"
@@ -188,6 +189,22 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 				num("digital_trace_participants") > 0 && has("digital_trace_sha256"), blockDocuments)
 		require("acceptance_act", "Акт приёмки доступа", hasDoc("acceptance_act", "acceptance_act_reference"), false)
 	case "minc_decision":
+		// MIN-01/MIN-05: legacy records stay visible, but cannot silently become
+		// eligible until the operator completes the typed Decision card.
+		authorities := map[string]string{
+			"president_instruction": "president", "government_instruction": "prime_minister",
+			"curator_instruction": "deputy_prime_minister", "security_council_decision": "security_council",
+		}
+		decisionDate, decisionDateErr := time.Parse("2006-01-02", fmt.Sprint(payload["decision_date"]))
+		implementationStart, startErr := time.Parse("2006-01-02", fmt.Sprint(payload["implementation_start"]))
+		implementationDeadline, deadlineErr := time.Parse("2006-01-02", fmt.Sprint(payload["implementation_deadline"]))
+		cardComplete := has("instruction_type") && has("instruction_authority") && has("instruction_reference") &&
+			has("decision_number") && has("decision_date") && has("implementation_start") &&
+			has("implementation_deadline") && has("implementation_conditions") && has("activity_description") &&
+			authorities[fmt.Sprint(payload["instruction_type"])] == fmt.Sprint(payload["instruction_authority"]) &&
+			decisionDateErr == nil && startErr == nil && deadlineErr == nil &&
+			!implementationDeadline.Before(implementationStart) && !implementationDeadline.Before(decisionDate)
+		require("ministry_decision_card", "Карточка Решения и исходного поручения заполнена", cardComplete, true)
 		require("ministry_decision", "Решение Минцифры и исходное поручение", hasDoc("ministry_decision", "decision_reference"), blockDocuments)
 		require("expense_evidence", "Акты, платежи и первичные документы", hasDoc("expense_evidence", "expense_evidence_reference"), false)
 		// MIN-04: the Decision itself defines its evidence package. The generic

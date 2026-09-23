@@ -210,24 +210,25 @@ type ActivityCategory struct {
 }
 
 type Entry struct {
-	ID               string                 `json:"id"`
-	ITCompanyID      string                 `json:"it_company_id,omitempty"`
-	CategoryCode     string                 `json:"category_code"`
-	PartnerID        *string                `json:"partner_id,omitempty"`
-	AgreementID      string                 `json:"agreement_id"`
-	PeriodType       PeriodType             `json:"period_type"`
-	ReportYear       int                    `json:"report_year"`
-	Audience         Audience               `json:"audience"`
-	Payload          map[string]interface{} `json:"payload"`
-	AmountRub        money.Amount           `json:"amount_rub"`
-	FormulaAmountRub money.Amount           `json:"formula_amount_rub"`
-	ActualAmountRub  *money.Amount          `json:"actual_amount_rub,omitempty"`
-	CostMethod       string                 `json:"cost_method"`
-	CreatedBy        string                 `json:"created_by"`
-	UpdatedBy        *string                `json:"updated_by,omitempty"`
-	CreatedAt        time.Time              `json:"created_at"`
-	UpdatedAt        time.Time              `json:"updated_at"`
-	Compliance       compliance.Result      `json:"compliance"`
+	ID                         string                 `json:"id"`
+	ITCompanyID                string                 `json:"it_company_id,omitempty"`
+	CategoryCode               string                 `json:"category_code"`
+	PartnerID                  *string                `json:"partner_id,omitempty"`
+	AgreementID                string                 `json:"agreement_id"`
+	PeriodType                 PeriodType             `json:"period_type"`
+	ReportYear                 int                    `json:"report_year"`
+	Audience                   Audience               `json:"audience"`
+	Payload                    map[string]interface{} `json:"payload"`
+	AmountRub                  money.Amount           `json:"amount_rub"`
+	FormulaAmountRub           money.Amount           `json:"formula_amount_rub"`
+	ActualAmountRub            *money.Amount          `json:"actual_amount_rub,omitempty"`
+	CostMethod                 string                 `json:"cost_method"`
+	MinistryCardBackfillStatus string                 `json:"ministry_card_backfill_status,omitempty"`
+	CreatedBy                  string                 `json:"created_by"`
+	UpdatedBy                  *string                `json:"updated_by,omitempty"`
+	CreatedAt                  time.Time              `json:"created_at"`
+	UpdatedAt                  time.Time              `json:"updated_at"`
+	Compliance                 compliance.Result      `json:"compliance"`
 }
 
 type LegalEntityGroupMember struct {

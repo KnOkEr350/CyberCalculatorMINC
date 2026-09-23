@@ -65,7 +65,7 @@ func TestTopITAnoDocuments(t *testing.T) {
 // решение с исходным поручением и первичные документы о расходах.
 func TestMinistryDecisionDocuments(t *testing.T) {
 	documents := []string{"ministry_decision", "expense_evidence"}
-	payload := map[string]interface{}{"decision_required_documents": "Акт\nПлатёжное поручение", "decision_provided_documents": "Акт\nПлатёжное поручение"}
+	payload := ministryDecisionPayload()
 	if got := Evaluate("minc_decision", "fact", payload, documents); got.State != "green" {
 		t.Fatalf("полный комплект по Решению должен быть зелёным: %+v", got)
 	}
@@ -81,8 +81,24 @@ func TestMinistryDecisionDocuments(t *testing.T) {
 	if plan := Evaluate("minc_decision", "plan", payload, nil); plan.State == "red" {
 		t.Fatalf("плановая строка не должна блокироваться отсутствием документов: %+v", plan)
 	}
-	incomplete := map[string]interface{}{"decision_required_documents": "Акт\nПлатёжное поручение", "decision_provided_documents": "Акт"}
+	incomplete := ministryDecisionPayload()
+	incomplete["decision_provided_documents"] = "Акт"
 	if got := Evaluate("minc_decision", "fact", incomplete, documents); got.State != "yellow" {
 		t.Fatalf("неполный динамический комплект должен оставаться жёлтым: %+v", got)
+	}
+	legacy := ministryDecisionPayload()
+	delete(legacy, "decision_number")
+	if got := Evaluate("minc_decision", "fact", legacy, documents); got.State != "red" {
+		t.Fatalf("legacy-запись с неполной карточкой должна требовать ручной проверки: %+v", got)
+	}
+}
+
+func ministryDecisionPayload() map[string]interface{} {
+	return map[string]interface{}{
+		"instruction_type": "government_instruction", "instruction_authority": "prime_minister",
+		"instruction_reference": "Поручение ПР-1", "decision_number": "МЦ-1", "decision_date": "2026-03-12",
+		"implementation_start": "2026-03-15", "implementation_deadline": "2026-11-15",
+		"implementation_conditions": "Передать результат по акту", "activity_description": "Разработка СУБД",
+		"decision_required_documents": "Акт\nПлатёжное поручение", "decision_provided_documents": "Акт\nПлатёжное поручение",
 	}
 }

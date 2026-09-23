@@ -43,6 +43,14 @@ const VALUE_LABELS = {
   full_or_partial: "Есть полностью или частично",
   fixed_term: "Срочный трудовой договор",
   other: "Другой тип договора",
+  president_instruction: "Поручение Президента РФ",
+  government_instruction: "Поручение Правительства РФ",
+  curator_instruction: "Поручение куратора Министерства",
+  security_council_decision: "Решение Совета Безопасности РФ",
+  president: "Президент РФ",
+  prime_minister: "Председатель Правительства РФ",
+  deputy_prime_minister: "Куратор Министерства",
+  security_council: "Совет Безопасности РФ",
   development: "Разработка",
   update: "Актуализация",
   expertise: "Экспертиза",
@@ -812,6 +820,14 @@ function fieldInput(f, value, audience) {
                   full_or_partial: "Есть полностью или частично",
                   fixed_term: "Срочный трудовой договор",
                   other: "Другой тип договора",
+                  president_instruction: "Поручение Президента РФ",
+                  government_instruction: "Поручение Правительства РФ",
+                  curator_instruction: "Поручение куратора Министерства",
+                  security_council_decision: "Решение Совета Безопасности РФ",
+                  president: "Президент РФ",
+                  prime_minister: "Председатель Правительства РФ",
+                  deputy_prime_minister: "Куратор Министерства",
+                  security_council: "Совет Безопасности РФ",
                   development: "Разработка",
                   update: "Актуализация",
                   expertise: "Экспертиза",
@@ -1246,6 +1262,7 @@ async function openEntryModal(entry, readOnly = false) {
     content: `
     <form id="m-form" novalidate>
     ${financialOnly ? '<p class="notice">Финансовая роль изменяет только квартал, плановую компенсацию и реквизиты выплаты. Учебные показатели и расчётная сумма защищены от изменения.</p>' : ""}
+    ${entry?.ministry_card_backfill_status === "manual_review" ? '<p class="notice">Запись перенесена из прежнего формата. Проверьте и заполните карточку Решения: до сохранения она не участвует в зачёте.</p>' : ""}
     <div class="field"><label>Аудитория</label>
       <select id="m-audience" disabled><option value="${escapeHTML(audience)}">${escapeHTML(AUDIENCE_LABELS[audience])}</option></select>
     </div>
