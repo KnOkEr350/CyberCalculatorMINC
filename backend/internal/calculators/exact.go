@@ -3,15 +3,24 @@ package calculators
 import (
 	"cybercalc/internal/models"
 	"cybercalc/internal/money"
+	"cybercalc/internal/tariffs"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
 )
 
-// CalculateAmount is the persistence boundary. Input decimals and all
-// intermediate arithmetic remain exact; only the final sum rounds to kopecks.
+// CalculateAmount считает сумму по ставкам редакции поставки. Рабочий путь
+// сохранения использует CalculateAmountWith со ставками, действующими на
+// отчётный год; этот вариант нужен проверкам без БД.
 func CalculateAmount(code string, audience models.Audience, p map[string]interface{}) (money.Amount, error) {
+	return CalculateAmountWith(tariffs.Default(), code, audience, p)
+}
+
+// CalculateAmountWith is the persistence boundary. Input decimals and all
+// intermediate arithmetic remain exact; only the final sum rounds to kopecks.
+// Ставки берутся из переданной карточки (DATA-07), а не из кода.
+func CalculateAmountWith(card tariffs.Card, code string, audience models.Audience, p map[string]interface{}) (money.Amount, error) {
 	c, err := Get(code)
 	if err != nil {
 		return 0, err
@@ -40,22 +49,36 @@ func CalculateAmount(code string, audience models.Audience, p map[string]interfa
 		}
 		return r
 	}
+	var rateErr error
+	rate := func(rateCode string) *big.Rat {
+		value, err := card.Rat(rateCode)
+		if err != nil {
+			rateErr = err
+			return new(big.Rat)
+		}
+		return value
+	}
+	text := func(key string) string {
+		value, _ := p[key].(string)
+		return value
+	}
 	mul := func(a, b *big.Rat) *big.Rat { return new(big.Rat).Mul(a, b) }
 	add := func(a, b *big.Rat) *big.Rat { return new(big.Rat).Add(a, b) }
-	i := func(v int64) *big.Rat { return big.NewRat(v, 1) }
 	var result *big.Rat
 	switch code {
 	case "teachers":
-		rate := int64(4140)
+		hourly := tariffs.TeacherHourVuz
 		if audience == models.AudienceKolledj {
-			rate = 3900
+			hourly = tariffs.TeacherHourKolledj
 		}
-		result = mul(n("academic_hours"), i(rate))
+		result = mul(n("academic_hours"), rate(hourly))
 	case "internship", "employment_practice":
-		result = mul(add(mul(n("student_load_hours_per_month"), i(800)), mul(n("mentor_load_hours_per_month"), i(2390))), n("duration_months"))
+		result = mul(add(mul(n("student_load_hours_per_month"), rate(tariffs.InternshipStudentHour)),
+			mul(n("mentor_load_hours_per_month"), rate(tariffs.InternshipMentorHour))), n("duration_months"))
 	case "ood_rpd":
-		rate, _ := c.Calculate(audience, p)
-		result = i(int64(rate))
+		// Допустимость сочетания вида документа, уровня и работы проверена
+		// выше через Calculate; здесь берётся ставка этого сочетания.
+		result = rate(tariffs.OODRPD(text("doc_type"), text("level"), text("activity_type")))
 	case "top_it":
 		// TOP-02: в зачёт норматива идёт фактически списанная вузом сумма
 		// (ТЗ §7.5). Раньше точный путь всегда брал объём по отчёту, поэтому
@@ -69,16 +92,22 @@ func CalculateAmount(code string, audience models.Audience, p map[string]interfa
 	case "minc_decision":
 		result = n("amount_manual")
 	case "it_clubs":
-		result = add(mul(n("academic_hours"), i(4260)), mul(n("developed_programs_count"), i(530890)))
+		result = add(mul(n("academic_hours"), rate(tariffs.SchoolProgramHour)),
+			mul(n("developed_programs_count"), rate(tariffs.SchoolProgramDevelopment)))
 	case "teacher_training":
-		result = add(mul(n("developed_programs_count"), i(1408570)), mul(mul(n("academic_hours_per_teacher"), n("trained_teachers_count")), i(3790)))
+		result = add(mul(n("developed_programs_count"), rate(tariffs.TeacherTrainingDevelopment)),
+			mul(mul(n("academic_hours_per_teacher"), n("trained_teachers_count")), rate(tariffs.TeacherTrainingHour)))
 	case "edu_content":
-		result = add(mul(n("student_platform_months"), i(6800)), mul(n("teacher_platform_months"), i(8590)))
+		result = add(mul(n("student_platform_months"), rate(tariffs.PlatformStudentMonth)),
+			mul(n("teacher_platform_months"), rate(tariffs.PlatformTeacherMonth)))
 	default:
 		return 0, fmt.Errorf("неизвестная формула")
 	}
 	if parseErr != nil {
 		return 0, parseErr
+	}
+	if rateErr != nil {
+		return 0, rateErr
 	}
 	amount, err := money.FromRat(result)
 	if err != nil {

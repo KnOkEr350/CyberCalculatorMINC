@@ -75,3 +75,37 @@ func TestProjectLegacyActivityKeepsUnapprovedFactOutOfCountedAmount(t *testing.T
 		t.Fatalf("an entry outside the accounting boundary must stay ineligible: %#v", projection)
 	}
 }
+
+// ADR-17: запись под юридическим сомнением не входит в зачёт, даже если по всем
+// остальным осям она проходит; после снятия сомнения сумма возвращается.
+func TestProjectLegacyActivityExcludesDisputedEntryFromCountedAmount(t *testing.T) {
+	row := legacyActivityRow{
+		activityID:      "activity-3",
+		categoryCode:    "edu_content",
+		audience:        "school",
+		reportYear:      2026,
+		period:          "fact",
+		amount:          money.Amount(125_000),
+		formulaAmount:   money.Amount(120_000),
+		payload:         []byte(`{"student_platform_months":"10","teacher_platform_months":2,"digital_trace_period_start":"2026-01-01","digital_trace_period_end":"2026-04-30","digital_trace_participants":12,"digital_trace_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
+		accountEligible: true,
+		reportStatus:    "approved",
+		documents:       []string{"school_agreement:approved", "digital_trace:approved", "acceptance_act:approved"},
+	}
+	clear, err := projectLegacyActivity(row, time.Now())
+	if err != nil || clear.CountedAmount != row.amount || !clear.LegalDispute.Passed || clear.LegalDispute.State != "clear" {
+		t.Fatalf("без сомнения запись в зачёте: %#v err=%v", clear, err)
+	}
+	row.disputeReason = "подпись вызывает сомнение"
+	disputed, err := projectLegacyActivity(row, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disputed.CountedAmount != 0 || disputed.LegalDispute.Passed || disputed.LegalDispute.State != "disputed" ||
+		len(disputed.LegalDispute.Reasons) != 1 {
+		t.Fatalf("запись под сомнением не должна попадать в зачёт: %#v", disputed)
+	}
+	if disputed.ConfirmedFact != row.amount {
+		t.Fatalf("подтверждённый факт от сомнения не зависит: %#v", disputed)
+	}
+}

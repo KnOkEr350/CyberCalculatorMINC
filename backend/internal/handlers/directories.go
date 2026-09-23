@@ -32,9 +32,15 @@ func (h *EntryHandlers) validateMentor(r *http.Request, category, partner, exclu
 	}
 	// Snapshot used in reports: callers cannot forge a mentor's full name.
 	payload["mentor_full_name"] = name
-	student := strings.Join(strings.Fields(fmt.Sprint(payload["student_full_name"])), " ")
-	start := strings.TrimSpace(fmt.Sprint(payload["mentor_assignment_start"]))
-	end := strings.TrimSpace(fmt.Sprint(payload["mentor_assignment_end"]))
+	// Отсутствующее поле — пустая строка, а не "<nil>": fmt.Sprint(nil) выглядел
+	// бы заполненным значением и уводил проверку в SQL с некорректной датой.
+	text := func(key string) string {
+		value, _ := payload[key].(string)
+		return strings.TrimSpace(value)
+	}
+	student := strings.Join(strings.Fields(text("student_full_name")), " ")
+	start := text("mentor_assignment_start")
+	end := text("mentor_assignment_end")
 	if student == "" || start == "" || end == "" {
 		return nil // the category validator returns the field-specific message
 	}

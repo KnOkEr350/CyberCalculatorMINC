@@ -261,7 +261,12 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 	if !requireEntry(w, r, h.DB, u, entryID) {
 		return
 	}
-	rows, err := h.DB.QueryContext(r.Context(), "SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at,document_type,review_status,COALESCE(review_comment,''),COALESCE(content_sha256,''),scan_status FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id"+page, entryID)
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id,file_name,size_bytes,uploaded_at,retention_expires_at,document_type,review_status,
+		COALESCE(review_comment,''),COALESCE(content_sha256,''),scan_status,
+		owner_role,owner_entity_type,COALESCE(document_number,''),COALESCE(document_date::text,''),COALESCE(signer_name,''),
+		COALESCE(certificate_serial,''),COALESCE(certificate_valid_from::text,''),COALESCE(certificate_valid_until::text,''),
+		COALESCE(signature_verified_at::text,'')
+		FROM attachments WHERE entry_id=$1 AND retention_expires_at>now() ORDER BY uploaded_at DESC,id`+page, entryID)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка запроса")
 		return
@@ -270,13 +275,18 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 	list := []map[string]interface{}{}
 	for rows.Next() {
 		var id, name, documentType, reviewStatus, reviewComment, contentSHA256, scanStatus string
+		var ownerRole, ownerEntity, number, docDate, signer, serial, certFrom, certUntil, verifiedAt string
 		var size int64
 		var uploaded, expires time.Time
-		if rows.Scan(&id, &name, &size, &uploaded, &expires, &documentType, &reviewStatus, &reviewComment, &contentSHA256, &scanStatus) != nil {
+		if rows.Scan(&id, &name, &size, &uploaded, &expires, &documentType, &reviewStatus, &reviewComment, &contentSHA256, &scanStatus,
+			&ownerRole, &ownerEntity, &number, &docDate, &signer, &serial, &certFrom, &certUntil, &verifiedAt) != nil {
 			middleware.WriteError(w, 500, "ошибка чтения")
 			return
 		}
-		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "file_name": name, "size_bytes": size, "content_sha256": contentSHA256, "uploaded_at": uploaded, "retention_expires_at": expires, "document_type": documentType, "review_status": reviewStatus, "review_comment": reviewComment, "scan_status": scanStatus})
+		list = append(list, map[string]interface{}{"id": id, "entry_id": entryID, "file_name": name, "size_bytes": size, "content_sha256": contentSHA256, "uploaded_at": uploaded, "retention_expires_at": expires, "document_type": documentType, "review_status": reviewStatus, "review_comment": reviewComment, "scan_status": scanStatus,
+			"owner_role": ownerRole, "owner_entity_type": ownerEntity, "document_number": number, "document_date": docDate,
+			"signer_name": signer, "certificate_serial": serial, "certificate_valid_from": certFrom,
+			"certificate_valid_until": certUntil, "signature_verified_at": verifiedAt})
 	}
 	if rows.Err() != nil {
 		middleware.WriteError(w, 500, "ошибка чтения")
@@ -288,6 +298,9 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 type attachmentReviewRequest struct {
 	Status  string `json:"status"`
 	Comment string `json:"comment"`
+	// SignatureVerified — проверяющий подтверждает, что подпись и сертификат,
+	// описанные в реквизитах, подлинны. Возможно только для описанной подписи.
+	SignatureVerified *bool `json:"signature_verified,omitempty"`
 }
 
 // Review records legal verification separately from the uploaded bytes. A
@@ -318,13 +331,33 @@ func (h *AttachmentHandlers) Review(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 400, "при отклонении укажите причину")
 		return
 	}
+	if req.SignatureVerified != nil && *req.SignatureVerified && req.Status != "approved" {
+		middleware.WriteError(w, 400, "подпись подтверждается вместе с одобрением документа")
+		return
+	}
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, 500, "ошибка транзакции")
 		return
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(r.Context(), `UPDATE attachments SET review_status=$1,reviewed_by=$2,reviewed_at=now(),review_comment=NULLIF($3,'') WHERE id::text=$4`, req.Status, u.ID, req.Comment, attachmentID); err != nil {
+	// Подтверждать нечего, если подпись не описана: проверяющий подтверждает
+	// сведения, а не собственное впечатление.
+	verifySignature := req.SignatureVerified != nil && *req.SignatureVerified
+	if verifySignature {
+		var signed bool
+		if err := tx.QueryRowContext(r.Context(), `SELECT signer_name IS NOT NULL FROM attachments WHERE id::text=$1`, attachmentID).Scan(&signed); err != nil {
+			middleware.WriteError(w, 500, "ошибка чтения документа")
+			return
+		}
+		if !signed {
+			middleware.WriteError(w, 400, "у документа не описана подпись: сначала укажите подписанта и сертификат")
+			return
+		}
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE attachments SET review_status=$1,reviewed_by=$2,reviewed_at=now(),review_comment=NULLIF($3,''),
+		signature_verified_at=CASE WHEN $5 THEN now() ELSE NULL END,signature_verified_by=CASE WHEN $5 THEN $2::uuid ELSE NULL END
+		WHERE id::text=$4`, req.Status, u.ID, req.Comment, attachmentID, verifySignature); err != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения проверки")
 		return
 	}

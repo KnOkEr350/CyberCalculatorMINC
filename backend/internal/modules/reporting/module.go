@@ -17,6 +17,7 @@ type Module struct {
 	workflow  *handlers.ReportWorkflowHandlers
 	snapshots *handlers.SnapshotHandlers
 	calendar  handlers.ReportCalendarHandlers
+	processes *handlers.RegulatoryHandlers
 	options   Options
 }
 
@@ -28,7 +29,7 @@ type Options struct {
 
 func New(db *sql.DB, options Options) *Module {
 	projection := repository.NewActivityProjection(db)
-	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, options: options}
+	return &Module{db: db, dashboard: &handlers.DashboardHandlers{DB: db, Projection: projection}, reports: &handlers.ReportHandlers{DB: db, Projection: projection}, workflow: &handlers.ReportWorkflowHandlers{DB: db}, snapshots: &handlers.SnapshotHandlers{DB: db}, calendar: handlers.ReportCalendarHandlers{}, processes: &handlers.RegulatoryHandlers{DB: db}, options: options}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -56,6 +57,14 @@ func (m *Module) registerReportRoutes(mux *http.ServeMux) {
 		m.reports.DownloadGenerated(w, r, u, r.PathValue("id"))
 	}))
 	mux.HandleFunc("GET /api/report-calendar", middleware.RequireAuth(m.db, m.calendar.Get))
+	mux.HandleFunc("POST /api/regulatory/processes", middleware.RequireAuth(m.db, m.processes.Create))
+	mux.HandleFunc("GET /api/regulatory/processes", middleware.RequireAuth(m.db, m.processes.List))
+	mux.HandleFunc("GET /api/regulatory/processes/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.processes.Get(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("POST /api/regulatory/processes/{id}/actions", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.processes.Act(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/report-workflow", middleware.RequireAuth(m.db, m.workflow.Get))
 	mux.HandleFunc("POST /api/report-workflow/transition", middleware.RequireAuth(m.db, m.workflow.Transition))
 }

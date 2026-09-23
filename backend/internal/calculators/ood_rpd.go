@@ -2,6 +2,7 @@ package calculators
 
 import (
 	"cybercalc/internal/models"
+	"cybercalc/internal/tariffs"
 	"fmt"
 )
 
@@ -10,16 +11,17 @@ import (
 // и вида активности (Разработка/Актуализация/Экспертиза).
 type oodRpdCalc struct{}
 
-// docType: "rpd" | "oop"; level: "vo" | "spo"; activityType: "development" | "update" | "expertise"
-var oodRpdRates = map[string]map[string]map[string]float64{
-	"rpd": {
-		"vo":  {"development": 300000, "update": 160000, "expertise": 55000},
-		"spo": {"development": 270750, "update": 150000, "expertise": 58060},
-	},
-	"oop": {
-		"vo":  {"development": 2039850, "update": 626110, "expertise": 312300},
-		"spo": {"development": 1731360, "update": 427440, "expertise": 171000},
-	},
+// docType: "rpd" | "oop"; level: "vo" | "spo"; activityType: "development" | "update" | "expertise".
+// Суммы читаются из редакции поставки (DATA-07): таблица ставок живёт в одном
+// месте, а здесь остаётся только допустимость сочетаний.
+var (
+	oodRpdDocTypes = []string{"rpd", "oop"}
+	oodRpdLevels   = []string{"vo", "spo"}
+)
+
+func oodRpdRate(docType, level, activity string) (float64, bool) {
+	value, err := tariffs.Default().Float(tariffs.OODRPD(docType, level, activity))
+	return value, err == nil
 }
 
 func (oodRpdCalc) Calculate(audience models.Audience, payload map[string]interface{}) (float64, error) {
@@ -42,15 +44,13 @@ func (oodRpdCalc) Calculate(audience models.Audience, payload map[string]interfa
 		return 0, err
 	}
 
-	byLevel, ok := oodRpdRates[docType]
-	if !ok {
+	if !contains(oodRpdDocTypes, docType) {
 		return 0, fmt.Errorf("неизвестный вид документа: %s (ожидается rpd|oop)", docType)
 	}
-	byActivity, ok := byLevel[level]
-	if !ok {
+	if !contains(oodRpdLevels, level) {
 		return 0, fmt.Errorf("неизвестный уровень образования: %s (ожидается vo|spo)", level)
 	}
-	rate, ok := byActivity[activityType]
+	rate, ok := oodRpdRate(docType, level, activityType)
 	if !ok {
 		return 0, fmt.Errorf("неизвестный вид активности: %s (ожидается development|update|expertise)", activityType)
 	}
@@ -71,4 +71,13 @@ func (oodRpdCalc) Fields() []FieldSpec {
 		{Key: "expert_conclusion_reference", Label: "Реквизиты экспертного заключения", Type: "text", MaxLength: 1000},
 		{Key: "approval_reference", Label: "Решение об утверждении / учёный совет", Type: "text", MaxLength: 1000},
 	}
+}
+
+func contains(values []string, value string) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }

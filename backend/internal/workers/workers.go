@@ -14,6 +14,7 @@ import (
 
 	"cybercalc/internal/config"
 	"cybercalc/internal/handlers"
+	"cybercalc/internal/regulatory"
 	"cybercalc/internal/retention"
 )
 
@@ -36,6 +37,9 @@ func Run(ctx context.Context, db *sql.DB, cfg config.Config) error {
 	}
 
 	start(func() { retention.Run(db, time.Hour, stop, cfg.UploadDir) })
+	// Согласование по молчанию: срок истекает в полночь по Москве, поэтому
+	// проверка идёт каждые 15 минут, и переход не опаздывает больше чем на них.
+	start(func() { regulatory.RunExpiry(db, 15*time.Minute, stop) })
 	start(func() {
 		handlers.RunDirectorySync(db, cfg.DirectorySyncURL, time.Duration(cfg.DirectorySyncHours)*time.Hour, stop)
 	})

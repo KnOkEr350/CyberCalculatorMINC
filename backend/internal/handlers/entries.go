@@ -3,6 +3,7 @@ package handlers
 import (
 	"cybercalc/internal/compliance"
 	"cybercalc/internal/money"
+	"cybercalc/internal/tariffs"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -199,7 +200,13 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	formulaAmount, err := calculators.CalculateAmount(req.CategoryCode, models.Audience(req.Audience), req.Payload)
+	// DATA-07: ставки берутся из версий, действующих на отчётный год записи.
+	tariffCard, err := tariffs.Load(r.Context(), h.DB, req.ReportYear)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось определить тариф: "+err.Error())
+		return
+	}
+	formulaAmount, err := calculators.CalculateAmountWith(tariffCard, req.CategoryCode, models.Audience(req.Audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
@@ -233,13 +240,14 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,created_by,
 		 mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
 		 ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
-		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status)
+		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status,formula_tariff_ids)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,NULLIF($15,'')::uuid,NULLIF($16,'')::date,NULLIF($17,'')::date,NULLIF($18,''),NULLIF($19,'')::date,NULLIF(lower($20),''),
-		 NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,'')) RETURNING id`,
+		 NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,''),$31) RETURNING id`,
 		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
 		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
 		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
+		pq.Array(tariffCard.VersionIDs(req.CategoryCode)),
 	).Scan(&id)
 	if err != nil {
 		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
@@ -604,7 +612,12 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
-	formulaAmount, err := calculators.CalculateAmount(categoryCode, models.Audience(audience), req.Payload)
+	tariffCard, err := tariffs.Load(r.Context(), h.DB, reportYear)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось определить тариф: "+err.Error())
+		return
+	}
+	formulaAmount, err := calculators.CalculateAmountWith(tariffCard, categoryCode, models.Audience(audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
 		return
@@ -632,12 +645,14 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		 mentor_id=NULLIF($12,'')::uuid,mentor_assignment_start=NULLIF($13,'')::date,mentor_assignment_end=NULLIF($14,'')::date,mentor_order_number=NULLIF($15,''),mentor_order_date=NULLIF($16,'')::date,assigned_student_name=NULLIF(lower($17),''),
 		 ministry_instruction_type=NULLIF($18,''),ministry_instruction_authority=NULLIF($19,''),ministry_instruction_reference=NULLIF($20,''),ministry_decision_number=NULLIF($21,''),
 		 ministry_decision_date=NULLIF($22,'')::date,ministry_implementation_start=NULLIF($23,'')::date,ministry_implementation_deadline=NULLIF($24,'')::date,
-		 ministry_implementation_conditions=NULLIF($25,''),ministry_activity_description=NULLIF($26,''),ministry_card_backfill_status=NULLIF($27,'')
+		 ministry_implementation_conditions=NULLIF($25,''),ministry_activity_description=NULLIF($26,''),ministry_card_backfill_status=NULLIF($27,''),
+		 formula_tariff_ids=$28
 		 WHERE id=$11`,
 		newPayloadJSON, audience, partnerID, req.AgreementID, newAmount, formulaAmount, req.ActualAmountRub, req.CostMethod, staffMemberID, u.ID, entryID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
 		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
 		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
+		pq.Array(tariffCard.VersionIDs(categoryCode)),
 	)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")

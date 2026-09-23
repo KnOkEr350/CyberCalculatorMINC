@@ -1166,6 +1166,41 @@
         }
       }
     },
+    "/api/tariffs": {
+      "get": {
+        "tags": [
+          "planning"
+        ],
+        "summary": "Ставки Методики, действующие на отчётный год, с основанием",
+        "parameters": [
+          {
+            "name": "report_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Действующие ставки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/entries": {
       "get": {
         "tags": [
@@ -1620,6 +1655,161 @@
         }
       }
     },
+    "/api/regulatory/processes": {
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Завести регламентный процесс в черновике (идемпотентно)",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateRegulatoryProcessRequest"
+        },
+        "responses": {
+          "201": {
+            "description": "Процесс создан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Процесс уже существует",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Процессы соглашения: проект, предварительный и итоговый перечни",
+        "parameters": [
+          {
+            "name": "agreement_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "report_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Процессы соглашения",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/regulatory/processes/{id}": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Процесс с историей переходов",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Процесс",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/regulatory/processes/{id}/actions": {
+      "post": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Действие над процессом: отправка, рассмотрение, согласование, доработка, оспаривание",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RegulatoryProcessActionRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "Процесс после действия",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/report-workflow": {
       "get": {
         "tags": [
@@ -1857,6 +2047,52 @@
         }
       }
     },
+    "/api/admin/legacy-findings": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "summary": "Записи, помеченные дозаполнением на ручное уточнение",
+        "parameters": [
+          {
+            "name": "category_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Открытые пометки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/admin/metrics": {
       "get": {
         "tags": [
@@ -1995,6 +2231,91 @@
           },
           "409": {
             "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/admin/tariffs": {
+      "post": {
+        "tags": [
+          "administration"
+        ],
+        "summary": "Ввод новой редакции ставки (только системный администратор)",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PublishTariffRequest"
+        },
+        "responses": {
+          "201": {
+            "description": "Редакция введена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/attachments/{id}/metadata": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "documents"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AttachmentMetadataRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/entries/{id}/legal-disputes": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LegalDisputeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
           },
           "default": {
             "$ref": "#/components/responses/Error"
@@ -2436,7 +2757,8 @@
         "type": "object",
         "properties": {
           "status": true,
-          "comment": true
+          "comment": true,
+          "signature_verified": true
         },
         "additionalProperties": false
       },
@@ -3112,6 +3434,130 @@
           }
         },
         "additionalProperties": false
+      },
+      "PublishTariffRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/tariffs.go",
+          "name": "publishTariffRequest"
+        },
+        "type": "object",
+        "properties": {
+          "rate_code": {
+            "type": "string",
+            "description": "Код ставки из перечня редакции поставки"
+          },
+          "amount_rub": {
+            "type": "string",
+            "description": "Ставка в рублях, положительная"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "description": "Начало действия; всегда 1 января"
+          },
+          "source_reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Официальная редакция — основание ставки"
+          }
+        },
+        "required": [
+          "rate_code",
+          "amount_rub",
+          "valid_from",
+          "source_reference"
+        ],
+        "additionalProperties": false
+      },
+      "CreateRegulatoryProcessRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/regulatory_processes.go",
+          "name": "createProcessRequest"
+        },
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agreement",
+              "preliminary",
+              "final"
+            ]
+          },
+          "agreement_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "report_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          }
+        },
+        "required": [
+          "kind",
+          "agreement_id",
+          "report_year"
+        ],
+        "additionalProperties": false
+      },
+      "RegulatoryProcessActionRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/regulatory_processes.go",
+          "name": "processActionRequest"
+        },
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "send",
+              "start_review",
+              "approve",
+              "request_rework",
+              "resubmit",
+              "dispute"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Замечания, причина оспаривания или основание ответа за контрагента"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "AttachmentMetadataRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/document_metadata.go",
+          "name": "attachmentMetadataRequest"
+        },
+        "type": "object",
+        "properties": {
+          "document_number": true,
+          "document_date": true,
+          "signer_name": true,
+          "certificate_serial": true,
+          "certificate_valid_from": true,
+          "certificate_valid_until": true
+        },
+        "additionalProperties": false
+      },
+      "LegalDisputeRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/document_metadata.go",
+          "name": "legalDisputeRequest"
+        },
+        "type": "object",
+        "properties": {
+          "action": true,
+          "reason": true,
+          "attachment_id": true
+        },
+        "additionalProperties": false
       }
     },
     "requestBodies": {
@@ -3490,6 +3936,56 @@
                   "maxLength": 26214400
                 }
               }
+            }
+          }
+        }
+      },
+      "PublishTariffRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PublishTariffRequest"
+            }
+          }
+        }
+      },
+      "CreateRegulatoryProcessRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateRegulatoryProcessRequest"
+            }
+          }
+        }
+      },
+      "RegulatoryProcessActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RegulatoryProcessActionRequest"
+            }
+          }
+        }
+      },
+      "AttachmentMetadataRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AttachmentMetadataRequest"
+            }
+          }
+        }
+      },
+      "LegalDisputeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LegalDisputeRequest"
             }
           }
         }

@@ -40,6 +40,7 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 
 func (m *Module) registerCategoryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/categories", middleware.RequireAuth(m.db, m.entries.Categories))
+	mux.HandleFunc("GET /api/tariffs", middleware.RequireAuth(m.db, m.entries.Tariffs))
 }
 
 func (m *Module) registerActivityRoutes(mux *http.ServeMux) {

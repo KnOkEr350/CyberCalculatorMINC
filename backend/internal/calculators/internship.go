@@ -1,6 +1,7 @@
 package calculators
 
 import (
+	"cybercalc/internal/tariffs"
 	"fmt"
 	"math"
 	"strings"
@@ -20,9 +21,10 @@ type employmentPracticeCalc struct {
 	internshipCalc
 }
 
-const (
-	studentHourRate = 800.0
-	mentorHourRate  = 2390.0
+// Ставки читаются из редакции поставки (DATA-07).
+var (
+	studentHourRate = tariffs.Default().MustFloat(tariffs.InternshipStudentHour)
+	mentorHourRate  = tariffs.Default().MustFloat(tariffs.InternshipMentorHour)
 )
 
 func (internshipCalc) Calculate(_ models.Audience, payload map[string]interface{}) (float64, error) {

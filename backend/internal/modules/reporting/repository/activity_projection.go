@@ -40,6 +40,7 @@ type legacyActivityRow struct {
 	accountEligible bool
 	reportStatus    string
 	documents       []string
+	disputeReason   string
 }
 
 func (r *ActivityProjection) List(ctx context.Context, filter activityprojection.Filter) ([]activityprojection.Contribution, error) {
@@ -58,10 +59,11 @@ func (r *ActivityProjection) List(ctx context.Context, filter activityprojection
 		e.amount_rub,e.formula_amount_rub,e.payload,COALESCE(eligibility.eligible,false),
 		COALESCE(eligibility.report_status,'draft'),
 		ARRAY(SELECT DISTINCT a.document_type||':'||a.review_status FROM attachments a
-			WHERE a.entry_id=e.id AND a.retention_expires_at>now())
+			WHERE a.entry_id=e.id AND a.retention_expires_at>now()),
+		COALESCE((SELECT d.reason FROM legal_disputes d WHERE d.entry_id=e.id AND d.lifted_at IS NULL),'')
 		FROM entries e LEFT JOIN entry_eligibility eligibility ON eligibility.id=e.id
 		WHERE ($1=0 OR e.report_year=$1) AND ($2='' OR e.period_type=$2)
-		AND ($3='' OR e.it_company_id::text=$3) AND ($4='' OR e.partner_id::text=$4)
+		AND ($3='' OR e.it_company_id=NULLIF($3,'')::uuid) AND ($4='' OR e.partner_id::text=$4)
 		AND ($5='' OR e.agreement_id::text=$5) AND ($6='' OR e.category_code=$6)
 		AND ($7='' OR e.audience=$7)
 		ORDER BY e.report_year,e.period_type,e.category_code,e.id`,
@@ -79,7 +81,7 @@ func (r *ActivityProjection) List(ctx context.Context, filter activityprojection
 			&row.activityID, &row.tenantID, &row.partnerID, &row.agreementID,
 			&row.categoryCode, &row.audience, &row.reportYear, &row.period,
 			&row.amount, &row.formulaAmount, &row.payload, &row.accountEligible,
-			&row.reportStatus, &documents,
+			&row.reportStatus, &documents, &row.disputeReason,
 		); err != nil {
 			return nil, err
 		}
@@ -133,7 +135,7 @@ func projectLegacyActivity(row legacyActivityRow, evaluatedAt time.Time) (activi
 		Readiness:      activityprojection.Assessment{State: readiness.State, Passed: readiness.Ready, Reasons: append(append([]string(nil), readiness.Blocking...), readiness.Warnings...)},
 		Eligibility:    activityprojection.Assessment{State: eligibilityState(eligible), Passed: eligible, Reasons: reasonsIfFalse(eligible, "Мероприятие не допущено к зачёту")},
 		Approval:       activityprojection.Assessment{State: row.reportStatus, Passed: approved, Reasons: reasonsIfFalse(approved, "Отчётный комплект не утверждён")},
-		LegalDispute:   activityprojection.Assessment{State: "clear", Passed: true, Reasons: []string{}},
+		LegalDispute:   legalDisputeAssessment(row.disputeReason),
 		Risk:           activityprojection.Assessment{State: riskState, Passed: riskState == "green", Reasons: reasons},
 		RulesetVersion: readiness.RulesetVersion,
 		EvaluatedAt:    evaluatedAt,
@@ -146,11 +148,19 @@ func projectLegacyActivity(row legacyActivityRow, evaluatedAt time.Time) (activi
 		if readiness.Ready {
 			projection.ConfirmedFact = row.amount
 		}
-		if readiness.Ready && row.accountEligible && approved {
+		// Запись под юридическим сомнением не в зачёте, пока оно не снято (ADR-17).
+		if readiness.Ready && row.accountEligible && approved && row.disputeReason == "" {
 			projection.CountedAmount = row.amount
 		}
 	}
 	return projection, nil
+}
+
+func legalDisputeAssessment(reason string) activityprojection.Assessment {
+	if reason == "" {
+		return activityprojection.Assessment{State: "clear", Passed: true, Reasons: []string{}}
+	}
+	return activityprojection.Assessment{State: "disputed", Passed: false, Reasons: []string{"Юридическое сомнение: " + reason}}
 }
 
 func eligibilityState(eligible bool) string {

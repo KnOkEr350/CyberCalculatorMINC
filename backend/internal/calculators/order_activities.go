@@ -1,6 +1,7 @@
 package calculators
 
 import (
+	"cybercalc/internal/tariffs"
 	"fmt"
 	"math"
 	"regexp"
@@ -11,13 +12,14 @@ import (
 	"cybercalc/internal/models"
 )
 
-const (
-	schoolProgramAcademicHourRate  = 4260.0
-	schoolProgramDevelopmentRate   = 530890.0
-	teacherTrainingHourRate        = 3790.0
-	teacherTrainingDevelopmentRate = 1408570.0
-	studentPlatformMonthRate       = 6800.0
-	teacherPlatformMonthRate       = 8590.0
+// Ставки читаются из редакции поставки (DATA-07): одно значение в одном месте.
+var (
+	schoolProgramAcademicHourRate  = tariffs.Default().MustFloat(tariffs.SchoolProgramHour)
+	schoolProgramDevelopmentRate   = tariffs.Default().MustFloat(tariffs.SchoolProgramDevelopment)
+	teacherTrainingHourRate        = tariffs.Default().MustFloat(tariffs.TeacherTrainingHour)
+	teacherTrainingDevelopmentRate = tariffs.Default().MustFloat(tariffs.TeacherTrainingDevelopment)
+	studentPlatformMonthRate       = tariffs.Default().MustFloat(tariffs.PlatformStudentMonth)
+	teacherPlatformMonthRate       = tariffs.Default().MustFloat(tariffs.PlatformTeacherMonth)
 )
 
 // topITCalc учитывает именно объём софинансирования из отчёта получателя
