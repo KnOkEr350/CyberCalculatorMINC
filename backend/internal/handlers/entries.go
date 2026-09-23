@@ -36,6 +36,7 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 		"mentor_name":        "mentor_full_name",
 		"structural_unit":    "department",
 		"cost_type":          "cost_type",
+		"decision_number":    "decision_number",
 	}
 	for parameter, field := range likeFields {
 		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
@@ -47,7 +48,7 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 			}
 		}
 	}
-	exactFields := map[string]string{"doc_type": "doc_type", "activity_type": "activity_type", "mentor_id": "mentor_id", "cost_method": "cost_method"}
+	exactFields := map[string]string{"doc_type": "doc_type", "activity_type": "activity_type", "mentor_id": "mentor_id", "cost_method": "cost_method", "instruction_authority": "instruction_authority"}
 	for parameter, field := range exactFields {
 		if value := strings.TrimSpace(q.Get(parameter)); value != "" {
 			if parameter == "cost_method" {

@@ -117,3 +117,13 @@ test("enterprise shell keeps topbar/sidebar proportions and active hierarchy", (
   assert.match(shell, /navigationIcon\(screen\.icon\)/);
   assert.match(shell, /11 экранов системы/);
 });
+
+test("Ministry decision screen exposes plan, fact, dynamic metric and evidence", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /function ministryDecisionTable/);
+  for (const label of ["Решение и поручение", "Динамический показатель", "План", "Факт", "Подтверждённая стоимость", "Документы"]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /decision_evidence_/);
+  assert.match(workspace, /data-entry-filter="decision_number"/);
+});

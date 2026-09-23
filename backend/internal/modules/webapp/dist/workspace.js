@@ -337,8 +337,38 @@ function entryFiltersMarkup(category) {
     internship: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
     employment_practice: `<div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>ФИО наставника</label><input data-entry-filter="mentor_name" value="${value("mentor_name")}"></div>`,
     top_it: `<div class="field"><label>Тип активности</label><select data-entry-filter="activity_type"><option value="">Все</option><option value="assistance" ${value("activity_type") === "assistance" ? "selected" : ""}>Содействие</option><option value="cofinancing" ${value("activity_type") === "cofinancing" ? "selected" : ""}>Софинансирование</option></select></div><div class="field"><label>Продолжительность, мес.</label><input type="number" min="0" step="any" data-entry-filter="duration_months" value="${value("duration_months")}"></div><div class="field"><label>Тип затрат</label><input data-entry-filter="cost_type" value="${value("cost_type")}"></div>`,
+    minc_decision: `<div class="field"><label>Номер Решения</label><input data-entry-filter="decision_number" value="${value("decision_number")}" placeholder="Например, МЦ-П12-402"></div><div class="field"><label>Основание поручения</label><select data-entry-filter="instruction_authority"><option value="">Все основания</option><option value="president" ${value("instruction_authority") === "president" ? "selected" : ""}>Президент РФ</option><option value="prime_minister" ${value("instruction_authority") === "prime_minister" ? "selected" : ""}>Правительство РФ</option><option value="deputy_prime_minister" ${value("instruction_authority") === "deputy_prime_minister" ? "selected" : ""}>Куратор Министерства</option><option value="security_council" ${value("instruction_authority") === "security_council" ? "selected" : ""}>Совет Безопасности РФ</option></select></div>`,
   }[category] || "";
   return `<div class="grid cols-3">${common}${byCategory}</div><div class="flex"><button class="btn secondary" id="entry-filter-apply">Применить фильтры</button><button class="btn secondary" id="entry-filter-reset">Сбросить</button></div>`;
+}
+
+function ministryDecisionTable(entries, writable, canCreate) {
+  const date = (value) => value ? escapeHTML(String(value).split("-").reverse().join(".")) : "—";
+  const volume = (value, unit) => value === undefined || value === null || value === ""
+    ? "—"
+    : `${Number(value).toLocaleString("ru-RU")} ${escapeHTML(unit || "ед.")}`;
+  const rows = entries.map((entry) => {
+    const payload = entry.payload || {};
+    const checks = entry.compliance?.checks || [];
+    const documentChecks = checks.filter((check) => check.code === "ministry_decision" || check.code === "expense_evidence" || check.code.startsWith("decision_evidence_"));
+    const completeDocuments = documentChecks.filter((check) => check.complete).length;
+    const decision = payload.decision_number
+      ? `№ ${escapeHTML(payload.decision_number)}<br><small>от ${date(payload.decision_date)}</small>`
+      : escapeHTML(payload.decision_reference || "—");
+    return `<tr>
+      <td>${CyberCalcUI.riskBadge({ state: entry.compliance?.state || "red", label: entry.compliance?.state === "green" ? "Готово" : entry.compliance?.state === "yellow" ? "Доработать" : "Риск", reasons: [...(entry.compliance?.blocking_reasons || []), ...(entry.compliance?.warnings || [])] })}</td>
+      <td><b>${decision}</b><br><small>${escapeHTML(valueLabel(payload.instruction_authority || "—"))} · ${escapeHTML(payload.instruction_reference || "реквизиты не указаны")}</small></td>
+      <td><b>${escapeHTML(payload.activity_description || "—")}</b><br><small>${escapeHTML(payload.implementation_conditions || "Условия не указаны")}</small></td>
+      <td>${date(payload.implementation_start)} — ${date(payload.implementation_deadline)}</td>
+      <td><b>${escapeHTML(payload.metric_description || "—")}</b><br><small>${escapeHTML(payload.metric_unit || "Единица не указана")}</small></td>
+      <td>${volume(payload.planned_volume, payload.metric_unit)}</td>
+      <td>${volume(payload.actual_volume, payload.metric_unit)}</td>
+      <td><b>${fmtMoney(entry.amount_rub)}</b><br><small>${escapeHTML(payload.calculation_basis || "Основание не указано")}</small></td>
+      <td><span class="status-badge ${completeDocuments === documentChecks.length && documentChecks.length ? "active" : "pending"}">${completeDocuments}/${documentChecks.length}</span><br><small>подтверждений</small></td>
+      <td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка и документы" : "Просмотреть"}</button></td>
+    </tr>`;
+  }).join("");
+  return `<p>На странице: ${entries.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table class="ministry-decision-grid"><thead><tr><th>Риск</th><th>Решение и поручение</th><th>Мероприятие и условия</th><th>Срок</th><th>Динамический показатель</th><th>План</th><th>Факт</th><th>Подтверждённая стоимость</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Решения ещё не зарегистрированы. Добавьте карточку мероприятия." : "ИТ-организация ещё не добавила мероприятия по Решению Минцифры."}</p>` : ""}`;
 }
 async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(state.view)) {
   const generation = (root.workspaceGeneration || 0) + 1;
@@ -548,6 +578,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ood_rpd: `Партнёры: ${summary.partners_count} · программы: ${summary.programs_count}`,
     internship: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · стажёры: ${summary.students_count}`,
     employment_practice: `Партнёры: ${summary.partners_count} · наставники: ${summary.mentors_count} · практиканты: ${summary.students_count}`,
+    minc_decision: `Решений: ${summary.count} · подтверждено: ${fmtMoney(summary.amount_rub)}`,
   }[state.categoryCode] || `Партнёры: ${summary.partners_count}`;
   const matrix = summary.ood_rpd_matrix?.length ? `<details><summary>Выжимка ООП/РПД</summary><div class="table-wrap"><table><thead><tr><th>Документ</th><th>Активность</th><th>Количество</th><th>Сумма</th></tr></thead><tbody>${summary.ood_rpd_matrix.map((item) => `<tr><td>${escapeHTML(valueLabel(item.document_type))}</td><td>${escapeHTML(valueLabel(item.activity_type))}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
   const units = summary.structural_units?.length ? `<details><summary>Структурные подразделения</summary><div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Записи</th><th>Сумма</th></tr></thead><tbody>${summary.structural_units.map((item) => `<tr><td>${escapeHTML(item.unit)}</td><td>${item.count}</td><td>${fmtMoney(item.amount_rub)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
@@ -620,8 +651,9 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
       currentCategory()?.fields.filter(
         (f) => !["org_name", "mentor_id", "staff_member_id"].includes(f.key),
       ) || [];
-    root.querySelector("#entries-table").innerHTML =
-      `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${CyberCalcUI.riskBadge({ state: e.compliance?.state || "red", label: e.compliance?.state === "green" ? "Готово" : e.compliance?.state === "yellow" ? "Доработать" : "Риск", reasons: [...(e.compliance?.blocking_reasons || []), ...(e.compliance?.warnings || [])] })}</td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+    root.querySelector("#entries-table").innerHTML = state.categoryCode === "minc_decision"
+      ? ministryDecisionTable(list, writable, canCreate)
+      : `<p>На странице: ${list.length}. Итоги выше рассчитаны по всей выборке.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th>Метод</th><th>Затраты</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${CyberCalcUI.riskBadge({ state: e.compliance?.state || "red", label: e.compliance?.state === "green" ? "Готово" : e.compliance?.state === "yellow" ? "Доработать" : "Риск", reasons: [...(e.compliance?.blocking_reasons || []), ...(e.compliance?.warnings || [])] })}</td><td>${e.cost_method === "actual" ? "Фактические" : "Средние"}</td><td>${fmtMoney(e.amount_rub)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(

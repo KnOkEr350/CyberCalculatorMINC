@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // STORE-01: содержимое адресуется собственным SHA-256. Имя файла в хранилище
@@ -46,6 +48,11 @@ func blobLocation(sum string) (dir, path string) {
 	return dir, filepath.Join(dir, sum)
 }
 
+func compressedBlobLocation(sum string) (dir, path string) {
+	dir, path = blobLocation(sum)
+	return dir, path + ".zst"
+}
+
 // IsBlobPath отличает адресуемый по содержимому файл от исторического,
 // лежащего в каталоге мероприятия.
 func IsBlobPath(root, path string) bool {
@@ -54,13 +61,14 @@ func IsBlobPath(root, path string) bool {
 		return false
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if len(parts) != 3 || parts[0] != blobRoot || len(parts[2]) != 64 {
+	if len(parts) != 3 || parts[0] != blobRoot {
 		return false
 	}
-	if parts[1] != parts[2][:2] {
+	name := strings.TrimSuffix(parts[2], ".zst")
+	if len(name) != 64 || (parts[2] != name && parts[2] != name+".zst") || parts[1] != name[:2] {
 		return false
 	}
-	_, err = hex.DecodeString(parts[2])
+	_, err = hex.DecodeString(name)
 	return err == nil
 }
 
@@ -95,8 +103,16 @@ func CreateBlob(root string, src io.Reader, limit int64) (Blob, error) {
 		return Blob{}, err
 	}
 	digest := sha256.New()
-	// limit+1 отличает файл ровно по лимиту от превысившего его.
-	size, copyErr := io.Copy(io.MultiWriter(file, digest), io.LimitReader(src, limit+1))
+	// SHA-256 and Size describe the original bytes. The physical blob is zstd,
+	// but callers and deduplication never depend on its compressed form.
+	counter := &countingReader{reader: io.TeeReader(io.LimitReader(src, limit+1), digest)}
+	encoder, encoderErr := zstd.NewWriter(file, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithEncoderCRC(true))
+	var copyErr error
+	if encoderErr == nil {
+		_, copyErr = io.Copy(encoder, counter)
+		copyErr = errors.Join(copyErr, encoder.Close())
+	}
+	size := counter.read
 	syncErr := file.Sync()
 	closeErr := file.Close()
 	discard := func() {
@@ -106,9 +122,9 @@ func CreateBlob(root string, src io.Reader, limit int64) (Blob, error) {
 			_ = removeErr
 		}
 	}
-	if copyErr != nil || syncErr != nil || closeErr != nil {
+	if encoderErr != nil || copyErr != nil || syncErr != nil || closeErr != nil {
 		discard()
-		return Blob{}, errors.Join(copyErr, syncErr, closeErr)
+		return Blob{}, errors.Join(encoderErr, copyErr, syncErr, closeErr)
 	}
 	if size > limit {
 		discard()
@@ -116,17 +132,31 @@ func CreateBlob(root string, src io.Reader, limit int64) (Blob, error) {
 	}
 
 	sum := hex.EncodeToString(digest.Sum(nil))
-	dir, path := blobLocation(sum)
+	dir, path := compressedBlobLocation(sum)
 	if err := r.Mkdir(dir, 0o750); err != nil && !os.IsExist(err) {
 		discard()
 		return Blob{}, err
 	}
 	result := Blob{Path: filepath.Join(root, path), SHA256: sum, Size: size}
-	if info, statErr := r.Stat(path); statErr == nil {
+	if _, statErr := r.Stat(path); statErr == nil {
 		// Такие байты уже лежат в хранилище: второй копии не создаём.
 		discard()
+		if err := VerifyBlob(root, result.Path); err != nil {
+			return Blob{}, fmt.Errorf("существующий blob повреждён: %w", err)
+		}
 		result.Deduplicated = true
-		result.Size = info.Size()
+		return result, nil
+	}
+	// Compatibility: a blob written before STORE-03 has the same plaintext
+	// address without the .zst suffix and remains the canonical copy.
+	_, legacyPath := blobLocation(sum)
+	if _, statErr := r.Stat(legacyPath); statErr == nil {
+		discard()
+		result.Path = filepath.Join(root, legacyPath)
+		if err := VerifyBlob(root, result.Path); err != nil {
+			return Blob{}, fmt.Errorf("существующий legacy blob повреждён: %w", err)
+		}
+		result.Deduplicated = true
 		return result, nil
 	}
 	// Переименование внутри одной файловой системы атомарно: конкурирующая
@@ -162,8 +192,20 @@ func VerifyBlob(root, path string) error {
 	if _, err := io.Copy(digest, file); err != nil {
 		return err
 	}
-	if got := hex.EncodeToString(digest.Sum(nil)); got != filepath.Base(rel) {
+	want := strings.TrimSuffix(filepath.Base(rel), ".zst")
+	if got := hex.EncodeToString(digest.Sum(nil)); got != want {
 		return fmt.Errorf("содержимое не соответствует адресу: %s", got)
 	}
 	return nil
+}
+
+type countingReader struct {
+	reader io.Reader
+	read   int64
+}
+
+func (r *countingReader) Read(buffer []byte) (int, error) {
+	n, err := r.reader.Read(buffer)
+	r.read += int64(n)
+	return n, err
 }

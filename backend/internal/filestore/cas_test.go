@@ -67,13 +67,76 @@ func TestBlobIsAddressedByItsContent(t *testing.T) {
 	}
 }
 
+// STORE-03: CAS хранит zstd, но адрес, размер и выдаваемые байты относятся к
+// исходному документу. Формат хранения не протекает в API вложений.
+func TestCompressedBlobRoundTripAndPlaintextHash(t *testing.T) {
+	root := t.TempDir()
+	content := bytes.Repeat([]byte("строка подтверждающего документа\n"), 4096)
+	want := sha256.Sum256(content)
+
+	blob, err := CreateBlob(root, bytes.NewReader(content), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Ext(blob.Path) != ".zst" {
+		t.Fatalf("новый blob должен храниться как zstd: %s", blob.Path)
+	}
+	if blob.SHA256 != hex.EncodeToString(want[:]) || blob.Size != int64(len(content)) {
+		t.Fatalf("метаданные должны описывать исходные байты: %+v", blob)
+	}
+	physical, err := os.Stat(blob.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if physical.Size() >= int64(len(content)) {
+		t.Fatalf("повторяющийся документ не сжат: %d >= %d", physical.Size(), len(content))
+	}
+	file, err := Open(root, blob.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := io.ReadAll(file)
+	file.Close()
+	if err != nil || !bytes.Equal(decoded, content) {
+		t.Fatalf("round-trip zstd изменил документ: %v", err)
+	}
+}
+
+// Уже существующие CAS-файлы без сжатия продолжают читаться и участвовать в
+// дедупликации: rollout STORE-03 не требует одномоментной перезаписи архива.
+func TestLegacyPlainBlobRemainsCompatible(t *testing.T) {
+	root := t.TempDir()
+	content := []byte("исторический несжатый документ")
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
+	dir, rel := blobLocation(hash)
+	if err := os.MkdirAll(filepath.Join(root, dir), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(root, rel)
+	if err := os.WriteFile(legacyPath, content, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	blob, err := CreateBlob(root, bytes.NewReader(content), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !blob.Deduplicated || blob.Path != legacyPath || blob.Size != int64(len(content)) {
+		t.Fatalf("legacy blob не переиспользован: %+v", blob)
+	}
+	if err := VerifyBlob(root, legacyPath); err != nil {
+		t.Fatalf("legacy blob перестал проходить проверку: %v", err)
+	}
+}
+
 // Файл появляется по своему адресу только целиком: при обрыве потока по
 // конечному пути не остаётся ничего, что выглядело бы готовым документом.
 func TestInterruptedBlobNeverAppearsAtItsAddress(t *testing.T) {
 	root := t.TempDir()
 	content := []byte("половина документа обрывается")
 	want := sha256.Sum256(content)
-	_, path := blobLocation(hex.EncodeToString(want[:]))
+	_, path := compressedBlobLocation(hex.EncodeToString(want[:]))
 
 	_, err := CreateBlob(root, io.MultiReader(bytes.NewReader(content[:10]), failingReader{}), 1<<20)
 	if err == nil {
