@@ -325,7 +325,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 |---|---|---:|---|---|
 | CRYPTO-00 | Production security profile | M | ADR-09 | Утверждены CryptoPro/иной provider, алгоритмы, допустимые виды ЭП, trust store, key storage, chain/revocation/time validation, ротация и threat model |
 | CRYPTO-01 | Интерфейс CryptoEngine — **ВЫПОЛНЕНО** | M | ADR-09 | Добавлен provider-neutral пакет `internal/cryptoengine`: `EncryptForRecipients/Decrypt/Sign/Verify`, provider factory, typed errors и DTO со ссылками на ключи/сертификаты без передачи private key material через HTTP/БД/persistence |
-| CRYPTO-02 | Модель ключей и сертификатов | M | CRYPTO-01, DATA-01 | Public certificate/key refs для организации и представителя, назначение, срок, статус/отзыв, ротация; private material отсутствует в БД |
+| CRYPTO-02 | Модель ключей и сертификатов — **ВЫПОЛНЕНО** | M | CRYPTO-01, DATA-01 | Добавлена доменная модель публичных refs сертификатов/ключей: организация, представитель, public key/certificate IDs, срок действия, статус/отзыв, usages и ротация через `ReplacedByID`; private material не входит в DTO и отсекается на boundary |
 | CRYPTO-03 | Versioned envelope `.pkg` | M | CRYPTO-01, CRYPTO-02, BASE-02 | Canonical signed manifest, sender/recipients, signer/recipient key IDs, algorithms, schema, timestamps, ciphertext hash, limits и forward compatibility |
 | CRYPTO-04 | Экспорт: sign + encrypt | L | CRYPTO-00, CRYPTO-02, CRYPTO-03, REPORT-01 | Представитель подписывает manifest/hash; content key обёрнут на каждого получателя; plaintext не пишется на диск |
 | CRYPTO-05 | Импорт: decrypt + verify | L | CRYPTO-00, CRYPTO-02, CRYPTO-03 | Расшифровка своим ключом, проверка chain/revocation/signature до parse; до commit БД не меняется |
@@ -334,7 +334,7 @@ REPORT-03–REPORT-10 независимы после REPORT-01/02 и получ
 | CRYPTO-08 | Разрешение конфликтов | L | CRYPTO-07, SEC-01 | Принять/отклонить/добавить атомарно; обязательна причина и аудит |
 | CRYPTO-09 | Протокол разногласий XLSX | M | CRYPTO-07, REPORT-02 | Все различия и решения оператора выгружаются |
 | CRYPTO-10 | Fixture provider и CryptoPro adapter stub — **ВЫПОЛНЕНО** | M | CRYPTO-01 | Детерминированный `fixture` provider покрывает round-trip шифрования и подписи для тестов, а `cryptopro_cgo` регистрируется как enterprise stub и возвращает понятную ошибку недоступности CSP/CGO/PKCS#11; fixture явно не маркируется production-ready |
-| CRYPTO-11 | Certificate/signature policy | M | CRYPTO-01, CRYPTO-02, CRYPTO-10 | Canonicalization, signer metadata, key usage, chain/time/revocation checks и test vectors |
+| CRYPTO-11 | Certificate/signature policy — **ВЫПОЛНЕНО** | M | CRYPTO-01, CRYPTO-02, CRYPTO-10 | Добавлена policy-проверка цепочки сертификатов: trusted root, issuer chain, срок действия, статус/отзыв, required key usage и signer metadata; JSON canonicalization и негативные test vectors закреплены unit-тестами |
 
 ## 12. Файлы, CAS и Audit Trail
 
