@@ -173,6 +173,7 @@ type Agreement struct {
 	RegionalAuthorityID         string                       `json:"regional_authority_id,omitempty"`
 	LegalEntityGroup            string                       `json:"legal_entity_group,omitempty"`
 	LegalEntityGroupID          string                       `json:"legal_entity_group_id,omitempty"`
+	CuratorID                   string                       `json:"curator_id,omitempty"`
 	SignatureMethod             string                       `json:"signature_method"`
 	SignedBy                    string                       `json:"signed_by,omitempty"`
 	CompanySignerAuthority      string                       `json:"company_signer_authority,omitempty"`
@@ -238,6 +239,8 @@ type LegalEntityGroupMember struct {
 	OGRN             string        `json:"ogrn"`
 	IsITOrganization bool          `json:"is_it_organization"`
 	TargetAmountRub  *money.Amount `json:"target_amount_rub,omitempty"`
+	// SharePercent — доля участия группы в организации, более 25% (п. 25⁵).
+	SharePercent *float64 `json:"share_percent,omitempty"`
 }
 
 type LegalEntityGroup struct {
@@ -249,6 +252,10 @@ type LegalEntityGroup struct {
 	AuthorizedEntityName       string                   `json:"authorized_entity_name"`
 	AuthorizedEntityINN        string                   `json:"authorized_entity_inn"`
 	AuthorizedEntityOGRN       string                   `json:"authorized_entity_ogrn"`
+	Status                     string                   `json:"status"`
+	TerminatedOn               string                   `json:"terminated_on,omitempty"`
+	TerminationReason          string                   `json:"termination_reason,omitempty"`
+	DocumentReference          string                   `json:"document_reference,omitempty"`
 	Members                    []LegalEntityGroupMember `json:"members"`
 	CreatedAt                  time.Time                `json:"created_at"`
 	UpdatedAt                  time.Time                `json:"updated_at"`

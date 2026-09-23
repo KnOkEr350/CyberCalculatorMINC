@@ -1,0 +1,137 @@
+{
+  "BASE-01": [
+    "docs/adr/README.md",
+    "docs/ORDER_270_ADR_ANALYSIS.md"
+  ],
+  "BASE-03": [
+    "backend/internal/modules/README.md",
+    "backend/internal/modules/health"
+  ],
+  "BASE-04": [
+    "backend/internal/server/routes.go",
+    "backend/internal/server/composition_test.go"
+  ],
+  "BASE-05": [
+    "frontend/core/store.js",
+    "frontend/core/router.js",
+    "frontend/shell/app-shell.js",
+    "frontend/architecture.test.cjs"
+  ],
+  "BASE-06": [
+    "frontend/components/ui.js",
+    "docs/UI_COMPONENTS.md"
+  ],
+  "BASE-07": [
+    "docs/MIGRATIONS.md",
+    "backend/cmd/migrationcheck/main.go",
+    "migrations/checksums.sha256"
+  ],
+  "BASE-08": [
+    "backend/internal/platform/featureflags",
+    "frontend/features.js",
+    "frontend/features.test.cjs"
+  ],
+  "BASE-09": [
+    "backend/internal/testfixtures/factory.go",
+    "docs/TEST_FIXTURES.md"
+  ],
+  "BASE-11": [
+    "docs/LEGACY_MIGRATION.md"
+  ],
+  "BASE-12": [
+    ".github/workflows/ci-cd.yml"
+  ],
+  "CRYPTO-01": [
+    "backend/internal/cryptoengine"
+  ],
+  "CRYPTO-02": [
+    "backend/internal/cryptoengine/certificates.go"
+  ],
+  "CRYPTO-10": [
+    "backend/internal/cryptoengine"
+  ],
+  "CRYPTO-11": [
+    "backend/internal/cryptoengine/certificates.go",
+    "backend/internal/cryptoengine/certificates_test.go"
+  ],
+  "DATA-04": [
+    "backend/internal/handlers/partner_structure.go"
+  ],
+  "INTG-02": [
+    "frontend/screens.js",
+    "frontend/screens.test.cjs"
+  ],
+  "OPS-01": [
+    "backend/internal/modules/webapp/module.go",
+    "backend/internal/modules/webapp/module_test.go"
+  ],
+  "PRA-03": [
+    "docs/EMPLOYMENT_PRACTICE.md"
+  ],
+  "TCH-02": [
+    "docs/TEACHING_SEMESTERS.md"
+  ],
+  "UI-00": [
+    "frontend/shell/app-shell.js",
+    "frontend/screens.js"
+  ],
+  "UI-03": [
+    "frontend/screens/teachers/index.js"
+  ],
+  "UI-04": [
+    "frontend/screens/ood-rpd/index.js"
+  ],
+  "UI-09": [
+    "frontend/screens/minc-decision/index.js"
+  ],
+  "UIR-01": [
+    "frontend/theme.css",
+    "frontend/components/ui.js"
+  ],
+  "UIR-02": [
+    "frontend/shell/app-shell.js",
+    "frontend/theme.css"
+  ],
+  "UIR-03": [
+    "frontend/components/ui.js"
+  ],
+  "UIR-04": [
+    "frontend/components/ui.js"
+  ],
+  "UIR-05": [
+    "frontend/components/ui.js"
+  ],
+  "UIR-06": [
+    "frontend/components/ui.js"
+  ],
+  "RISK-07": [
+    "backend/internal/platform/activityprojection/projection.go",
+    "backend/internal/modules/reporting/repository/activity_projection.go"
+  ],
+  "INTG-03": [
+    "backend/internal/platform/activityprojection/projection.go",
+    "backend/internal/platform/activityprojection/projection_test.go"
+  ],
+  "REPORT-02": [
+    "backend/internal/xlsx",
+    "backend/internal/docx"
+  ],
+  "REPORT-12": [
+    "backend/internal/xlsx"
+  ],
+  "UI-01": [
+    "frontend/app.js",
+    "frontend/screens/dashboard/index.js"
+  ],
+  "UI-02": [
+    "frontend/screens/partners/index.js"
+  ],
+  "UI-12": [
+    "frontend/architecture.test.cjs",
+    "frontend/components/ui.js"
+  ],
+  "UI-13": [
+    "frontend/architecture.test.cjs",
+    "frontend/theme.css"
+  ]
+}

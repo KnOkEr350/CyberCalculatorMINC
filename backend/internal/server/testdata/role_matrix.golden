@@ -1,7 +1,9 @@
 DELETE /api/academic-groups/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 DELETE /api/org-units/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
+DELETE /api/top-items/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/admin/directory-template | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/admin/it-company-options | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
+GET /api/admin/legacy-directory-findings | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 GET /api/admin/legacy-findings | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 GET /api/admin/logs | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 GET /api/admin/logs/export | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
@@ -13,6 +15,7 @@ GET /api/admin/okz/versions | super_admin=pass holding_admin=403 org_admin=403 c
 GET /api/admin/settings | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 GET /api/admin/users | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 GET /api/agreements | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
+GET /api/agreements/{id}/history | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=403
 GET /api/attachments/{id}/download | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/auth/me | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/categories | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
@@ -29,10 +32,12 @@ GET /api/entries/{id}/attachments | super_admin=pass holding_admin=pass org_admi
 GET /api/entries/{id}/comments | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/entries/{id}/cost-history | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/entries/{id}/legal-disputes | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
+GET /api/entries/{id}/top-items | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/it-companies | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/it-companies/registry-search | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/it-companies/template | super_admin=pass holding_admin=pass org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 GET /api/legal-entity-groups | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
+GET /api/legal-entity-groups/{id}/limits | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=403
 GET /api/mentors | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/obligations | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 GET /api/okz | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
@@ -82,9 +87,11 @@ POST /api/entries | super_admin=pass holding_admin=pass org_admin=pass curator=p
 POST /api/entries/import | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/entries/{id}/attachments | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=403 auditor_viewer=403 edu_curator=pass
 POST /api/entries/{id}/legal-disputes | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=pass auditor_viewer=403 edu_curator=403
+POST /api/entries/{id}/top-items | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 POST /api/it-companies | super_admin=pass holding_admin=pass org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/it-companies/import | super_admin=pass holding_admin=pass org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/legal-entity-groups | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
+POST /api/legal-entity-groups/{id}/terminate | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/mentors | super_admin=403 holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/partners | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/partners/{partner_id}/academic-groups | super_admin=403 holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
@@ -102,6 +109,7 @@ POST /api/workflow-tasks/{id}/complete | super_admin=pass holding_admin=pass org
 POST /api/workflow-tasks/{id}/reassign | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 PUT /api/academic-groups/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass
 PUT /api/agreements/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
+PUT /api/agreements/{id}/curator | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 PUT /api/directory/{id} | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 PUT /api/entries/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=403 auditor_viewer=403 edu_curator=403
 PUT /api/legal-entity-groups/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
@@ -109,3 +117,4 @@ PUT /api/org-units/{id} | super_admin=pass holding_admin=pass org_admin=pass cur
 PUT /api/regional-authorities/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 PUT /api/staff-members/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=pass financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 PUT /api/teaching-payouts/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=pass legal_specialist=403 auditor_viewer=403 edu_curator=403
+PUT /api/top-items/{id} | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=pass auditor_viewer=pass edu_curator=pass

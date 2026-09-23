@@ -341,7 +341,7 @@ func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 	}
 	scope := partnerScope(u, requestedPartner)
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT a.id,a.agreement_kind,a.number,a.status,a.signed_on,a.valid_from,a.valid_until,
-		COALESCE(a.it_company_id::text,''),COALESCE(a.regional_authority_id::text,''),COALESCE(ra.name,a.roiv_name,''),COALESCE(a.legal_entity_group,''),COALESCE(a.legal_entity_group_id::text,''),a.signature_method,COALESCE(a.signed_by,''),
+		COALESCE(a.it_company_id::text,''),COALESCE(a.regional_authority_id::text,''),COALESCE(ra.name,a.roiv_name,''),COALESCE(a.legal_entity_group,''),COALESCE(a.legal_entity_group_id::text,''),COALESCE(a.curator_id::text,''),a.signature_method,COALESCE(a.signed_by,''),
 		COALESCE(a.company_signer_authority,''),COALESCE(a.counterparty_signer_name,''),COALESCE(a.counterparty_signer_position,''),COALESCE(a.counterparty_signer_authority,''),
 		COALESCE(a.signature_date::text,''),COALESCE(a.document_reference,''),COALESCE(a.notes,''),
 		a.created_at,a.updated_at,array_agg(ap.partner_id::text ORDER BY ap.is_primary DESC,ap.partner_id)
@@ -362,7 +362,7 @@ func (h *AgreementHandlers) List(w http.ResponseWriter, r *http.Request, u middl
 		var signedOn, validFrom, validUntil time.Time
 		var partnerIDs pq.StringArray
 		if err = rows.Scan(&agreement.ID, &agreement.AgreementKind, &agreement.Number, &agreement.Status,
-			&signedOn, &validFrom, &validUntil, &agreement.ITCompanyID, &agreement.RegionalAuthorityID, &agreement.ROIVName, &agreement.LegalEntityGroup, &agreement.LegalEntityGroupID,
+			&signedOn, &validFrom, &validUntil, &agreement.ITCompanyID, &agreement.RegionalAuthorityID, &agreement.ROIVName, &agreement.LegalEntityGroup, &agreement.LegalEntityGroupID, &agreement.CuratorID,
 			&agreement.SignatureMethod, &agreement.SignedBy, &agreement.CompanySignerAuthority, &agreement.CounterpartySignerName, &agreement.CounterpartySignerPosition, &agreement.CounterpartySignerAuthority, &agreement.SignatureDate,
 			&agreement.DocumentReference, &agreement.Notes, &agreement.CreatedAt, &agreement.UpdatedAt, &partnerIDs); err != nil {
 			middleware.WriteError(w, 500, "ошибка чтения соглашений")

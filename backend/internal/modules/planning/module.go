@@ -12,6 +12,7 @@ import (
 type Module struct {
 	db       *sql.DB
 	entries  *handlers.EntryHandlers
+	topItems *handlers.TopItemHandlers
 	teaching *handlers.TeachingDirectoryHandlers
 	options  Options
 }
@@ -23,7 +24,7 @@ type Options struct {
 }
 
 func New(db *sql.DB, options Options) *Module {
-	return &Module{db: db, entries: &handlers.EntryHandlers{DB: db}, teaching: &handlers.TeachingDirectoryHandlers{DB: db}, options: options}
+	return &Module{db: db, entries: &handlers.EntryHandlers{DB: db}, topItems: &handlers.TopItemHandlers{DB: db}, teaching: &handlers.TeachingDirectoryHandlers{DB: db}, options: options}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -50,6 +51,18 @@ func (m *Module) registerActivityRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/entries", middleware.RequireAuth(m.db, m.entries.List))
 	mux.HandleFunc("GET /api/entries/summary", middleware.RequireAuth(m.db, m.entries.Summary))
 	mux.HandleFunc("POST /api/entries", middleware.RequireAuth(m.db, m.entries.Create))
+	mux.HandleFunc("GET /api/entries/{id}/top-items", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.topItems.List(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("POST /api/entries/{id}/top-items", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.topItems.Create(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("PUT /api/top-items/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.topItems.Update(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("DELETE /api/top-items/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.topItems.Delete(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("PUT /api/entries/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.entries.Update(w, r, u, r.PathValue("id"))
 	}))

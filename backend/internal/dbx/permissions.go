@@ -25,6 +25,7 @@ var appendOnlyTables = map[string]bool{
 	"agreement_report_history":           true,
 	"regulatory_process_events":          true,
 	"workflow_task_events":               true,
+	"agreement_revisions":                true,
 	"normative_sources":                  true,
 	"normative_revision_diffs":           true,
 }

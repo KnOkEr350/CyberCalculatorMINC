@@ -61,6 +61,21 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('ood_rpd',$1,'fact',2026,'vuz','{"program_name":"Без вида документа"}',1,$2) RETURNING id`, partner, user).Scan(&oopIncomplete); e != nil {
 		t.Fatal(e)
 	}
+	// TOP-11: старые записи Вида 4 — по вузу и по колледжу.
+	var topVuz, topCollege string
+	for audience, target := range map[string]*string{"vuz": &topVuz, "kolledj": &topCollege} {
+		if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('top_it',$1,'fact',2026,$2,'{"project_name":"Проект","program_name":"Программа","program_wave":"2","partner_role":"anchor","grant_amount_rub":"1500000,50"}',100,$3) RETURNING id`, partner, audience, user).Scan(target); e != nil {
+			t.Fatal(e)
+		}
+	}
+	// SCH-08: старые записи школьного трека — полная и нарушающая правила.
+	var schoolGood, schoolBad string
+	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('it_clubs',$1,'fact',2026,'school','{"program_name":"Кружок","class_range":"5-7","budget_funding":"absent","citizen_funding":"absent","acceptance_act_reference":"Акт 5"}',530890,$2) RETURNING id`, partner, user).Scan(&schoolGood); e != nil {
+		t.Fatal(e)
+	}
+	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('edu_content',$1,'fact',2026,'vuz','{"budget_funding":"full_or_partial"}',6800,$2) RETURNING id`, partner, user).Scan(&schoolBad); e != nil {
+		t.Fatal(e)
+	}
 	if _, e := db.Exec(`INSERT INTO budget_targets(report_year,target_amount_rub,updated_by) VALUES(2026,12345,$1)`, user); e != nil {
 		t.Fatal(e)
 	}
@@ -88,6 +103,38 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	}
 	if e := db.QueryRow(`SELECT oop_incomplete FROM entries WHERE id=$1`, oopIncomplete).Scan(&legacyFlag); e != nil || !legacyFlag {
 		t.Fatalf("неполная запись должна быть помечена: %v %v", legacyFlag, e)
+	}
+	var topProject, topRole, topGrant string
+	var topNonVO bool
+	if e := db.QueryRow(`SELECT top_project_name,top_partner_role,top_grant_rub::text,top_legacy_non_vo FROM entries WHERE id=$1`, topVuz).Scan(&topProject, &topRole, &topGrant, &topNonVO); e != nil ||
+		topProject != "Проект" || topRole != "anchor" || topGrant != "1500000.50" || topNonVO {
+		t.Fatalf("паспорт старой записи по вузу: %q %q %q %v %v", topProject, topRole, topGrant, topNonVO, e)
+	}
+	if e := db.QueryRow(`SELECT top_legacy_non_vo FROM entries WHERE id=$1`, topCollege).Scan(&topNonVO); e != nil || !topNonVO {
+		t.Fatalf("запись по колледжу должна быть помечена: %v %v", topNonVO, e)
+	}
+	var topFindings int
+	if e := db.QueryRow(`SELECT count(*) FROM legacy_backfill_findings WHERE entry_id=$1 AND rule_code='top.non_vo_audience'`, topCollege).Scan(&topFindings); e != nil || topFindings != 1 {
+		t.Fatalf("запись по колледжу должна попасть в находки: %d %v", topFindings, e)
+	}
+	if e := db.QueryRow(`SELECT count(*) FROM legacy_backfill_findings WHERE entry_id=$1`, topVuz).Scan(&topFindings); e != nil || topFindings != 0 {
+		t.Fatalf("полная запись по вузу находок не имеет: %d %v", topFindings, e)
+	}
+	var schoolProgram, schoolAct string
+	var schoolIncomplete bool
+	if e := db.QueryRow(`SELECT school_program_name,school_act_reference,school_incomplete FROM entries WHERE id=$1`, schoolGood).Scan(&schoolProgram, &schoolAct, &schoolIncomplete); e != nil ||
+		schoolProgram != "Кружок" || schoolAct != "Акт 5" || schoolIncomplete {
+		t.Fatalf("полная старая школьная запись: %q %q %v %v", schoolProgram, schoolAct, schoolIncomplete, e)
+	}
+	for _, rule := range []string{"school.program_missing", "school.budget_funding_declared", "school.audience_mismatch", "school.digital_trace_incomplete"} {
+		var n int
+		if e := db.QueryRow(`SELECT count(*) FROM legacy_backfill_findings WHERE entry_id=$1 AND rule_code=$2`, schoolBad, rule).Scan(&n); e != nil || n != 1 {
+			t.Fatalf("старая запись школьного трека должна получить находку %s: %d %v", rule, n, e)
+		}
+	}
+	var schoolClean int
+	if e := db.QueryRow(`SELECT count(*) FROM legacy_backfill_findings WHERE entry_id=$1`, schoolGood).Scan(&schoolClean); e != nil || schoolClean != 0 {
+		t.Fatalf("полная запись находок не имеет: %d %v", schoolClean, e)
 	}
 	var normativeHostCount int
 	if e := db.QueryRow(`SELECT count(*) FROM normative_trusted_hosts`).Scan(&normativeHostCount); e != nil || normativeHostCount != 4 {

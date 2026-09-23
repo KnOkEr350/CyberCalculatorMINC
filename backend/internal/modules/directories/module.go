@@ -20,6 +20,7 @@ type Module struct {
 	partnerStructure    *handlers.PartnerStructureHandlers
 	referenceCatalogs   *handlers.ReferenceCatalogHandlers
 	curatorAssignments  *handlers.CuratorAssignmentHandlers
+	agreementHistory    *handlers.AgreementHistoryHandlers
 }
 
 func New(db *sql.DB) *Module {
@@ -29,7 +30,7 @@ func New(db *sql.DB) *Module {
 		regionalAuthorities: &handlers.RegionalAuthorityHandlers{DB: db}, entryReferences: &handlers.EntryHandlers{DB: db},
 		partnerStructure:   &handlers.PartnerStructureHandlers{DB: db},
 		referenceCatalogs:  &handlers.ReferenceCatalogHandlers{DB: db},
-		curatorAssignments: &handlers.CuratorAssignmentHandlers{DB: db},
+		curatorAssignments: &handlers.CuratorAssignmentHandlers{DB: db}, agreementHistory: &handlers.AgreementHistoryHandlers{DB: db},
 	}
 }
 
@@ -88,6 +89,12 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/legal-entity-groups/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.legalEntityGroups.Update(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("POST /api/legal-entity-groups/{id}/terminate", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.legalEntityGroups.Terminate(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/legal-entity-groups/{id}/limits", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.legalEntityGroups.Limits(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/regional-authorities", middleware.RequireAuth(m.db, m.regionalAuthorities.List))
 	mux.HandleFunc("POST /api/regional-authorities", middleware.RequireAuth(m.db, m.regionalAuthorities.Create))
 	mux.HandleFunc("PUT /api/regional-authorities/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -107,5 +114,11 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("POST /api/curator-assignments/{id}/revoke", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.curatorAssignments.Revoke(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("GET /api/agreements/{id}/history", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.agreementHistory.History(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("PUT /api/agreements/{id}/curator", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.agreementHistory.SetCurator(w, r, u, r.PathValue("id"))
 	}))
 }

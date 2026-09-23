@@ -272,7 +272,7 @@ async function boot() {
       state.partners = [];
     }
     if (state.me.entity_type === "organization" && state.me.it_company_id) {
-      try { state.legalEntityGroups = (await api("/legal-entity-groups")) || []; }
+      try { state.legalEntityGroups = ((await api("/legal-entity-groups")) || []).filter((group) => group.status !== "terminated"); }
       catch (_) { state.legalEntityGroups = []; }
     }
   }

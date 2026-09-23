@@ -1120,7 +1120,7 @@ async function openLegalEntityGroups(onSaved) {
     form.elements.members.value = memberText(group.members);
   };
   const load = async () => {
-    state.legalEntityGroups = await api("/legal-entity-groups");
+    state.legalEntityGroups = ((await api("/legal-entity-groups")) || []).filter((group) => group.status !== "terminated");
     modal.querySelector("#group-list").innerHTML = state.legalEntityGroups.length ? `<div class="table-wrap"><table><thead><tr><th>Группа и договор</th><th>Уполномоченное лицо</th><th>Участники</th><th></th></tr></thead><tbody>${state.legalEntityGroups.map((group) => `<tr><td><b>${escapeHTML(group.name)}</b><br>№ ${escapeHTML(group.interaction_agreement_number)} от ${escapeHTML(group.interaction_agreement_date)}</td><td>${escapeHTML(group.authorized_entity_name)}<br>ИНН ${escapeHTML(group.authorized_entity_inn)}</td><td>${group.members.length}</td><td><button class="btn secondary" data-group-edit="${group.id}">Изменить</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Договор о взаимодействии ещё не добавлен.</p>';
     modal.querySelectorAll("[data-group-edit]").forEach((button) => button.onclick = () => fill(state.legalEntityGroups.find((group) => group.id === button.dataset.groupEdit)));
     if (state.legalEntityGroups.length === 1 && !editingID) fill(state.legalEntityGroups[0]);
@@ -1362,7 +1362,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     }),
   );
   root.querySelector("#legal-groups")?.addEventListener("click", () => openLegalEntityGroups(async () => {
-    state.legalEntityGroups = await api("/legal-entity-groups");
+    state.legalEntityGroups = ((await api("/legal-entity-groups")) || []).filter((group) => group.status !== "terminated");
   }));
   root.querySelector("#d-review-all").onchange = search;
   root.querySelector("#d-kind").onchange = () => {

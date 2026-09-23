@@ -2586,6 +2586,179 @@
           "reporting"
         ]
       }
+    },
+    "/api/entries/{id}/top-items": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "planning"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "planning"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TopItemRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/top-items/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "put": {
+        "tags": [
+          "planning"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TopItemRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "planning"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/legal-entity-groups/{id}/terminate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TerminateLegalEntityGroupRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/legal-entity-groups/{id}/limits": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/agreements/{id}/history": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/agreements/{id}/curator": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "put": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/SetAgreementCuratorRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/admin/legacy-directory-findings": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2911,7 +3084,8 @@
           "authorized_entity_name": true,
           "authorized_entity_inn": true,
           "authorized_entity_ogrn": true,
-          "members": true
+          "members": true,
+          "document_reference": true
         },
         "additionalProperties": false
       },
@@ -3888,6 +4062,61 @@
           "reason": true
         },
         "additionalProperties": false
+      },
+      "TopItemRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/top_items.go",
+          "name": "topItemRequest"
+        },
+        "type": "object",
+        "properties": {
+          "kind": true,
+          "title": true,
+          "support_kind": true,
+          "act_reference": true,
+          "act_date": true,
+          "balance_value_rub": true,
+          "appraised_value_rub": true,
+          "confirmed_value_rub": true,
+          "student_name": true,
+          "group_name": true,
+          "course": true,
+          "period_start": true,
+          "period_end": true,
+          "amount_rub": true,
+          "criterion": true,
+          "donor_name": true,
+          "implementation_org": true,
+          "implementation_status": true,
+          "implemented_on": true,
+          "description": true,
+          "document_ids": true
+        },
+        "additionalProperties": false
+      },
+      "TerminateLegalEntityGroupRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/legal_entity_groups.go",
+          "name": "terminateLegalEntityGroupRequest"
+        },
+        "type": "object",
+        "properties": {
+          "reason": true,
+          "terminated_on": true
+        },
+        "additionalProperties": false
+      },
+      "SetAgreementCuratorRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/agreement_history.go",
+          "name": "setAgreementCuratorRequest"
+        },
+        "type": "object",
+        "properties": {
+          "curator_id": true,
+          "reason": true
+        },
+        "additionalProperties": false
       }
     },
     "requestBodies": {
@@ -4408,6 +4637,36 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ReassignTaskRequest"
+            }
+          }
+        }
+      },
+      "TopItemRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TopItemRequest"
+            }
+          }
+        }
+      },
+      "TerminateLegalEntityGroupRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TerminateLegalEntityGroupRequest"
+            }
+          }
+        }
+      },
+      "SetAgreementCuratorRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SetAgreementCuratorRequest"
             }
           }
         }
