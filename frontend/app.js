@@ -787,6 +787,20 @@ async function renderDashboard(root) {
     yellow: { entry_count: riskCounts.yellow, amount_rub: 0 },
     red: { entry_count: riskCounts.red, amount_rub: 0 },
   };
+  const readinessTotal = ["green", "yellow", "red"].reduce(
+    (sum, key) => sum + Number(riskBuckets[key]?.entry_count || 0),
+    0,
+  );
+  const readinessBucket = (stateName, label, hint, icon) => {
+    const count = Number(riskBuckets[stateName]?.entry_count || 0);
+    const percent = readinessTotal ? Math.round((count / readinessTotal) * 100) : 0;
+    return `<div class="${stateName} readiness-bucket">
+      <div class="readiness-bucket-icon" aria-hidden="true">${icon}</div>
+      <div class="readiness-bucket-copy"><b>${label}</b><small>${hint}</small></div>
+      <div class="readiness-bucket-metric"><span>${count}</span><small>${percent}% записей</small></div>
+      <div class="readiness-bucket-meter" aria-hidden="true"><i style="width:${percent}%"></i></div>
+    </div>`;
+  };
   const factEntries = (d.fact_by_category || []).reduce((sum, item) => sum + Number(item.entry_count || 0), 0);
   const activeAgreements = state.partners.reduce((sum, partner) => sum + Number(partner.active_agreements_count || 0), 0);
   const attentionEntries = Number(riskBuckets.yellow?.entry_count || 0) + Number(riskBuckets.red?.entry_count || 0);
@@ -831,7 +845,7 @@ async function renderDashboard(root) {
       <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, "Факт")}</div>
     </div>
     <div class="grid cols-2 dashboard-risk-grid">
-      <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets"><div class="green"><span>${Number(riskBuckets.green?.entry_count || 0)}</span><b>Готово</b></div><div class="yellow"><span>${Number(riskBuckets.yellow?.entry_count || 0)}</span><b>В работе</b></div><div class="red"><span>${Number(riskBuckets.red?.entry_count || 0)}</span><b>Требует внимания</b></div></div></div>
+      <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets">${readinessBucket("green", "Готово", "Можно подтверждать", "✓")}${readinessBucket("yellow", "В работе", "Есть незавершённые шаги", "↻")}${readinessBucket("red", "Требует внимания", "Нужна проверка данных", "!")}</div></div>
       <div class="card"><h2>Все виды мероприятий</h2><div class="table-wrap"><table><thead><tr><th>Вид активности</th>${sortHeader("plan", "План")}${sortHeader("fact", "Факт")}${sortHeader("risk", "Готовность")}</tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${item.plan}</td><td>${item.fact}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Готово" : item.risk === "yellow" ? "В работе" : "Нет данных"}</span></td></tr>`).join("")}</tbody></table></div></div>
     </div>
     ${regulatoryTimelineMarkup(milestones)}
