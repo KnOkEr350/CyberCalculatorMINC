@@ -425,7 +425,7 @@ function oopMatrix(summary) {
   }).join("");
   const columnTotals = actions.map(([action]) => total(docs.map(([doc]) => cell(doc, action))));
   const grandTotal = total([...items.values()]);
-  return `<div class="oop-matrix" aria-label="Матрица ООП и РПД"><div class="flex between"><h2>Краткая матричная выжимка</h2><span class="status-badge ${grandTotal ? "active" : "inactive"}">${grandTotal} документов</span></div><div class="table-wrap"><table><thead><tr><th>Вид документа</th>${actions.map(([, label]) => `<th>${label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${body}<tr class="total-row"><th>Итого</th>${columnTotals.map((item) => `<td><b>${item}</b></td>`).join("")}<td><b>${grandTotal}</b></td></tr></tbody></table></div></div>`;
+  return `<div class="oop-matrix" aria-label="Матрица ООП и РПД"><div class="flex between"><h2>Сводная матрица ООП и РПД</h2><span class="status-badge ${grandTotal ? "active" : "inactive"}">${grandTotal} документов</span></div><div class="table-wrap"><table><thead><tr><th>Вид документа</th>${actions.map(([, label]) => `<th>${label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${body}<tr class="total-row"><th>Итого</th>${columnTotals.map((item) => `<td><b>${item}</b></td>`).join("")}<td><b>${grandTotal}</b></td></tr></tbody></table></div></div>`;
 }
 
 function oopRegistryTable(entries, writable, canCreate) {
@@ -608,26 +608,18 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     <div class="field"><label for="partner-search">Поиск учебного заведения</label><input id="partner-search" placeholder="Введите часть названия"></div>
     <div class="field"><label for="workspace-partner">2. Учебное заведение</label><select id="workspace-partner"></select></div>`;
   const headingTitle = screen?.title || (canPrepare ? "План и факт" : "Рассмотрение плана и отчёта");
-  const screenFacts = screen?.facts?.length
-    ? `<div class="activity-facts">${screen.facts.map((fact) => `<div><span class="activity-fact-mark"></span><b>${escapeHTML(fact)}</b></div>`).join("")}</div>`
-    : "";
-  root.innerHTML = `<section class="page-heading screen-heading"><div>${screen ? `<span class="eyebrow">Экран ${screen.number} · ${escapeHTML(screen.kind)}</span>` : ""}<h1>${escapeHTML(headingTitle)}</h1></div><span class="year-badge">${state.year}</span></section>
-  ${screenFacts}
+  root.innerHTML = `<section class="page-heading screen-heading"><div>${screen ? `<span class="eyebrow">Экран ${screen.number} · ${escapeHTML(screen.kind)}</span>` : ""}<h1>${escapeHTML(headingTitle)}</h1></div><div class="activity-heading-actions"><div class="tabs activity-period-tabs" role="tablist" aria-label="План или факт"><button type="button" role="tab" data-p="plan" aria-selected="${state.period === "plan"}" class="${state.period === "plan" ? "active" : ""}">План</button><button type="button" role="tab" data-p="fact" aria-selected="${state.period === "fact"}" class="${state.period === "fact" ? "active" : ""}">Факт</button></div><span class="year-badge">${state.year}</span></div></section>
   <div class="card"><div class="grid cols-3">
     ${educationSelector}
     <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
-  </div><div class="flex workspace-actions">${canManageWorkflow && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}${canManageWorkflow && isStaffUser() ? '<button class="btn secondary" id="edit-budget-target">Целевая сумма (3%)</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
-  <div class="card"><div class="tabs"><button data-p="plan" class="${state.period === "plan" ? "active" : ""}">План</button><button data-p="fact" class="${state.period === "fact" ? "active" : ""}">Факт</button></div>
-    <div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
+  </div><div class="flex workspace-actions">${canManageWorkflow && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
+  <div class="card"><div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     ${screen?.id === "schools" && available.length > 1 ? `<div class="tab-strip" role="tablist" aria-label="Виды школьного трека" style="grid-column:1/-1">${available.map((c) => `<button type="button" role="tab" class="btn ${c.code === state.categoryCode ? "" : "secondary"}" aria-selected="${c.code === state.categoryCode}" data-school-tab="${c.code}">${escapeHTML(SCHOOL_KIND_LABELS[c.code] || c.name)}</button>`).join("")}</div>` : ""}
     <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Режим</label>${canCreate ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : `<input value="${canPrepare ? "Редактирование по роли" : "Просмотр и согласование"}" readonly>`}</div></div>
     <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Сотрудники и ОКЗ</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
-  const budgetTargetButton = root.querySelector("#edit-budget-target");
-  if (budgetTargetButton)
-    budgetTargetButton.onclick = () => openBudgetTargetDialog(budgetTargetButton);
   const partnerSelect = root.querySelector("#workspace-partner");
   if (partnerSelect) {
     const fillPartners = () => {
@@ -865,6 +857,11 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   paint();
   const paging = el(`<div class="actions"><button class="btn secondary" id="entries-prev">Назад</button><span>Страница ${Math.floor((state.entryPageOffset || 0) / 200) + 1}</span><button class="btn secondary" id="entries-next">Далее</button></div>`);
   root.querySelector("#entries-table").after(paging);
+  if (screen?.id === "teachers" && canCreate) {
+    const addTeacher = el(`<div class="teacher-list-footer"><button type="button" class="btn" ${writable ? "" : "disabled"}>+ Добавить преподавателя</button></div>`);
+    paging.after(addTeacher);
+    addTeacher.querySelector("button").onclick = () => openEntryModal(null);
+  }
   paging.querySelector("#entries-prev").disabled = !state.entryPageOffset;
   paging.querySelector("#entries-next").disabled = entries.nextOffset == null;
   paging.querySelector("#entries-prev").onclick = () => { state.entryPageOffset = Math.max(0, state.entryPageOffset - 200); renderEntries(root); };

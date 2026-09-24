@@ -137,6 +137,11 @@ test("dashboard prioritizes operational indicators and moves analytics below", (
     assert.doesNotMatch(app, new RegExp(removed));
   }
   assert.ok(app.indexOf("dashboard-primary-kpis") < app.indexOf("dashboard-filter-card"));
+  assert.ok(app.indexOf("dashboard-primary-kpis") < app.indexOf("dashboard-compare-card"));
+  assert.ok(app.indexOf("regulatoryTimelineMarkup(milestones)") < app.indexOf("dashboard-filter-card"));
+  assert.doesNotMatch(app, /partnerDistributionMarkup\(state\.partners\)/);
+  assert.doesNotMatch(app, /id="dash-slice"/);
+  for (const key of ["plan", "fact", "risk"]) assert.ok(app.includes(`sortHeader("${key}"`));
 });
 
 test("partners page shows confirmed partners and lazy-loads details 4 through 6", () => {
@@ -164,10 +169,18 @@ test("OOP and RPD screen exposes permanent 2 by 3 matrix and document registry",
   const workspace = source("./workspace.js");
   assert.match(workspace, /function oopMatrix/);
   assert.match(workspace, /function oopRegistryTable/);
-  for (const label of ["Разработка", "Актуализация", "Экспертиза", "Краткая матричная выжимка", "Программа или дисциплина"]) {
+  for (const label of ["Разработка", "Актуализация", "Экспертиза", "Сводная матрица ООП и РПД", "Программа или дисциплина"]) {
     assert.match(workspace, new RegExp(label));
   }
   assert.match(workspace, /\[\["rpd", "РПД"\], \["oop", "ООП"\]\]/);
+});
+
+test("activity screens use one-line plan/fact switch without target controls", () => {
+  const workspace = source("./workspace.js");
+  assert.match(workspace, /class="tabs activity-period-tabs"/);
+  assert.doesNotMatch(workspace, /id="edit-budget-target"/);
+  assert.doesNotMatch(workspace, /class="activity-facts"/);
+  assert.match(workspace, /\+ Добавить преподавателя/);
 });
 
 test("UI-07 TOP-05 TOP-08 ADR-14: TOP-IT entry card shows the sub-registers, RID and the co-financing scale", () => {

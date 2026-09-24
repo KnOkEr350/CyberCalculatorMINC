@@ -33,7 +33,6 @@
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
       kind: "Вид 1",
-      facts: ["Нагрузка по семестрам", "Проверка стажа и ОКЗ", "Документы преподавателя"],
     },
     {
       id: "ood_rpd",
@@ -47,7 +46,6 @@
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
       kind: "Вид 3",
-      facts: ["Матрица РПД × ООП", "Разработка · актуализация · экспертиза", "Документы и эксперт"],
     },
     {
       id: "internship",
@@ -61,7 +59,6 @@
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
       kind: "Вид 2",
-      facts: ["Часы студента и наставника", "Срочный трудовой договор", "HR · Куратор · Юрист"],
     },
     {
       id: "employment_practice",
@@ -75,7 +72,6 @@
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
       kind: "Вид 2",
-      facts: ["Только срочный трудовой договор", "Проверка номера и даты", "Отдельно от стажировок"],
     },
     {
       id: "top_it",
@@ -89,7 +85,6 @@
       audiences: ["vuz"],
       defaultAudience: "vuz",
       kind: "Вид 4",
-      facts: ["Только высшее образование", "Контроль порогов участия", "Фактическое исполнение вузом"],
     },
     {
       id: "schools",
@@ -103,7 +98,6 @@
       audiences: ["school"],
       defaultAudience: "school",
       kind: "Виды 6–8",
-      facts: ["Три направления в одном разделе", "Без бюджетного финансирования", "Связь со школой и РОИВ"],
     },
     {
       id: "minc_decision",
@@ -117,7 +111,6 @@
       audiences: ["vuz", "kolledj"],
       defaultAudience: "vuz",
       kind: "Вид 5",
-      facts: ["Реквизиты решения обязательны", "Динамическая единица измерения", "Первичные документы"],
     },
     {
       id: "reports",
@@ -141,7 +134,6 @@
     ...screen,
     categoryCodes: Object.freeze([...(screen.categoryCodes || [])]),
     audiences: Object.freeze([...(screen.audiences || [])]),
-    facts: Object.freeze([...(screen.facts || [])]),
   }));
 
   const byID = new Map(screens.map((screen) => [screen.id, screen]));

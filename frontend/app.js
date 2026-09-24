@@ -755,26 +755,32 @@ async function renderDashboard(root) {
   }, {});
   const planCounts = countsByCategory(d.plan_by_category);
   const factCounts = countsByCategory(d.fact_by_category);
-  const dashboardSlice = ["plan", "fact", "delta"].includes(state.dashboardSlice)
-    ? state.dashboardSlice
+  const sortKey = ["plan", "fact", "risk"].includes(state.dashboardSortKey)
+    ? state.dashboardSortKey
     : "fact";
-  const sliceLabels = {
-    plan: "План",
-    fact: "Факт",
-    delta: "Дельта (Факт-План)",
-  };
+  const sortDirection = state.dashboardSortDirection === "asc" ? "asc" : "desc";
+  const riskOrder = { red: 0, yellow: 1, green: 2 };
   const activityRows = state.categories.map((category) => {
     const plan = planCounts[category.code] || 0;
     const fact = factCounts[category.code] || 0;
-    const delta = fact - plan;
     const risk = fact > 0 && (plan === 0 || fact >= plan)
       ? "green"
       : plan > 0 || fact > 0
         ? "yellow"
         : "red";
-    const selected = dashboardSlice === "plan" ? plan : dashboardSlice === "delta" ? delta : fact;
-    return { ...category, plan, fact, delta, selected, risk };
+    return { ...category, plan, fact, risk };
+  }).sort((left, right) => {
+    const leftValue = sortKey === "risk" ? riskOrder[left.risk] : left[sortKey];
+    const rightValue = sortKey === "risk" ? riskOrder[right.risk] : right[sortKey];
+    const result = leftValue - rightValue;
+    return sortDirection === "asc" ? result : -result;
   });
+  const sortHeader = (key, label) => {
+    const active = sortKey === key;
+    const direction = active ? sortDirection : "none";
+    const marker = active ? (sortDirection === "asc" ? "↑" : "↓") : "↕";
+    return `<th aria-sort="${direction === "none" ? "none" : direction === "asc" ? "ascending" : "descending"}"><button type="button" class="dashboard-sort" data-dashboard-sort="${key}">${label}<span aria-hidden="true">${marker}</span></button></th>`;
+  };
   const riskCounts = activityRows.reduce((counts, item) => {
     counts[item.risk] += 1;
     return counts;
@@ -822,7 +828,16 @@ async function renderDashboard(root) {
         <div class="dashboard-kpi-value">${attentionEntries}</div>
       </article>
     </div>
-    ${partnerDistributionMarkup(state.partners)}
+    <div class="card dashboard-compare-card"><h2>Количество мероприятий по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
+    <div class="grid cols-2 dashboard-donut-grid">
+      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, "План")}</div>
+      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, "Факт")}</div>
+    </div>
+    <div class="grid cols-2 dashboard-risk-grid">
+      <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets"><div class="green"><span>${Number(riskBuckets.green?.entry_count || 0)}</span><b>Готово</b></div><div class="yellow"><span>${Number(riskBuckets.yellow?.entry_count || 0)}</span><b>В работе</b></div><div class="red"><span>${Number(riskBuckets.red?.entry_count || 0)}</span><b>Требует внимания</b></div></div></div>
+      <div class="card"><h2>Все виды мероприятий</h2><div class="table-wrap"><table><thead><tr><th>Вид активности</th>${sortHeader("plan", "План")}${sortHeader("fact", "Факт")}${sortHeader("risk", "Готовность")}</tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${item.plan}</td><td>${item.fact}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Готово" : item.risk === "yellow" ? "В работе" : "Нет данных"}</span></td></tr>`).join("")}</tbody></table></div></div>
+    </div>
+    ${regulatoryTimelineMarkup(milestones)}
     <div class="card dashboard-filter-card">
       <div class="dashboard-toolbar">
         <h2 style="margin:0">Аналитика</h2>
@@ -830,23 +845,12 @@ async function renderDashboard(root) {
           <div class="field"><label for="dash-year">Год</label><input type="number" id="dash-year" min="2000" max="2100" step="1" value="${state.year}"></div>
           ${partnerFilter}
           <div class="field"><label for="dash-category">Вид активности</label><select id="dash-category"><option value="">Все активности</option>${state.categories.map((category) => `<option value="${escapeHTML(category.code)}" ${category.code === state.dashboardCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div>
-          <div class="field"><label for="dash-slice">Срез</label><select id="dash-slice"><option value="plan" ${dashboardSlice === "plan" ? "selected" : ""}>План</option><option value="fact" ${dashboardSlice === "fact" ? "selected" : ""}>Факт</option><option value="delta" ${dashboardSlice === "delta" ? "selected" : ""}>Дельта</option></select></div>
           <div class="field"><label for="dash-semester">Семестр</label><select id="dash-semester">${DASHBOARD_SEMESTER_OPTIONS.map(([code, label]) => `<option value="${code}" ${code === (state.dashboardSemester || "") ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
           <div class="field"><label for="dash-light">Светофор</label><select id="dash-light">${DASHBOARD_LIGHT_OPTIONS.map(([code, label]) => `<option value="${code}" ${code === (state.dashboardLight || "") ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
           <div class="field"><label class="check-row" for="dash-hide-zero"><input type="checkbox" id="dash-hide-zero" ${state.dashboardHideZero ? "checked" : ""}> Скрыть нулевые позиции</label></div>
           <div class="field"><label for="dash-audience">Аудитория</label><select id="dash-audience"><option value="">Все аудитории</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}" ${code === state.dashboardAudience ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select></div>
         </div>
       </div>
-    </div>
-    <div class="grid cols-2 dashboard-risk-grid">
-      <div class="card"><h2>Распределение по готовности</h2><div class="risk-buckets"><div class="green"><span>${Number(riskBuckets.green?.entry_count || 0)}</span><b>Готово</b></div><div class="yellow"><span>${Number(riskBuckets.yellow?.entry_count || 0)}</span><b>В работе</b></div><div class="red"><span>${Number(riskBuckets.red?.entry_count || 0)}</span><b>Требует внимания</b></div></div></div>
-      <div class="card"><h2>Все виды мероприятий — ${escapeHTML(sliceLabels[dashboardSlice])}</h2><div class="table-wrap"><table><thead><tr><th>Вид</th><th>${escapeHTML(sliceLabels[dashboardSlice])}</th><th>План</th><th>Факт</th><th>Готовность</th></tr></thead><tbody>${activityRows.map((item) => `<tr><td>${escapeHTML(item.name)}</td><td>${item.selected}</td><td>${item.plan}</td><td>${item.fact}</td><td><span class="risk-label ${item.risk}"><i></i>${item.risk === "green" ? "Готово" : item.risk === "yellow" ? "В работе" : "Нет данных"}</span></td></tr>`).join("")}</tbody></table></div></div>
-    </div>
-    ${regulatoryTimelineMarkup(milestones)}
-    <div class="card"><h2>Количество мероприятий по категориям</h2>${groupedChart(d.plan_by_category, d.fact_by_category)}</div>
-    <div class="grid cols-2">
-      <div class="card"><h2>Структура плана</h2>${donutChart(d.plan_by_category, "План")}</div>
-      <div class="card"><h2>Структура факта</h2>${donutChart(d.fact_by_category, "Факт")}</div>
     </div>
   `;
   root.querySelectorAll("[data-quick-view]").forEach((button) => {
@@ -872,10 +876,14 @@ async function renderDashboard(root) {
     state.dashboardCategory = event.target.value;
     renderDashboard(root);
   };
-  root.querySelector("#dash-slice").onchange = (event) => {
-    state.dashboardSlice = event.target.value;
-    renderDashboard(root);
-  };
+  root.querySelectorAll("[data-dashboard-sort]").forEach((button) => {
+    button.onclick = () => {
+      const key = button.dataset.dashboardSort;
+      state.dashboardSortDirection = state.dashboardSortKey === key && state.dashboardSortDirection === "desc" ? "asc" : "desc";
+      state.dashboardSortKey = key;
+      renderDashboard(root);
+    };
+  });
   root.querySelector("#dash-semester").onchange = (event) => {
     state.dashboardSemester = event.target.value;
     renderDashboard(root);
