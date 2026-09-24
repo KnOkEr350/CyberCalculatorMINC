@@ -174,11 +174,11 @@ button { touch-action: manipulation; }
 .dashboard-risk-grid .risk-buckets > div span,
 .dashboard-risk-grid .risk-buckets > div b,
 .dashboard-risk-grid .risk-buckets > div small { color: currentColor; }
-.dashboard-risk-grid .readiness-bucket { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 24px; border-left-width: 1px; border-radius: 7px; box-shadow: none; }
-.readiness-bucket > div { display: flex; min-width: 0; flex-direction: column; }
+.dashboard-risk-grid .readiness-bucket { display: grid; grid-template-columns: 64px minmax(0, 1fr) 64px; align-items: center; gap: 14px; padding: 22px 24px; border-left-width: 1px; border-radius: 7px; box-shadow: none; }
+.readiness-bucket > div { display: flex; min-width: 0; grid-column: 2; align-items: center; flex-direction: column; text-align: center; }
 .dashboard-risk-grid .readiness-bucket span { font-size: clamp(30px, 10cqi, 42px); font-weight: 760; letter-spacing: -.035em; }
 .dashboard-risk-grid .readiness-bucket b { margin: 5px 0 0; font-size: 13px; font-weight: 650; }
-.dashboard-risk-grid .readiness-bucket > small { margin: 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.dashboard-risk-grid .readiness-bucket > small { grid-column: 3; justify-self: end; margin: 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .risk-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .risk-label i, .risk-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
 .risk-label.green i, .risk-dot.green { background: var(--good); }
@@ -606,7 +606,7 @@ td .btn { min-height: 29px; padding: 4px 9px; font-size: 10px; }
   .dashboard-summary-strip > div:last-child { border-bottom: 0; }
   .admin-nav { grid-template-columns: 1fr; }
   .card { padding: 16px 14px; }
-  .dashboard-risk-grid .readiness-bucket { padding: 18px; }
+  .dashboard-risk-grid .readiness-bucket { grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 8px; padding: 18px; }
   .tabs { width: 100%; overflow-x: auto; }
   .tabs button { flex: 1 0 auto; }
   .flex.between { align-items: stretch; flex-direction: column; }
