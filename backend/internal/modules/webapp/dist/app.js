@@ -787,16 +787,10 @@ async function renderDashboard(root) {
     yellow: { entry_count: riskCounts.yellow, amount_rub: 0 },
     red: { entry_count: riskCounts.red, amount_rub: 0 },
   };
-  const readinessTotal = ["green", "yellow", "red"].reduce(
-    (sum, key) => sum + Number(riskBuckets[key]?.entry_count || 0),
-    0,
-  );
   const readinessBucket = (stateName, label) => {
     const count = Number(riskBuckets[stateName]?.entry_count || 0);
-    const percent = readinessTotal ? Math.round((count / readinessTotal) * 100) : 0;
     return `<div class="${stateName} readiness-bucket">
       <div><span>${count}</span><b>${label}</b></div>
-      <small>${percent}%</small>
     </div>`;
   };
   const factEntries = (d.fact_by_category || []).reduce((sum, item) => sum + Number(item.entry_count || 0), 0);
