@@ -87,7 +87,7 @@
 | TOP-05 | Шкала прогресса | выполнено | — | `frontend/architecture.test.cjs` | — |
 | TOP-06 | Стипендиаты | выполнено | `backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go`<br>`frontend/app.js`<br>`migrations/0601_top_program_model.sql` | `backend/internal/handlers/top_program_integration_test.go` | — |
 | TOP-07 | Производственные кейсы | выполнено | `backend/internal/handlers/top_items.go`<br>`backend/internal/topit/items.go`<br>`frontend/app.js`<br>`migrations/0601_top_program_model.sql` | `backend/internal/handlers/top_program_integration_test.go` | — |
-| TOP-08 | Реестр РИД | выполнено | `backend/internal/topit/items.go`<br>`migrations/0602_top_rid_registry.sql` | `backend/internal/topit/items_test.go`<br>`frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
+| TOP-08 | Реестр РИД | выполнено | `backend/internal/topit/items.go`<br>`migrations/0905_top_rid_registry.sql` | `backend/internal/topit/items_test.go`<br>`frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | TOP-09 | Документы АНО АЦ | выполнено | — | `backend/internal/compliance/documents_test.go` | — |
 | TOP-10 | Правило п. 22 | выполнено | — | `backend/internal/handlers/calendar_deadline_test.go`<br>`backend/internal/handlers/report_workflow_integration_test.go` | `docs/adr/ADR-03-top-it-exemption.md` |
 | TOP-11 | Legacy backfill | выполнено | `migrations/0601_top_program_model.sql`<br>`migrations/0811_top_legacy_eligibility.sql` | `backend/internal/dbx/migrations_integration_test.go` | — |
@@ -134,7 +134,7 @@
 | REPORT-06 | Приложение №2 к отчёту | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | `docs/adr/ADR-13-internship-agreement.md` |
 | REPORT-07 | Приложение №3 DOCX | выполнено | — | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-08 | Типовые соглашения DOCX | выполнено | `migrations/0202_agreement_signatories.sql` | `backend/internal/handlers/agreement_template_test.go` | — |
-| REPORT-09 | АНО АЦ: 6 листов | частично | `backend/internal/handlers/ano_ac_report.go`<br>`frontend/app.js`<br>`migrations/0812_ano_ac_report_type.sql` | `backend/internal/handlers/ano_ac_report_integration_test.go`<br>`frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
+| REPORT-09 | АНО АЦ: 6 листов | частично | `backend/internal/handlers/ano_ac_report.go`<br>`frontend/app.js`<br>`migrations/0906_ano_ac_report_type.sql` | `backend/internal/handlers/ano_ac_report_integration_test.go`<br>`frontend/architecture.test.cjs` | `docs/adr/ADR-14-top-it-percent-denominator.md` |
 | REPORT-10 | Конструктор срезов | выполнено | `backend/internal/handlers/regulatory_reports.go`<br>`migrations/0805_generated_reports_csv.sql` | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-11 | Реестр сформированных файлов | частично | `backend/internal/handlers/annex4.go`<br>`backend/internal/handlers/regulatory_reports.go` | `backend/internal/handlers/regulatory_reports_test.go` | — |
 | REPORT-12 | Golden regression suite | частично | `backend/internal/xlsx` | — | `docs/ORDER_270_ADR_ANALYSIS.md` |
