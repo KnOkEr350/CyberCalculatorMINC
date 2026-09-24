@@ -168,10 +168,12 @@ button { touch-action: manipulation; }
 .risk-buckets .green span { color: var(--good); }
 .risk-buckets .yellow span { color: var(--warn); }
 .risk-buckets .red span { color: var(--bad); }
-.dashboard-risk-grid .risk-buckets > div { border-color: #3155d9; background: #3155d9; color: #fff; box-shadow: 0 10px 24px rgba(49,85,217,.22); }
+.dashboard-risk-grid .risk-buckets > .green { border-color: #079455; background: #12b76a; color: #fff; box-shadow: 0 10px 24px rgba(18,183,106,.25); }
+.dashboard-risk-grid .risk-buckets > .yellow { border-color: #e0a000; background: #ffc400; color: #3d2d00; box-shadow: 0 10px 24px rgba(255,196,0,.28); }
+.dashboard-risk-grid .risk-buckets > .red { border-color: #d92d4f; background: #f04466; color: #fff; box-shadow: 0 10px 24px rgba(240,68,102,.25); }
 .dashboard-risk-grid .risk-buckets > div span,
 .dashboard-risk-grid .risk-buckets > div b,
-.dashboard-risk-grid .risk-buckets > div small { color: #fff; }
+.dashboard-risk-grid .risk-buckets > div small { color: currentColor; }
 .risk-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .risk-label i, .risk-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
 .risk-label.green i, .risk-dot.green { background: var(--good); }

@@ -130,6 +130,7 @@ test("Ministry decision screen exposes plan, fact, dynamic metric and evidence",
 
 test("dashboard prioritizes operational indicators and moves analytics below", () => {
   const app = source("./app.js");
+  const theme = source("./theme.css");
   for (const label of ["Партнёры", "Действующие соглашения", "Мероприятия по факту", "Требуют внимания"]) {
     assert.match(app, new RegExp(label));
   }
@@ -142,6 +143,16 @@ test("dashboard prioritizes operational indicators and moves analytics below", (
   assert.doesNotMatch(app, /partnerDistributionMarkup\(state\.partners\)/);
   assert.doesNotMatch(app, /id="dash-slice"/);
   for (const key of ["plan", "fact", "risk"]) assert.ok(app.includes(`sortHeader("${key}"`));
+  for (const [state, color] of [["green", "#12b76a"], ["yellow", "#ffc400"], ["red", "#f04466"]]) {
+    assert.match(theme, new RegExp(`dashboard-risk-grid \\.risk-buckets > \\.${state} \\{[^}]*background: ${color}`, "s"));
+  }
+});
+
+test("reports screen has no calendar and offers all partners", () => {
+  const app = source("./app.js");
+  const reports = app.slice(app.indexOf("async function renderReportsScreen"), app.indexOf("async function renderSettingsOverview"));
+  assert.doesNotMatch(reports, /report-calendar|regulatoryTimelineMarkup/);
+  assert.match(reports, /id="report-partner"><option value="">Все<\/option>/);
 });
 
 test("partners page shows confirmed partners and lazy-loads details 4 through 6", () => {
