@@ -19,7 +19,7 @@ const AGREEMENT_KIND_LABELS = {
 const CHART_COLORS = [
   "#6d3df5",
   "#00c98d",
-  "#ff3f81",
+  "#3f70ff",
   "#00aef3",
   "#ffb000",
   "#ff6636",

@@ -244,7 +244,7 @@ button { touch-action: manipulation; }
 .bar-row { gap: 12px; margin: 8px 0; }
 .bar-row .name { color: var(--muted); }
 .bar-track { overflow: hidden; border-radius: 999px; background: #e2e8f1; box-shadow: inset 0 2px 4px rgba(30,55,83,.12); }
-.bar-fill { border-radius: 999px; background: linear-gradient(90deg, #6d3df5, #ff3f81); box-shadow: 0 0 12px rgba(135,61,221,.34); }
+.bar-fill { border-radius: 999px; background: linear-gradient(90deg, #6d3df5, #3f70ff); box-shadow: 0 0 12px rgba(77,84,232,.34); }
 .bar-row .bar-value { width: 130px; color: var(--text); }
 .chart-legend { gap: 16px; margin-bottom: 15px; }
 .chart-legend span { padding: 5px 9px; border: 1px solid #d5deea; border-radius: 999px; background: #fff; color: #3e4f63; font-weight: 700; box-shadow: 0 3px 9px rgba(40,63,88,.08); }
@@ -255,7 +255,7 @@ button { touch-action: manipulation; }
 .compare-bar { min-height: 21px; border-radius: 999px; box-shadow: 0 5px 12px rgba(30,59,91,.16); }
 .compare-bar.plan { background: linear-gradient(90deg, #5c2be8 0%, #7d4dff 48%, #1788ff 100%); }
 .compare-bar.fact { background: linear-gradient(90deg, #009f70 0%, #00cb8f 52%, #52e49e 100%); }
-.donut { position: relative; border: 8px solid rgba(255,255,255,.78); filter: saturate(1.18); box-shadow: 0 17px 34px rgba(59,53,116,.24), inset 0 0 18px rgba(255,255,255,.3); transform: rotate(-8deg); }
+.donut { position: relative; border: 0; filter: saturate(1.18); box-shadow: 0 17px 34px rgba(59,53,116,.24), inset 0 0 18px rgba(255,255,255,.3); transform: rotate(-8deg); }
 .donut::after { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: linear-gradient(140deg, rgba(255,255,255,.5), transparent 43%); pointer-events: none; }
 .donut-hole { position: relative; z-index: 1; width: 112px; height: 112px; border: 1px solid rgba(120,105,190,.15); background: radial-gradient(circle at 34% 28%, #fff 0%, #f7f3ff 58%, #e8f7ff 100%); box-shadow: 0 7px 18px rgba(49,43,98,.16); transform: rotate(8deg); }
 .donut-hole strong, .donut-legend b { color: var(--navy); }
@@ -309,10 +309,10 @@ table { background: #fff; font-size: 11px; }
 .oop-matrix td:not(:first-child), .oop-matrix th:not(:first-child) { text-align: right; }
 .oop-matrix thead th:nth-child(2) { border-top: 3px solid #6d3df5; color: #5630cb; background: #f0eaff; }
 .oop-matrix thead th:nth-child(3) { border-top: 3px solid #00c98d; color: #008d64; background: #e5fff5; }
-.oop-matrix thead th:nth-child(4) { border-top: 3px solid #ff3f81; color: #ca2862; background: #ffe8f1; }
+.oop-matrix thead th:nth-child(4) { border-top: 3px solid #3f70ff; color: #2751c7; background: #e8efff; }
 .oop-matrix tbody td:nth-child(2) { background: linear-gradient(135deg, #fff, #f1ecff); }
 .oop-matrix tbody td:nth-child(3) { background: linear-gradient(135deg, #fff, #e8fff6); }
-.oop-matrix tbody td:nth-child(4) { background: linear-gradient(135deg, #fff, #ffedf4); }
+.oop-matrix tbody td:nth-child(4) { background: linear-gradient(135deg, #fff, #edf2ff); }
 .oop-matrix tbody td b { font-size: 16px; }
 .oop-matrix .total-row { background: linear-gradient(90deg, #ece8ff, #e2f9ff); }
 .partner-action-strip { padding: 12px 14px; }
@@ -320,7 +320,7 @@ table { background: #fff; font-size: 11px; }
 .partner-action-flow .btn { margin: 0; }
 .partner-distribution { display: grid; grid-template-columns: minmax(180px, 1fr) 108px minmax(260px, 1.4fr); align-items: center; gap: 22px; }
 .partner-distribution h2 { margin: 4px 0 0; }
-.partner-distribution-chart { display: grid; width: 104px; height: 104px; place-items: center; border: 7px solid rgba(255,255,255,.8); border-radius: 50%; filter: saturate(1.2); box-shadow: 0 13px 28px rgba(73,49,154,.25); }
+.partner-distribution-chart { display: grid; width: 104px; height: 104px; place-items: center; border: 0; border-radius: 50%; filter: saturate(1.2); box-shadow: 0 13px 28px rgba(73,49,154,.25); }
 .partner-distribution-chart::before { content: ""; grid-area: 1 / 1; width: 60px; height: 60px; border-radius: 50%; background: #fff; }
 .partner-distribution-chart span { z-index: 1; grid-area: 1 / 1; color: var(--navy); font-size: 20px; font-weight: 700; }
 .partner-distribution-legend { display: grid; gap: 8px; }
