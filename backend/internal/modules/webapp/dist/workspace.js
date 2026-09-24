@@ -617,7 +617,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ${screen?.id === "schools" && available.length > 1 ? `<div class="tab-strip" role="tablist" aria-label="Виды школьного трека" style="grid-column:1/-1">${available.map((c) => `<button type="button" role="tab" class="btn ${c.code === state.categoryCode ? "" : "secondary"}" aria-selected="${c.code === state.categoryCode}" data-school-tab="${c.code}">${escapeHTML(SCHOOL_KIND_LABELS[c.code] || c.name)}</button>`).join("")}</div>` : ""}
     <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Режим</label>${canCreate ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : `<input value="${canPrepare ? "Редактирование по роли" : "Просмотр и согласование"}" readonly>`}</div></div>
-    <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Сотрудники и ОКЗ</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Потенциальные преподаватели</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const partnerSelect = root.querySelector("#workspace-partner");
@@ -857,10 +857,11 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   paint();
   const paging = el(`<div class="actions"><button class="btn secondary" id="entries-prev">Назад</button><span>Страница ${Math.floor((state.entryPageOffset || 0) / 200) + 1}</span><button class="btn secondary" id="entries-next">Далее</button></div>`);
   root.querySelector("#entries-table").after(paging);
-  if (screen?.id === "teachers" && canCreate) {
-    const addTeacher = el(`<div class="teacher-list-footer"><button type="button" class="btn" ${writable ? "" : "disabled"}>+ Добавить преподавателя</button></div>`);
+  const canManagePotentialTeachers = ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(state.me?.role);
+  if (screen?.id === "teachers" && canManagePotentialTeachers) {
+    const addTeacher = el('<div class="teacher-list-footer"><button type="button" class="btn">+ Добавить ИТ-специалиста в потенциальные преподаватели</button></div>');
     paging.after(addTeacher);
-    addTeacher.querySelector("button").onclick = () => openEntryModal(null);
+    addTeacher.querySelector("button").onclick = () => openStaffMembersDialog();
   }
   paging.querySelector("#entries-prev").disabled = !state.entryPageOffset;
   paging.querySelector("#entries-next").disabled = entries.nextOffset == null;
@@ -1409,7 +1410,7 @@ function partnerDistributionMarkup(partners = []) {
   const schoolPercent = compared ? Math.round((schools / compared) * 100) : 0;
   const universityPercent = compared ? 100 - schoolPercent : 0;
   const gradient = compared
-    ? `conic-gradient(#397ec4 0 ${universityPercent}%, #43a98b ${universityPercent}% 100%)`
+    ? `conic-gradient(#6d3df5 0 ${universityPercent}%, #00c98d ${universityPercent}% 100%)`
     : "conic-gradient(#dfe7ef 0 100%)";
   return `<div class="card partner-distribution"><div><span class="eyebrow">Структура партнёров</span><h2>Школы и вузы</h2></div><div class="partner-distribution-chart" role="img" aria-label="Вузы ${universityPercent} процентов, школы ${schoolPercent} процентов" style="background:${gradient}"><span>${compared}</span></div><div class="partner-distribution-legend"><div><i class="university"></i><span>Вузы</span><b>${universityPercent}% · ${universities}</b></div><div><i class="school"></i><span>Школы</span><b>${schoolPercent}% · ${schools}</b></div>${colleges ? `<div><i class="college"></i><span>СПО отдельно</span><b>${colleges}</b></div>` : ""}</div></div>`;
 }

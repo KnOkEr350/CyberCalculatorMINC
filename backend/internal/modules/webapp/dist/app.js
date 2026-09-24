@@ -17,15 +17,15 @@ const AGREEMENT_KIND_LABELS = {
   roiv: "С РОИВ",
 };
 const CHART_COLORS = [
-  "#397ec4",
-  "#43a98b",
-  "#6c75c9",
-  "#dda33f",
-  "#c86686",
-  "#71a15d",
-  "#5c9fd6",
-  "#8a69b4",
-  "#c97c4f",
+  "#6d3df5",
+  "#00c98d",
+  "#ff3f81",
+  "#00aef3",
+  "#ffb000",
+  "#ff6636",
+  "#15b8a6",
+  "#a83bea",
+  "#f2384f",
 ];
 
 const VALUE_LABELS = {
@@ -1242,10 +1242,11 @@ async function openStaffMembersDialog() {
   const canConfirm = ["super_admin", "holding_admin", "org_admin"].includes(role);
   const drawer = CyberCalcUI.openDrawer({
     id: "staff-members-drawer",
-    title: "Сотрудники-преподаватели",
+    title: "ИТ-специалисты — потенциальные преподаватели",
     mode: canManage ? "edit" : "view",
     wide: true,
     content: `
+    <p class="notice">Добавьте ИТ-специалиста в кадровый список кандидатов. Педагогическая нагрузка и часы назначаются отдельно после выбора специалиста.</p>
     ${canManage ? `<form id="staff-form"><input type="hidden" name="id"><div class="grid cols-3">
       <div class="field"><label>ФИО *</label><input name="fio" maxlength="200" required></div>
       <div class="field"><label>Должность *</label><input name="company_position" maxlength="200" required></div>
@@ -1254,7 +1255,7 @@ async function openStaffMembersDialog() {
       <div class="field"><label>ИТ-стаж за 5 лет, дней *</label><input name="it_experience_days" type="number" min="0" max="1827" required></div>
       <div class="field"><label>Статус</label><select name="record_status" ${canConfirm ? "" : "disabled"}><option value="unconfirmed_by_admin">Ожидает подтверждения</option><option value="confirmed">Подтверждён</option></select></div>
       <div class="field"><label>Документ о стаже</label><input name="experience_document_reference" maxlength="1000" placeholder="СТД-Р / трудовая книжка, номер и дата"></div>
-    </div><div class="flex"><button class="btn" type="submit">Сохранить профиль</button><button class="btn secondary" type="button" data-staff-reset>Новый профиль</button></div><p class="error" data-staff-error></p></form>` : ""}
+    </div><div class="flex"><button class="btn" type="submit">Добавить ИТ-специалиста</button><button class="btn secondary" type="button" data-staff-reset>Новый кандидат</button></div><p class="error" data-staff-error></p></form>` : ""}
     <div id="staff-list">Загрузка…</div>
   `,
   });
@@ -1270,7 +1271,7 @@ async function openStaffMembersDialog() {
   const paint = () => {
     backdrop.querySelector("#staff-list").innerHTML = items.length
       ? `<div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Должность</th><th>ОКЗ</th><th>Стаж</th><th>Статус</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.fio)}</b><br><small>${escapeHTML(item.company_department || "—")}</small></td><td>${escapeHTML(item.company_position)}</td><td><code>${escapeHTML(item.okz_code)}</code><br><small>${escapeHTML(item.okz_name)}</small></td><td>${item.it_experience_days} дн.</td><td><span class="status-badge ${item.eligible ? "active" : "inactive"}">${item.eligible ? "Подтверждён" : "Не подтверждён"}</span></td><td>${canManage ? `<button class="btn secondary" data-staff-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
-      : '<p class="muted">Сотрудники ещё не добавлены.</p>';
+      : '<p class="muted">Потенциальные преподаватели ещё не добавлены.</p>';
     backdrop.querySelectorAll("[data-staff-edit]").forEach((button) => button.onclick = () => {
       const item = items.find((value) => value.id === button.dataset.staffEdit);
       if (!item || !form) return;
@@ -1301,7 +1302,7 @@ async function openStaffMembersDialog() {
     errorBox.textContent = "";
     try {
       await api(id ? `/staff-members/${id}` : "/staff-members", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
-      showToast("Профиль сотрудника сохранён", "success");
+      showToast("ИТ-специалист добавлен в список потенциальных преподавателей", "success");
       reset();
       await reload();
     } catch (error) { errorBox.textContent = error.message; }
