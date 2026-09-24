@@ -790,7 +790,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ${reviewHint}
     ${workflowControls}
     ${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : ""}
-    ${workflow.history.length ? `<details><summary>История согласования (${workflow.history.length})</summary><ul>${workflow.history.map((item) => `<li>${new Date(item.changed_at).toLocaleString("ru-RU")} · ${escapeHTML(item.changed_by)}: ${escapeHTML(workflowLabels[item.from_status] || item.from_status)} → ${escapeHTML(workflowLabels[item.to_status] || item.to_status)} — ${escapeHTML(item.comment)}</li>`).join("")}</ul></details>` : ""}<p class="muted">Любое изменение соглашения, перечня или записи автоматически возвращает этот отчёт в черновик. Экспорт разрешён только после утверждения.</p></div>`;
+    ${workflow.history.length ? `<details><summary>История согласования (${workflow.history.length})</summary><ul>${workflow.history.map((item) => `<li>${new Date(item.changed_at).toLocaleString("ru-RU")} · ${escapeHTML(item.changed_by)}: ${escapeHTML(workflowLabels[item.from_status] || item.from_status)} → ${escapeHTML(workflowLabels[item.to_status] || item.to_status)} — ${escapeHTML(item.comment)}</li>`).join("")}</ul></details>` : ""}<p class="muted">Любое изменение соглашения, перечня или записи автоматически возвращает этот отчёт в черновик. На этапе MVP выгрузка доступна в любом статусе; статус согласования указывается в файле.</p></div>`;
   obligation.querySelectorAll("[data-required]").forEach((button) => button.onclick = () => { state.categoryCode = button.dataset.required; renderEntries(root); });
   const transition = async (nextStatus) => {
     const button = obligation.querySelector(`#wf-${nextStatus === "ready" ? "ready" : nextStatus === "verified" ? "verify" : nextStatus === "approved" ? "approve" : "draft"}`);
@@ -818,9 +818,6 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   obligation.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", syncReady));
   obligation.querySelector("#wf-auditor-reference")?.addEventListener("input", syncReady);
   syncReady();
-  if (workflow.status !== "approved") {
-    ["#export-link", "#export-all-link", "#export-word"].forEach((selector) => { const link = root.querySelector(selector); link.removeAttribute("href"); link.classList.add("disabled"); link.title = "Экспорт откроется после утверждения отчёта"; });
-  }
   const paint = () => {
     const list = entries;
     const hiddenOverviewFields = new Set([

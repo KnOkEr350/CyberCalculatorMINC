@@ -25,6 +25,7 @@ type ReportHandlers struct {
 
 type reportEntryRow struct {
 	Eligible              bool
+	ReportStatus          string
 	PartnerID             string
 	PartnerName           sql.NullString
 	CategoryCode          string
@@ -40,6 +41,22 @@ type reportEntryRow struct {
 	LegalEntityGroupID    string
 	LegalEntityGroup      string
 	InteractionAgreement  string
+}
+
+func reportEntryStatus(row reportEntryRow) string {
+	label := map[string]string{
+		"draft":    "Черновик",
+		"ready":    "Готово",
+		"verified": "Проверено",
+		"approved": "Утверждено",
+	}[row.ReportStatus]
+	if label == "" {
+		label = row.ReportStatus
+	}
+	if !row.Eligible {
+		return label + " (не допущено к зачёту)"
+	}
+	return label
 }
 
 // «Сформировать годовой план активностей» / «отчёт по реализованным
@@ -69,7 +86,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	}
 	categoryFilter := q.Get("category_code") // пусто = все категории (годовой план); можно ограничить, напр. internship
 
-	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.formula_amount_rub,e.cost_method,e.payload,eligibility.eligible,
+	query := `SELECT COALESCE(e.partner_id::text,''),p.name,e.category_code,e.audience,e.amount_rub,e.formula_amount_rub,e.cost_method,e.payload,eligibility.eligible,COALESCE(eligibility.report_status,'draft'),
 		COALESCE(a.number,''),COALESCE(a.agreement_kind,''),COALESCE(a.status,''),COALESCE(ra.name,''),COALESCE(g.id::text,''),COALESCE(g.name,''),
 		CASE WHEN g.id IS NULL THEN '' ELSE concat('от ',to_char(g.interaction_agreement_date,'DD.MM.YYYY'),' № ',g.interaction_agreement_number) END
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id
@@ -120,7 +137,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	var payloadBytes int
 	for rows.Next() {
 		var row reportEntryRow
-		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.FormulaAmountRub, &row.CostMethod, &row.Payload, &row.Eligible,
+		if err := rows.Scan(&row.PartnerID, &row.PartnerName, &row.CategoryCode, &row.Audience, &row.AmountRub, &row.FormulaAmountRub, &row.CostMethod, &row.Payload, &row.Eligible, &row.ReportStatus,
 			&row.AgreementNumber, &row.AgreementKind, &row.AgreementStatus, &row.RegionalAuthorityName, &row.LegalEntityGroupID, &row.LegalEntityGroup, &row.InteractionAgreement); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
@@ -141,15 +158,12 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		return
 	}
 	if len(data) == 0 {
-		middleware.WriteError(w, http.StatusConflict, "нет данных для утверждённого отчёта")
+		middleware.WriteError(w, http.StatusConflict, "нет данных для отчёта")
 		return
 	}
-	for _, row := range data {
-		if !row.Eligible {
-			middleware.WriteError(w, http.StatusConflict, "выгрузка заблокирована: сначала переведите каждый затронутый отчёт по соглашению из черновика в состояния «Готово», «Проверено» и «Утверждено»")
-			return
-		}
-	}
+	// На этапе MVP состояние согласования не блокирует формирование файла.
+	// Статус и допуск к зачёту всё равно выводятся в отчёте, поэтому черновые
+	// или проблемные данные нельзя принять за утверждённые.
 	categoryNames := map[string]string{}
 	categoryRows, err := h.DB.QueryContext(r.Context(), `SELECT code,name FROM activity_categories`)
 	if err != nil {
@@ -175,20 +189,21 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 
 	wb := xlsx.New()
 	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Группа лиц", "Договор о взаимодействии", "Категория активности", "Аудитория", "Метод стоимости", "Сумма по методике, руб.", "Сумма в отчёте, руб.", "Параметры", "Статус отчёта"}
-	status := func(d reportEntryRow) string {
-		return "Утверждено"
-	}
 
 	// Сводный лист для МЦ — все партнёры вместе.
 	var consolidated [][]interface{}
 	var total money.Amount
+	preliminary := false
 	for _, d := range data {
+		if d.ReportStatus != "approved" || !d.Eligible {
+			preliminary = true
+		}
 		partnerName := "—"
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
 		costMethod := map[string]string{"average": "Средние значения", "actual": "Фактические затраты"}[d.CostMethod]
-		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), reportEntryStatus(d)})
 		var sumErr error
 		total, sumErr = money.Add(total, d.AmountRub)
 		if sumErr != nil {
@@ -196,7 +211,11 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			return
 		}
 	}
-	consolidated = append(consolidated, []interface{}{"ИТОГО (только утверждённые данные)", "", "", "", "", "", "", "", "", "", total, "", "Утверждено"})
+	totalLabel, totalStatus := "ИТОГО (только утверждённые данные)", "Утверждено"
+	if preliminary {
+		totalLabel, totalStatus = "ИТОГО (включая предварительные данные)", "Предварительная выгрузка"
+	}
+	consolidated = append(consolidated, []interface{}{totalLabel, "", "", "", "", "", "", "", "", "", total, "", totalStatus})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	groupIDs := map[string]bool{}
 	for _, row := range data {
@@ -315,7 +334,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			order = append(order, key)
 		}
 		costMethod := map[string]string{"average": "Средние значения", "actual": "Фактические затраты"}[d.CostMethod]
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), status(d)})
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), reportEntryStatus(d)})
 	}
 	for _, key := range order {
 		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])

@@ -188,7 +188,9 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		h.exportPlanFactProjection(w, r, u, year, company, partner, agreement, riskFilter)
 		return
 	}
-	conds := []string{"e.it_company_id::text=$1", "e.report_year=$2", "eligibility.eligible"}
+	// На этапе MVP отчёт можно сформировать до завершения согласования.
+	// eligibility по-прежнему читается и влияет на риск, но не отсекает строки.
+	conds := []string{"e.it_company_id::text=$1", "e.report_year=$2"}
 	args := []interface{}{company, year}
 	if partner != "" {
 		args = append(args, partner)
@@ -237,7 +239,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		data = filterRegulatoryRowsByRisk(data, riskFilter)
 	}
 	if len(data) == 0 {
-		middleware.WriteError(w, 409, "нет утверждённых данных для формы")
+		middleware.WriteError(w, 409, "нет данных для формы")
 		return
 	}
 	outputFormat := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
@@ -315,9 +317,6 @@ func (h *ReportHandlers) exportPlanFactProjection(w http.ResponseWriter, r *http
 	}
 	filtered := make([]activityprojection.Contribution, 0, len(items))
 	for _, item := range items {
-		if !item.Eligibility.Passed {
-			continue
-		}
 		state := item.Risk.State
 		if state != "green" && state != "yellow" && state != "red" {
 			state = "red"
@@ -328,7 +327,7 @@ func (h *ReportHandlers) exportPlanFactProjection(w http.ResponseWriter, r *http
 		filtered = append(filtered, item)
 	}
 	if len(filtered) == 0 {
-		middleware.WriteError(w, 409, "нет утверждённых данных для формы")
+		middleware.WriteError(w, 409, "нет данных для формы")
 		return
 	}
 	groups, err := activityprojection.AggregateContributions(filtered, activityprojection.Grouping{Partner: true, Category: true})
@@ -434,9 +433,9 @@ func (h *ReportHandlers) exportAbsenceStatements(w http.ResponseWriter, r *http.
 		FROM agreements a JOIN agreement_partners ap ON ap.agreement_id=a.id JOIN partners p ON p.id=ap.partner_id
 		WHERE p.id::text=$1 AND a.it_company_id::text=$2 AND ($3='' OR a.id::text=$3)
 		AND NOT EXISTS(
-			SELECT 1 FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id
+			SELECT 1 FROM entries e
 			WHERE e.it_company_id::text=$2 AND e.partner_id=p.id AND e.agreement_id=a.id
-				AND e.report_year=$4 AND e.period_type='fact' AND eligibility.eligible
+				AND e.report_year=$4 AND e.period_type='fact'
 		)
 		ORDER BY a.signed_on,a.number,a.id`, partner, company, agreement, year)
 	if err != nil {

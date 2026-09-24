@@ -182,6 +182,8 @@ test("activity screens use one-line plan/fact switch without target controls", (
   assert.doesNotMatch(workspace, /class="activity-facts"/);
   assert.match(workspace, /\+ Добавить ИТ-специалиста в потенциальные преподаватели/);
   assert.match(workspace, /openStaffMembersDialog\(\)/);
+  assert.match(workspace, /На этапе MVP выгрузка доступна в любом статусе/);
+  assert.doesNotMatch(workspace, /Экспорт откроется после утверждения отчёта/);
 });
 
 test("UI-07 TOP-05 TOP-08 ADR-14: TOP-IT entry card shows the sub-registers, RID and the co-financing scale", () => {

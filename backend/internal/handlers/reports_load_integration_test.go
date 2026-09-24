@@ -29,6 +29,37 @@ const (
 	reportAllocBudget        = 1 << 30 // суммарные аллокации за один отчёт, байт
 )
 
+// MVP: согласование остаётся частью процесса, но не должно блокировать
+// рабочую выгрузку. Черновые данные обязаны попасть в файл с честной меткой.
+func TestDraftReportCanBeExported(t *testing.T) {
+	db, year := integrationDB(t)
+	ctx := context.Background()
+	f := testfixtures.New(db, t.Name())
+	tenant := newTenant(ctx, t, f)
+
+	if _, err := db.ExecContext(ctx, `INSERT INTO entries(category_code,partner_id,agreement_id,it_company_id,period_type,report_year,
+		audience,payload,amount_rub,formula_amount_rub,cost_method,created_by)
+		VALUES('teachers',$1,$2,$3,'fact',$4,'vuz','{}',100000,100000,'average',$5)`,
+		tenant.partner, tenant.agreement, tenant.company, year, tenant.admin); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := ReportHandlers{DB: db}
+	user := middleware.AuthUser{ID: tenant.admin, Role: models.RoleSuperAdmin, EntityType: models.EntityOrganization, ITCompanyID: &tenant.company}
+	recorder := httptest.NewRecorder()
+	handler.Export(recorder, httptest.NewRequest("GET", fmt.Sprintf("/api/reports/export?period_type=fact&report_year=%d", year), nil), user)
+	if recorder.Code != 200 {
+		t.Fatalf("черновой отчёт вернул %d: %s", recorder.Code, recorder.Body.String())
+	}
+	rows, err := xlsx.ReadFirst(recorder.Body.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) < 2 || len(rows[1]) < 13 || rows[1][12] != "Черновик (не допущено к зачёту)" {
+		t.Fatalf("черновой статус не отражён в выгрузке: %v", rows)
+	}
+}
+
 func TestReportGenerationOnAgreedVolume(t *testing.T) {
 	db, year := integrationDB(t)
 	ctx := context.Background()
