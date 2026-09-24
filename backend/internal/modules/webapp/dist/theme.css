@@ -155,7 +155,9 @@ button { touch-action: manipulation; }
 .mandatory-chip.missing { background: #fff0e8; color: #ae5b27; }
 .dashboard-risk-grid { grid-template-columns: minmax(280px, .68fr) minmax(0, 1.32fr); align-items: stretch; }
 .dashboard-risk-grid > .card { min-width: 0; }
+.dashboard-risk-grid > .card:first-child { display: flex; flex-direction: column; }
 .risk-buckets { display: grid; grid-template-columns: 1fr; gap: 11px; }
+.dashboard-risk-grid .risk-buckets { flex: 1; grid-template-rows: repeat(3, minmax(148px, 1fr)); }
 /* Карточка корзины — контейнер для размера суммы: сумма вида
    «999 999 999,99 ₽» с неразрывными пробелами не переносится и при
    фиксированных 26px вылезала за карточку шириной в 1/6 экрана. */
@@ -166,9 +168,10 @@ button { touch-action: manipulation; }
 .risk-buckets .green span { color: var(--good); }
 .risk-buckets .yellow span { color: var(--warn); }
 .risk-buckets .red span { color: var(--bad); }
-.risk-buckets > .green { color: #00ad79; border-color: #56dfad; background: linear-gradient(135deg, #fff 18%, #dffff0 100%); box-shadow: 0 10px 24px rgba(0,190,132,.17); }
-.risk-buckets > .yellow { color: #ec9700; border-color: #ffc64d; background: linear-gradient(135deg, #fff 18%, #fff0b9 100%); box-shadow: 0 10px 24px rgba(255,176,0,.18); }
-.risk-buckets > .red { color: #ec3154; border-color: #ff8aa0; background: linear-gradient(135deg, #fff 18%, #ffdce3 100%); box-shadow: 0 10px 24px rgba(242,56,79,.17); }
+.dashboard-risk-grid .risk-buckets > div { border-color: #3155d9; background: #3155d9; color: #fff; box-shadow: 0 10px 24px rgba(49,85,217,.22); }
+.dashboard-risk-grid .risk-buckets > div span,
+.dashboard-risk-grid .risk-buckets > div b,
+.dashboard-risk-grid .risk-buckets > div small { color: #fff; }
 .risk-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .risk-label i, .risk-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
 .risk-label.green i, .risk-dot.green { background: var(--good); }
