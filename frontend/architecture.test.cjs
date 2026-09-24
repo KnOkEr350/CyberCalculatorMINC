@@ -143,10 +143,11 @@ test("dashboard prioritizes operational indicators and moves analytics below", (
   assert.doesNotMatch(app, /partnerDistributionMarkup\(state\.partners\)/);
   assert.doesNotMatch(app, /id="dash-slice"/);
   for (const key of ["plan", "fact", "risk"]) assert.ok(app.includes(`sortHeader("${key}"`));
-  for (const [state, color] of [["green", "#12b76a"], ["yellow", "#ffc400"], ["red", "#f04466"]]) {
-    assert.match(theme, new RegExp(`dashboard-risk-grid \\.risk-buckets > \\.${state} \\{[^}]*linear-gradient\\([^}]*${color}`, "s"));
+  for (const [state, color] of [["green", "#15966a"], ["yellow", "#e5b000"], ["red", "#d94b5f"]]) {
+    assert.match(theme, new RegExp(`dashboard-risk-grid \\.risk-buckets > \\.${state} \\{[^}]*background: ${color}`, "s"));
   }
-  for (const className of ["readiness-bucket-icon", "readiness-bucket-metric", "readiness-bucket-meter"]) assert.match(app, new RegExp(className));
+  assert.match(app, /class="\$\{stateName\} readiness-bucket"/);
+  assert.doesNotMatch(app, /readiness-bucket-icon|readiness-bucket-meter|linear-gradient/);
 });
 
 test("reports screen has no calendar and offers all partners", () => {
