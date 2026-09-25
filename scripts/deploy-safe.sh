@@ -107,6 +107,13 @@ for _ in {1..30}; do
     # Exact mktemp-owned paths only; no application volumes are removed.
     rm -r "$deploy_state"
     echo "Verified revision $version"
+    # Ревизия жива, но это не значит, что модули включены: без флагов маршруты
+    # ТЗ 4.4 не подключаются, а интерфейс пуст. Проверка не откатывает выкладку
+    # (откат образов флаги не исправит), а сообщает о проблеме кодом возврата.
+    if ! HTTP_PORT="${HTTP_PORT:-8080}" APP_VERSION="${APP_VERSION:-dev}" bash "$(dirname "${BASH_SOURCE[0]}")/verify-deployment.sh"; then
+      echo "Revision is live, but feature modules are not verified: check BACKEND_FEATURE_FLAGS/FRONTEND_FEATURE_FLAGS in .env and recreate backend, worker and nginx." >&2
+      exit 4
+    fi
     exit 0
   fi
   sleep 2

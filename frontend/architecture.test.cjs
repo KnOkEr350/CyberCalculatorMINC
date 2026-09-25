@@ -306,3 +306,16 @@ test("UIR-01 UIR-02 UIR-04: console skin keeps the palette sampled from the Cybe
   assert.match(theme, /\.ui-drawer > header h2 \{[^}]*font-size: 24px/);
   assert.match(theme, /\.topbar \{ background: #fff;/);
 });
+
+test("panels rendered inside the entry card never nest a <form> (the browser drops it)", () => {
+  const app = source("./app.js");
+  const between = (from, to) => app.slice(app.indexOf(from), app.indexOf(to, app.indexOf(from)));
+  for (const [name, code] of [["составляющие программы", between("async function wireTopItems", "\n// ----")], ["юридическое сомнение", between("function renderLegalDisputeSection", "async function wireLegalDispute")], ["юридическое сомнение (форма)", between("async function wireLegalDispute", "\n// ----")]]) {
+    assert.ok(code.length > 200, name);
+    assert.doesNotMatch(code.replace(/^\s*\/\/.*$/gm, ""), /<form/, `${name}: вложенная форма внутри карточки записи не работает`);
+  }
+});
+
+test("legal entity groups are requested only for roles that may read them", () => {
+  assert.match(source("./app.js"), /state\.me\.it_company_id && \["super_admin", "holding_admin", "org_admin", "curator"\]\.includes\(state\.me\.role\)\) \{\n\s+try \{ state\.legalEntityGroups/);
+});

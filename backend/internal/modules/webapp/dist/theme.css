@@ -749,3 +749,25 @@ table th, .card h2, .dashboard-toolbar h2 { text-transform: none; letter-spacing
 .admin-nav button.active { background: #d1dded; border-left-color: #0466e5; }
 .container .page-heading h1, .container .eyebrow { display: none; }
 .card .grid > button.btn, .card .grid > .btn { align-self: end; }
+
+/* ==== Плоские данные: без неоновых градиентов и свечения, палитра референса ==== */
+.progress-fill, .bar-fill, .legend-plan, .compare-bar.plan { background: #216bc4; box-shadow: none; }
+.progress-fill.target, .legend-fact, .compare-bar.fact { background: #9ac02f; box-shadow: none; }
+.tabs.activity-period-tabs button.active { transform: none; box-shadow: none; }
+.tabs.activity-period-tabs button[data-p="plan"].active { border-color: #216bc4; background: #216bc4; }
+.tabs.activity-period-tabs button[data-p="fact"].active { border-color: #7a9a20; background: #9ac02f; color: #1e2a0a; }
+.activity-period-tabs { border-radius: 2px; box-shadow: none; }
+.activity-period-tabs button { border-radius: 2px; }
+.dashboard-kpi { background: #fff; box-shadow: none; border-radius: 0; border-color: #e8e9eb; }
+.donut { filter: none; box-shadow: none; transform: none; }
+.donut::after { content: none; }
+.donut-hole { border-color: #e8e9eb; background: #fff; }
+.partner-distribution-chart { filter: none; box-shadow: none; }
+.partner-distribution-legend i.university { background: #216bc4; box-shadow: none; }
+.partner-distribution-legend i.school { background: #9ac02f; box-shadow: none; }
+.oop-matrix thead th:nth-child(2), .oop-matrix thead th:nth-child(3), .oop-matrix thead th:nth-child(4) { border-top: 3px solid #216bc4; color: var(--text); background: #e8ecf5; }
+.oop-matrix tbody td:nth-child(2), .oop-matrix tbody td:nth-child(3), .oop-matrix tbody td:nth-child(4), .oop-matrix .total-row { background: #fff; }
+.oop-matrix .total-row { background: #e8ecf5; }
+.top-scale-bar i { background: #d74d57; box-shadow: none; }
+.top-scale.yellow .top-scale-bar i { background: #e0a92a; box-shadow: none; }
+.top-scale.green .top-scale-bar i { background: #9ac02f; box-shadow: none; }

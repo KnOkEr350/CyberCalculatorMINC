@@ -603,7 +603,18 @@ jobs:
       DB_RUNTIME_PASSWORD: ${{ secrets.PROD_DB_RUNTIME_PASSWORD }}
       ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.PROD_ADMIN_BOOTSTRAP_EMAIL }}
       ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.PROD_ADMIN_BOOTSTRAP_PASSWORD }}
-      APP_ENV: development
+      # production включают переменной PROD_APP_ENV, когда готовы HTTPS, ClamAV и
+      # уникальные пароли (см. «Validate deployment settings»): в production
+      # обязателен второй фактор, а режим все-флаги-сразу запрещён.
+      APP_ENV: ${{ vars.PROD_APP_ENV || 'development' }}
+      PUBLIC_URL: ${{ vars.PROD_PUBLIC_URL || '' }}
+      CLAMAV_ADDRESS: ${{ vars.PROD_CLAMAV_ADDRESS || '' }}
+      # Модули ТЗ 4.4 без флагов не подключаются и в интерфейсе не видны, поэтому
+      # деплой включает их явно. Список должен совпадать с реестром флагов
+      # (проверяется тестом backend/internal/platform/featureflags); PROD_*_FEATURE_FLAGS
+      # переопределяют его без правки кода.
+      BACKEND_FEATURE_FLAGS: ${{ vars.PROD_BACKEND_FEATURE_FLAGS || 'dashboard_v44,partners_v44,teachers,oop_rpd,internships,practice,top_it_ai,schools,ministry_decision,reporting_v44,settings_v44' }}
+      FRONTEND_FEATURE_FLAGS: ${{ vars.PROD_FRONTEND_FEATURE_FLAGS || 'dashboard_v44,partners_v44,teachers,oop_rpd,internships,practice,top_it_ai,schools,ministry_decision,reporting_v44,settings_v44' }}
       MFA_ENCRYPTION_KEY: ${{ secrets.PROD_MFA_ENCRYPTION_KEY }}
       # The application is reached through the VM floating IP. Set this
       # explicitly so a stale runner/service environment cannot restrict the
@@ -631,6 +642,11 @@ jobs:
           [[ -n "$ADMIN_BOOTSTRAP_EMAIL" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_EMAIL is not configured"; missing=1; }
           [[ -n "$ADMIN_BOOTSTRAP_PASSWORD" ]] || { echo "::error::GitHub production secret PROD_ADMIN_BOOTSTRAP_PASSWORD is not configured"; missing=1; }
           [[ -n "$MFA_ENCRYPTION_KEY" ]] || { echo "::error::GitHub production secret PROD_MFA_ENCRYPTION_KEY is not configured"; missing=1; }
+          if [[ "$APP_ENV" == "production" ]]; then
+            [[ "$PUBLIC_URL" == https://* ]] || { echo "::error::для production задайте переменную PROD_PUBLIC_URL=https://домен"; missing=1; }
+            [[ -n "$CLAMAV_ADDRESS" ]] || { echo "::error::для production задайте переменную PROD_CLAMAV_ADDRESS"; missing=1; }
+            [[ "$BACKEND_FEATURE_FLAGS" != "all" && "$FRONTEND_FEATURE_FLAGS" != "all" ]] || { echo "::error::в production флаг all запрещён: перечислите модули"; missing=1; }
+          fi
           [[ "$missing" == "0" ]]
           docker compose config --quiet
 

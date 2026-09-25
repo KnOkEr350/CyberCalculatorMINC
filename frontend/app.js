@@ -16,17 +16,7 @@ const AGREEMENT_KIND_LABELS = {
   education_organization: "С образовательной организацией",
   roiv: "С РОИВ",
 };
-const CHART_COLORS = [
-  "#6d3df5",
-  "#00c98d",
-  "#3f70ff",
-  "#00aef3",
-  "#ffb000",
-  "#ff6636",
-  "#15b8a6",
-  "#a83bea",
-  "#f2384f",
-];
+const CHART_COLORS = ["#216bc4", "#9ac02f", "#0466e5", "#00214e", "#7fa6d8", "#e0a92a", "#d74d57", "#b7c4d8"];
 
 const VALUE_LABELS = {
   vuz: "Вуз",
@@ -279,7 +269,7 @@ async function boot() {
     } catch (e) {
       state.partners = [];
     }
-    if (state.me.entity_type === "organization" && state.me.it_company_id) {
+    if (state.me.entity_type === "organization" && state.me.it_company_id && ["super_admin", "holding_admin", "org_admin", "curator"].includes(state.me.role)) {
       try { state.legalEntityGroups = ((await api("/legal-entity-groups")) || []).filter((group) => group.status !== "terminated"); }
       catch (_) { state.legalEntityGroups = []; }
     }
@@ -1917,34 +1907,37 @@ async function wireTopItems(root, entryId, canEdit) {
     }
   };
   if (canEdit) {
-    formBox.innerHTML = `<form id="top-item-form" class="top-item-form"><div class="field"><label>Что добавить</label><select name="kind">${Object.entries(TOP_KIND_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div>
+    // Карточка записи сама лежит внутри <form>: вложенная форма браузером отбрасывается,
+    // поэтому поля собираются в div и отправляются кнопкой.
+    formBox.innerHTML = `<div id="top-item-form" class="top-item-form"><div class="field"><label>Что добавить</label><select name="kind">${Object.entries(TOP_KIND_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div>
       <div class="field"><label>Название *</label><input name="title" maxlength="300" required></div><div id="top-item-fields" class="grid cols-2"></div>
-      <button type="submit" class="btn secondary">Добавить строку</button></form>`;
-    const form = formBox.querySelector("form");
+      <button type="button" class="btn secondary" id="top-item-add">Добавить строку</button></div>`;
+    const form = formBox.querySelector("#top-item-form");
+    const control = (name) => form.querySelector(`[name="${name}"]`);
     const fields = form.querySelector("#top-item-fields");
     const drawFields = () => {
-      fields.innerHTML = TOP_FIELDS[form.elements.kind.value]
+      fields.innerHTML = TOP_FIELDS[control("kind").value]
         .map((field) => `<div class="field"><label>${escapeHTML(field.label)}</label>${field.type === "select"
           ? `<select name="${field.key}">${Object.entries(field.options).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select>`
           : `<input name="${field.key}" type="${field.type === "money" ? "text" : field.type}" ${field.type === "money" ? 'inputmode="decimal"' : ""}>`}</div>`)
         .join("");
     };
-    form.elements.kind.onchange = drawFields;
+    control("kind").onchange = drawFields;
     drawFields();
-    form.onsubmit = async (event) => {
-      event.preventDefault();
-      const kind = form.elements.kind.value;
-      const body = { kind, title: form.elements.title.value.trim() };
+    form.querySelector("#top-item-add").onclick = async () => {
+      const kind = control("kind").value;
+      const body = { kind, title: control("title").value.trim() };
+      if (!body.title) { showToast("Укажите название"); return; }
       for (const field of TOP_FIELDS[kind]) {
-        const raw = String(form.elements[field.key].value || "").trim().replace(",", ".");
+        const raw = String(control(field.key).value || "").trim().replace(",", ".");
         if (raw === "") continue;
         body[field.key] = field.type === "number" ? Number(raw) : raw;
       }
-      const submit = form.querySelector("button[type=submit]");
+      const submit = form.querySelector("#top-item-add");
       submit.disabled = true;
       try {
         await api(`/entries/${encodeURIComponent(entryId)}/top-items`, { method: "POST", body: JSON.stringify(body) });
-        form.reset();
+        control("title").value = "";
         drawFields();
         await refresh();
         showToast("Строка добавлена", "success");
@@ -1982,15 +1975,15 @@ async function wireLegalDispute(root, entryId) {
         ? `<ol class="task-history">${items.map((item) => `<li>${item.active ? '<span class="status-badge inactive">действует</span>' : '<span class="status-badge active">снято</span>'} ${escapeHTML(item.reason)}${item.lifted_reason ? ` — снято: ${escapeHTML(item.lifted_reason)}` : ""} <span class="muted">${escapeHTML(String(item.raised_at || "").slice(0, 10).split("-").reverse().join("."))}</span></li>`).join("")}</ol>`
         : '<p class="muted">Сомнений не заявлено.</p>';
       formBox.innerHTML = canDispute
-        ? `<form class="top-item-form"><div class="field"><label>Причина *</label><input name="reason" maxlength="2000" required></div><button class="btn secondary" type="submit">${active ? "Снять сомнение" : "Поставить под сомнение"}</button></form>`
+        ? `<div class="top-item-form" id="legal-dispute-form"><div class="field"><label>Причина *</label><input name="reason" maxlength="2000"></div><button class="btn secondary" type="button" id="legal-dispute-submit">${active ? "Снять сомнение" : "Поставить под сомнение"}</button></div>`
         : "";
-      const form = formBox.querySelector("form");
-      if (form) form.onsubmit = async (event) => {
-        event.preventDefault();
-        const submit = form.querySelector("button");
+      const submit = formBox.querySelector("#legal-dispute-submit");
+      if (submit) submit.onclick = async () => {
+        const reason = formBox.querySelector("[name=reason]").value.trim();
+        if (!reason) { showToast("Укажите причину"); return; }
         submit.disabled = true;
         try {
-          await api(`/entries/${encodeURIComponent(entryId)}/legal-disputes`, { method: "POST", body: JSON.stringify({ action: active ? "lift" : "raise", reason: form.elements.reason.value.trim() }) });
+          await api(`/entries/${encodeURIComponent(entryId)}/legal-disputes`, { method: "POST", body: JSON.stringify({ action: active ? "lift" : "raise", reason }) });
           showToast(active ? "Сомнение снято" : "Запись поставлена под сомнение", "success");
           await refresh();
         } catch (error) {

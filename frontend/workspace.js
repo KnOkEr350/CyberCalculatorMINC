@@ -1407,7 +1407,7 @@ function partnerDistributionMarkup(partners = []) {
   const schoolPercent = compared ? Math.round((schools / compared) * 100) : 0;
   const universityPercent = compared ? 100 - schoolPercent : 0;
   const gradient = compared
-    ? `conic-gradient(#6d3df5 0 ${universityPercent}%, #00c98d ${universityPercent}% 100%)`
+    ? `conic-gradient(#216bc4 0 ${universityPercent}%, #9ac02f ${universityPercent}% 100%)`
     : "conic-gradient(#dfe7ef 0 100%)";
   return `<div class="card partner-distribution"><div><span class="eyebrow">Структура партнёров</span><h2>Школы и вузы</h2></div><div class="partner-distribution-chart" role="img" aria-label="Вузы ${universityPercent} процентов, школы ${schoolPercent} процентов" style="background:${gradient}"><span>${compared}</span></div><div class="partner-distribution-legend"><div><i class="university"></i><span>Вузы</span><b>${universityPercent}% · ${universities}</b></div><div><i class="school"></i><span>Школы</span><b>${schoolPercent}% · ${schools}</b></div>${colleges ? `<div><i class="college"></i><span>СПО отдельно</span><b>${colleges}</b></div>` : ""}</div></div>`;
 }

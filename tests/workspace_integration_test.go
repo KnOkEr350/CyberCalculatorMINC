@@ -453,6 +453,20 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	internship["mentor_id"] = "wrong"
 	create(companyClient, p1, agreement1, "internship", "fact", internship, 400)
+	expectPreliminaryExport := func(client *http.Client, marker string) {
+		t.Helper()
+		rows, err := xlsx.ReadFirst(call(client, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 200))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := ""
+		for _, row := range rows {
+			text += strings.Join(row, " ") + "\n"
+		}
+		if !strings.Contains(text, marker) || !strings.Contains(text, "включая предварительные данные") {
+			t.Fatalf("выгрузка до утверждения обязана быть помечена предварительной (%q):\n%s", marker, text)
+		}
+	}
 	statusPath := "/obligations?partner_id=" + p1 + "&agreement_id=" + agreement1 + "&report_year=2026&period_type=plan"
 	status := object(call(partnerClient, "GET", statusPath, nil, 200))
 	if !status["required"].(bool) || !status["teachers"].(bool) || status["ood_rpd"].(bool) {
@@ -563,7 +577,8 @@ func TestWorkspaceIntegration(t *testing.T) {
 	transitionPath := "/report-workflow/transition?agreement_id=" + agreement1 + "&report_year=2026&period_type=fact"
 	confirmations := map[string]interface{}{"status": "ready", "scope_confirmed": true, "conditions_confirmed": true, "evidence_confirmed": true, "counterparty_confirmed": true, "comment": "Комплект проверен"}
 	call(companyClient, "POST", transitionPath, confirmations, 422)
-	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
+	// MVP: отчёт до утверждения выгружается, но честно помечен предварительным.
+	expectPreliminaryExport(partnerClient, "не допущено к зачёту")
 	create(companyClient, p1, agreement1, "ood_rpd", "fact", map[string]interface{}{
 		"org_name": p1, "doc_type": "rpd", "level": "vo", "activity_type": "expertise", "program_name": "Безопасность",
 		"expert_full_name": "Эксперт Эксперт", "project_document_reference": "Проект-1",
@@ -599,7 +614,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	}
 	internship["mentor_id"] = mentor
 	call(companyClient, "PUT", "/entries/"+traineeID, map[string]interface{}{"payload": internship, "comment": "Уточнение данных после утверждения"}, 200)
-	call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 409)
+	expectPreliminaryExport(partnerClient, "не допущено к зачёту")
 	dash = object(call(partnerClient, "GET", "/dashboard?report_year=2026", nil, 200))
 	if money(dash["eligible_fact_total_rub"]) != "0.00" {
 		t.Fatal("changed approved report was not returned to draft")
