@@ -1426,7 +1426,7 @@ async function renderPartnerDirectory(root, embedded = false) {
   <div class="card"><div class="flex between"><div><span class="eyebrow">Отдельный перечень</span><h2>Подтверждённые партнёры</h2></div><span class="count-badge" id="confirmed-partner-count"></span></div><div id="confirmed-partner-list"></div></div>
   ${canSuggest || canApprove ? '<div id="directory-proposals" class="card proposal-center" hidden></div>' : ""}
   <div class="card"><div class="flex between"><h2>Наши партнёры</h2><span class="count-badge" id="partner-count"></span></div><div class="grid cols-3"><div class="field"><label>Вид учебного заведения</label><select id="partner-kind-filter"><option value="">Все виды</option>${Object.entries(AUDIENCE_LABELS).map(([code, label]) => `<option value="${code}">${escapeHTML(label)}</option>`).join("")}</select></div><div class="field"><label>Название или ИНН</label><input id="partner-name-filter" placeholder="Начните вводить название или ИНН"></div><button class="btn secondary" id="partner-filter-reset">Сбросить</button></div><div id="partner-list"></div></div>
-  <div hidden aria-hidden="true"><div id="directory-stats"></div><div><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
+  <div class="card" id="directory-search-card"><div class="flex between"><div><span class="eyebrow">Справочник</span><h2>Поиск по справочнику учебных заведений</h2></div></div><p class="muted">Здесь видны все добавленные записи, в том числе ещё не подтверждённые.</p><div id="directory-stats" hidden></div><div><div class="grid cols-3"><div class="field"><label>Тип ОО</label><select id="d-kind">${Object.entries(
     AUDIENCE_LABELS,
   )
     .map(
@@ -1435,7 +1435,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     )
     .join(
       "",
-    )}</select></div><div class="field"><label>Поиск</label><input id="d-search"></div><button id="d-find">Найти</button></div><div id="d-results"></div>${canApprove ? '<button id="d-import">Импорт</button>' : ""}</div><button id="roiv-add"></button><div id="roiv-list"></div></div>${isStaffUser() ? '<div id="partner-create" hidden></div>' : ""}`;
+    )}</select></div><div class="field"><label>Поиск</label><input id="d-search" placeholder="Название, регион, ИНН, ОГРН"></div><button class="btn" id="d-find">Найти</button></div><div id="d-results"></div>${canApprove ? '<button class="btn secondary" id="d-import">Импорт</button>' : ""}</div></div><div hidden aria-hidden="true"><button id="roiv-add"></button><div id="roiv-list"></div></div>${isStaffUser() ? '<div id="partner-create" hidden></div>' : ""}`;
   let generation = 0;
   const reviewFilter = el('<label class="muted"><input type="checkbox" id="d-review-all"> Показать также вузы без подтверждённого направления — для проверки</label>');
   root.querySelector("#d-results").before(reviewFilter);
@@ -1474,6 +1474,7 @@ async function renderPartnerDirectory(root, embedded = false) {
           (b.onclick = () => {
             const item = items.find((i) => i.id === b.dataset.directory);
             const form = root.querySelector("#partner-create");
+            form.hidden = false;
             form.dataset.directoryId = item.id;
             form.querySelector("#p-selected").innerHTML =
               `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ` +
@@ -1493,6 +1494,8 @@ async function renderPartnerDirectory(root, embedded = false) {
     }
   };
   root.querySelector("#d-find").onclick = search;
+  root.querySelector("#d-review-all").checked = canApprove || canSuggest;
+  search();
   root.querySelector("#directory-add")?.addEventListener("click", () =>
     openDirectoryCreate(async () => {
       await renderPartnerDirectory(root, embedded);
