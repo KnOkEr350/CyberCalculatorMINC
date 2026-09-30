@@ -1588,7 +1588,7 @@ async function renderPartnerDirectory(root, embedded = false) {
       : [];
     const [partners, ...directoryGroups] = await Promise.all([api("/partners"), ...directoryRequests]);
     state.partners = partners;
-    confirmedDirectory = directoryGroups.flat().filter((item) => item.verification_status === "verified");
+    confirmedDirectory = directoryGroups.flat().filter((item) => item.selectable);
     paintPartners();
   };
   const paintPartners = () => {
@@ -1602,7 +1602,7 @@ async function renderPartnerDirectory(root, embedded = false) {
     const confirmed = confirmedDirectory.length ? confirmedDirectory : state.partners.filter((partner) => partner.verification_status === "verified");
     root.querySelector("#confirmed-partner-count").textContent = String(confirmed.length);
     root.querySelector("#confirmed-partner-list").innerHTML = confirmed.length
-      ? `<div class="confirmed-partner-list">${confirmed.map((partner) => { const added = state.partners.some((item) => item.inn && item.inn === partner.inn); return `<div class="confirmed-partner"><b>${escapeHTML(partner.name)}</b><span>${escapeHTML(AUDIENCE_LABELS[partner.partner_kind] || partner.partner_kind)} · ИНН ${escapeHTML(partner.inn || "—")}</span>${isStaffUser() ? `<button class="btn secondary" data-confirmed-partner="${partner.id}" ${added || partner.selectable === false ? "disabled" : ""}>${added ? "Уже в наших партнёрах" : partner.selectable === false ? "Не входит в перечень № 27 — недоступно для соглашения" : "Добавить в наши партнёры"}</button>` : ""}</div>`; }).join("")}</div>`
+      ? `<div class="confirmed-partner-list">${confirmed.map((partner) => { const added = state.partners.some((item) => item.inn && item.inn === partner.inn); return `<div class="confirmed-partner"><b>${escapeHTML(partner.name)}</b><span>${escapeHTML(AUDIENCE_LABELS[partner.partner_kind] || partner.partner_kind)} · ИНН ${escapeHTML(partner.inn || "—")}</span>${isStaffUser() ? `<button class="btn secondary" data-confirmed-partner="${partner.id}" ${added ? "disabled" : ""}>${added ? "Уже в наших партнёрах" : "Добавить в наши партнёры"}</button>` : ""}</div>`; }).join("")}</div>`
       : '<p class="muted">Подтверждённых партнёров пока нет.</p>';
     root.querySelector("#partner-count").textContent = `Показано: ${partners.length} из ${state.partners.length}`;
     root.querySelector("#partner-list").innerHTML = partners.length
