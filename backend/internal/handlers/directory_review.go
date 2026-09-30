@@ -303,7 +303,10 @@ func (h *PartnerHandlers) CreateDirectory(w http.ResponseWriter, r *http.Request
 	if req.Confirm {
 		status, verifiedBy = "verified", u.ID
 	}
-	if canProposeEducationDirectory(u) {
+	moderator := canProposeEducationDirectory(u)
+	// An administrator's unconfirmed record joins the "needs decision" queue too,
+	// otherwise it would be saved but not listed anywhere.
+	if moderator || !req.Confirm {
 		proposedBy = u.ID
 	}
 	codes := []string{}
@@ -311,7 +314,7 @@ func (h *PartnerHandlers) CreateDirectory(w http.ResponseWriter, r *http.Request
 		codes = *req.ProgramCodes
 	}
 	sourceLabel := "Добавлено администратором"
-	if proposedBy != nil {
+	if moderator {
 		sourceLabel = "Предложено модератором"
 	}
 	if req.SourceURL == ministryEducationDirectoryURL {
@@ -352,7 +355,7 @@ func (h *PartnerHandlers) CreateDirectory(w http.ResponseWriter, r *http.Request
 		return
 	}
 	action, comment := "directory_create", "Учебное заведение добавлено администратором"
-	if proposedBy != nil {
+	if moderator {
 		action, comment = "directory_propose", "Модератор предложил добавить учебное заведение: "+req.ProposalComment
 	}
 	if err = logAudit(r.Context(), tx, "education_directory", id, action, u.ID, comment, nil, map[string]interface{}{
