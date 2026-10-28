@@ -1230,7 +1230,7 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
   return { payload, valid: !firstInvalid };
 }
 
-async function openStaffMembersDialog() {
+async function openStaffMembersDialog(onChange) {
   const role = state.me?.role;
   const canManage = ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(role);
   const canConfirm = ["super_admin", "holding_admin", "org_admin"].includes(role);
@@ -1278,6 +1278,9 @@ async function openStaffMembersDialog() {
   try {
     const [, okz] = await Promise.all([reload(), canManage ? api("/okz?level=4&limit=100") : Promise.resolve({ items: [] })]);
     if (form) backdrop.querySelector("#staff-okz").innerHTML = okz.items.map((item) => `<option value="${escapeHTML(item.code)}">${escapeHTML(item.name)}</option>`).join("");
+    if (form && !okz.items.length) {
+      form.before(el(`<p class="notice" data-okz-empty>Справочник ОКЗ пуст, поэтому сотрудника добавить нельзя: код ОКЗ проверяется по справочнику. ${role === "super_admin" ? "Загрузите CSV в разделе «Настройки → Классификатор ОКЗ»." : "Попросите главного администратора загрузить справочник ОКЗ (Настройки → Классификатор ОКЗ)."}</p>`));
+    }
   } catch (error) {
     backdrop.querySelector("#staff-list").innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
   }
@@ -1299,6 +1302,7 @@ async function openStaffMembersDialog() {
       showToast("ИТ-специалист добавлен в список потенциальных преподавателей", "success");
       reset();
       await reload();
+      await onChange?.();
     } catch (error) { errorBox.textContent = error.message; }
     finally { submit.disabled = false; }
   };
@@ -1621,6 +1625,17 @@ async function openEntryModal(entry, readOnly = false) {
       select.addEventListener("change", syncStaff);
       row.appendChild(hint);
       queueMicrotask(syncStaff);
+      if (!readOnly && ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(state.me?.role)) {
+        const addStaff = el('<button type="button" class="btn secondary">+ ИТ-специалист</button>');
+        addStaff.onclick = () => openStaffMembersDialog(async () => {
+          state.staffMembers = await api("/staff-members");
+          const keep = select.value;
+          select.innerHTML = '<option value="">—</option>' + state.staffMembers.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(`${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}`)}</option>`).join("");
+          select.value = state.staffMembers.some((m) => m.id === keep) ? keep : state.staffMembers[state.staffMembers.length - 1]?.id || "";
+          syncStaff();
+        });
+        row.appendChild(addStaff);
+      }
     }
   });
 
