@@ -44,6 +44,16 @@ func (h *EntryHandlers) validateMentor(r *http.Request, category, periodType, pa
 	if student == "" || start == "" || end == "" {
 		return nil // the category validator returns the field-specific message
 	}
+	// Даты проверяются здесь, до запроса: иначе PostgreSQL отвечает общей
+	// ошибкой приведения типа, и пользователь не понимает, что исправить.
+	startDate, startErr := time.Parse("2006-01-02", start)
+	endDate, endErr := time.Parse("2006-01-02", end)
+	if startErr != nil || endErr != nil {
+		return fmt.Errorf("даты назначения наставника укажите в формате ГГГГ-ММ-ДД и проверьте год")
+	}
+	if endDate.Before(startDate) {
+		return fmt.Errorf("дата окончания назначения наставника не может быть раньше даты начала")
+	}
 	var overlap bool
 	if err := h.DB.QueryRowContext(r.Context(), `SELECT EXISTS(
 		SELECT 1 FROM entries

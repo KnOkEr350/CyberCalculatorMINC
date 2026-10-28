@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"cybercalc/internal/testfixtures"
@@ -47,6 +48,18 @@ func TestMentorAssignmentAllowedInPlanAndFactButNotTwiceInOne(t *testing.T) {
 	for _, period := range []string{"plan", "fact"} {
 		if err := handlers.validateMentor(request, "internship", period, tenant.partner, "", payload()); err == nil {
 			t.Fatalf("пересечение внутри среза %s должно отклоняться", period)
+		}
+	}
+	for name, dates := range map[string][2]string{
+		"окончание раньше начала": {"2026-06-01", "2026-05-01"},
+		"опечатка в годе":         {"202026-05-01", "2026-05-31"},
+		"не ISO-формат":           {"01.05.2026", "31.05.2026"},
+	} {
+		bad := payload()
+		bad["mentor_assignment_start"], bad["mentor_assignment_end"] = dates[0], dates[1]
+		err := handlers.validateMentor(request, "internship", "plan", tenant.partner, "", bad)
+		if err == nil || strings.Contains(err.Error(), "не удалось проверить") {
+			t.Fatalf("%s: ожидалось понятное сообщение о датах, получено %v", name, err)
 		}
 	}
 	other := payload()
