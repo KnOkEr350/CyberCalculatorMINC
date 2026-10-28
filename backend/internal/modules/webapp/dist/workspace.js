@@ -1334,7 +1334,7 @@ async function openDirectoryCreate(onSaved = async () => {}) {
       await api("/directory", { method: "POST", body: JSON.stringify(payload) });
       modal.remove();
       await onSaved();
-      showToast(admin ? (payload.confirm ? "Учебное заведение добавлено и подтверждено" : "Учебное заведение добавлено для проверки") : "Предложение отправлено администратору", "success");
+      showToast(admin ? (payload.confirm ? "Учебное заведение добавлено и подтверждено" : "Учебное заведение добавлено для проверки — найдите его в «Требуют решения»") : "Предложение отправлено администратору", "success");
     } catch (error) {
       form.querySelector(".error").textContent = error.message;
       buttons.forEach((button) => (button.disabled = false));

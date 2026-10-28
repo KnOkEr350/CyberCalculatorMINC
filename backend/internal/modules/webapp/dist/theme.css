@@ -52,11 +52,12 @@ button { touch-action: manipulation; }
 .brand-lockup { display: inline-flex; align-items: center; gap: 10px; min-width: 0; color: var(--navy); }
 .brand-emblem { display: grid; place-items: center; width: 29px; height: 32px; flex: 0 0 auto; }
 .brand-emblem svg { width: 29px; height: 29px; }
-.brand-shield { fill: #f2b01e; }
-.brand-shine { fill: #ffd766; opacity: .55; }
-.brand-rim { fill: none; stroke: #fff; stroke-opacity: .55; stroke-width: .9; }
+.brand-shield { fill: url(#brand-grad); }
+.brand-rim { fill: none; stroke: #fff; stroke-opacity: .6; stroke-width: .9; }
 .brand-cut { fill: #fff; }
-.brand-core { fill: #c97d08; }
+.brand-screen, .brand-keys { fill: #00214e; }
+.brand-cursor { fill: none; stroke: #19c3ff; stroke-width: .9; }
+.brand-core { fill: #19c3ff; }
 .brand-copy { display: flex; min-width: 0; flex-direction: column; line-height: 1; }
 .brand-copy strong { overflow: hidden; color: inherit; font-size: 14px; line-height: 1.05; font-weight: 780; letter-spacing: .065em; text-overflow: ellipsis; white-space: nowrap; }
 .brand-lockup.inverse { color: #fff; }
