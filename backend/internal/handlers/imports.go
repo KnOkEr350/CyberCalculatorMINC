@@ -273,7 +273,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 				}
 				row.Payload["mentor_id"] = id
 			}
-			if err := h.validateMentor(r, category, partner, "", row.Payload); err != nil {
+			if err := h.validateMentor(r, category, period, partner, "", row.Payload); err != nil {
 				return err
 			}
 			if err := calculators.ValidatePayload(calc, row.Payload); err != nil {

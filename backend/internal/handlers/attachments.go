@@ -164,6 +164,9 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 				return
 			}
 			staged[len(staged)-1].scanStatus = "quarantined"
+		case filestore.VerdictSkipped:
+			// Сканер не настроен: честно помечаем файл непроверенным, а не чистым.
+			staged[len(staged)-1].scanStatus = "unscanned"
 		default:
 			staged[len(staged)-1].scanStatus = "clean"
 		}
@@ -231,7 +234,7 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	out := make([]map[string]interface{}, 0, len(staged))
 	for _, f := range staged {
 		var id string
-		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at,document_type,content_sha256,scan_status,scan_signature,scanned_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),now()) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires, documentType, f.contentSHA256, f.scanStatus, f.scanSignature).Scan(&id) != nil {
+		if tx.QueryRowContext(r.Context(), `INSERT INTO attachments(entry_id,file_name,storage_path,content_type,size_bytes,uploaded_by,retention_expires_at,document_type,content_sha256,scan_status,scan_signature,scanned_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),CASE WHEN $10='unscanned' THEN NULL ELSE now() END) RETURNING id`, entryID, f.name, f.path, "application/octet-stream", f.size, u.ID, expires, documentType, f.contentSHA256, f.scanStatus, f.scanSignature).Scan(&id) != nil {
 			middleware.WriteError(w, 500, "ошибка метаданных")
 			return
 		}

@@ -180,3 +180,25 @@ func TestAntivirusPipelineStates(t *testing.T) {
 		}
 	})
 }
+
+// Без настроенного сканера файл не выдаётся за проверенный.
+func TestAttachmentWithoutScannerIsMarkedUnscanned(t *testing.T) {
+	db, year := integrationDB(t)
+	ctx := context.Background()
+	f := testfixtures.New(db, t.Name())
+	tenant := newTenant(ctx, t, f)
+	user := middleware.AuthUser{ID: tenant.admin, Role: models.RoleSuperAdmin,
+		EntityType: models.EntityOrganization, ITCompanyID: &tenant.company}
+	var entry string
+	if err := db.QueryRowContext(ctx, `INSERT INTO entries(category_code,partner_id,agreement_id,it_company_id,period_type,report_year,
+		audience,payload,amount_rub,formula_amount_rub,cost_method,created_by)
+		VALUES('internship',$1,$2,$3,'fact',$4,'vuz','{}',100000,100000,'average',$5) RETURNING id::text`,
+		tenant.partner, tenant.agreement, tenant.company, year, tenant.admin).Scan(&entry); err != nil {
+		t.Fatal(err)
+	}
+	handlers := AttachmentHandlers{DB: db, UploadDir: t.TempDir()}
+	response := uploadFile(t, handlers, user, entry, "doc.pdf", append([]byte("%PDF-1.4\n"), []byte("документ")...))
+	if response.Code != 201 || !strings.Contains(response.Body.String(), `"scan_status":"unscanned"`) {
+		t.Fatalf("без сканера ожидался unscanned: %d %s", response.Code, response.Body.String())
+	}
+}

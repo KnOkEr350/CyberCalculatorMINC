@@ -766,7 +766,7 @@ table th, .card h2, .dashboard-toolbar h2 { text-transform: none; letter-spacing
 .partner-distribution-chart { filter: none; box-shadow: none; }
 .partner-distribution-legend i.university { background: #216bc4; box-shadow: none; }
 .partner-distribution-legend i.school { background: #9ac02f; box-shadow: none; }
-.oop-matrix thead th:nth-child(2), .oop-matrix thead th:nth-child(3), .oop-matrix thead th:nth-child(4) { border-top: 3px solid #216bc4; color: var(--text); background: #e8ecf5; }
+.oop-matrix thead th, .oop-matrix thead th:nth-child(2), .oop-matrix thead th:nth-child(3), .oop-matrix thead th:nth-child(4) { border-top: 3px solid #216bc4; color: var(--text); background: #e8ecf5; }
 .oop-matrix tbody td:nth-child(2), .oop-matrix tbody td:nth-child(3), .oop-matrix tbody td:nth-child(4), .oop-matrix .total-row { background: #fff; }
 .oop-matrix .total-row { background: #e8ecf5; }
 .top-scale-bar i { background: #d74d57; box-shadow: none; }

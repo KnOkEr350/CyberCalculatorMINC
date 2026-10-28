@@ -12,7 +12,7 @@ import (
 	"github.com/lib/pq"
 )
 
-func (h *EntryHandlers) validateMentor(r *http.Request, category, partner, excludeEntryID string, payload map[string]interface{}) error {
+func (h *EntryHandlers) validateMentor(r *http.Request, category, periodType, partner, excludeEntryID string, payload map[string]interface{}) error {
 	if category != "internship" && category != "employment_practice" {
 		return nil
 	}
@@ -49,8 +49,9 @@ func (h *EntryHandlers) validateMentor(r *http.Request, category, partner, exclu
 		SELECT 1 FROM entries
 		WHERE mentor_id::text=$1 AND lower(assigned_student_name)=lower($2)
 		  AND daterange(mentor_assignment_start,mentor_assignment_end,'[]') && daterange($3::date,$4::date,'[]')
+		  AND period_type=$6
 		  AND ($5='' OR id::text<>$5)
-	)`, id, student, start, end, excludeEntryID).Scan(&overlap); err != nil {
+	)`, id, student, start, end, excludeEntryID, periodType).Scan(&overlap); err != nil {
 		return fmt.Errorf("не удалось проверить период назначения наставника")
 	}
 	if overlap {

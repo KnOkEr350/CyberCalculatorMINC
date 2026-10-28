@@ -206,7 +206,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.validateMentor(r, req.CategoryCode, partnerID, "", req.Payload); err != nil {
+	if err := h.validateMentor(r, req.CategoryCode, req.PeriodType, partnerID, "", req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
@@ -618,7 +618,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.validateMentor(r, categoryCode, partnerID, entryID, req.Payload); err != nil {
+	if err := h.validateMentor(r, categoryCode, periodType, partnerID, entryID, req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
