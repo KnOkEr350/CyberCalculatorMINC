@@ -168,6 +168,7 @@ async function api(path, opts = {}, pageCount = 0) {
   if (!res.ok) {
     throw new Error((data && data.error) || `Ошибка ${res.status}`);
   }
+  if (path === "/auth/logout") clearEntryDrafts();
   if (Array.isArray(data) && res.headers.has("X-Next-Offset")) data.nextOffset = Number(res.headers.get("X-Next-Offset"));
   if (Array.isArray(data) && data.nextOffset != null && !["/entries", "/it-companies"].includes(path.split("?")[0])) {
     if (pageCount >= 19) throw new Error("Список превышает 10000 элементов. Сузьте выборку.");
@@ -1369,6 +1370,64 @@ async function openTeachingPayoutsDialog() {
   };
 }
 
+// Черновик окна записи: введённое сохраняется в браузере при каждом изменении,
+// чтобы случайное закрытие (клик мимо окна, Esc, крестик) не стоило данных.
+// Явная «Отмена» и успешное сохранение черновик удаляют.
+const ENTRY_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function entryDraftStorage() {
+  try {
+    return globalThis.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function readEntryDraft(key, base) {
+  const storage = entryDraftStorage();
+  if (!storage) return null;
+  try {
+    const draft = JSON.parse(storage.getItem(key) || "null");
+    if (!draft || typeof draft.fields !== "object") return null;
+    if (Date.now() - Number(draft.saved_at || 0) > ENTRY_DRAFT_TTL_MS || (draft.base || "") !== (base || "")) {
+      storage.removeItem(key);
+      return null;
+    }
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function writeEntryDraft(key, draft) {
+  try {
+    entryDraftStorage()?.setItem(key, JSON.stringify(draft));
+  } catch {
+    /* хранилище недоступно или переполнено: окно работает без черновика */
+  }
+}
+
+// При выходе черновики удаляются: на общем компьютере их не должен увидеть следующий пользователь.
+function clearEntryDrafts() {
+  const storage = entryDraftStorage();
+  if (!storage) return;
+  try {
+    Object.keys(storage)
+      .filter((key) => key.startsWith("cybercalc:entry-draft:"))
+      .forEach((key) => storage.removeItem(key));
+  } catch {
+    /* ничего не делаем */
+  }
+}
+
+function removeEntryDraft(key) {
+  try {
+    entryDraftStorage()?.removeItem(key);
+  } catch {
+    /* ничего не делаем */
+  }
+}
+
 async function openEntryModal(entry, readOnly = false) {
   const cat = currentCategory();
   if (!cat) {
@@ -1606,8 +1665,53 @@ async function openEntryModal(entry, readOnly = false) {
     syncSemesterRange();
   }
 
+  const draftKey = readOnly || financialOnly
+    ? null
+    : ["cybercalc:entry-draft:v1", state.me?.id || "", agreementID, cat.code, state.period, state.year, entry?.id || "new"].join(":");
+  const draftSnapshot = () => ({
+    fields: Object.fromEntries([...fieldsBox.querySelectorAll("[data-key]")].filter((input) => !input.disabled).map((input) => [input.dataset.key, input.value])),
+    cost_method: backdrop.querySelector("#m-cost-method").value,
+    actual_amount: backdrop.querySelector("#m-actual-amount").value,
+    comment: backdrop.querySelector("#m-comment")?.value || "",
+  });
+  if (draftKey) {
+    const pristine = JSON.stringify(draftSnapshot());
+    const draft = readEntryDraft(draftKey, entry?.updated_at);
+    if (draft) {
+      Object.entries(draft.fields).forEach(([key, value]) => {
+        const input = fieldsBox.querySelector(`[data-key="${CSS.escape(key)}"]`);
+        if (!input || input.disabled) return;
+        if (input.tagName === "SELECT" && ![...input.options].some((option) => option.value === value)) return;
+        input.value = value;
+        if (input.tagName === "SELECT") input.dispatchEvent(new Event("change"));
+      });
+      backdrop.querySelector("#m-cost-method").value = draft.cost_method || "average";
+      backdrop.querySelector("#m-actual-amount").value = draft.actual_amount || "";
+      const commentBox = backdrop.querySelector("#m-comment");
+      if (commentBox) commentBox.value = draft.comment || "";
+      syncCostMethod();
+      const notice = el('<p class="notice" data-draft-notice>Восстановлены данные, которые вы вводили ранее и не сохранили. <button type="button" class="btn secondary" data-draft-reset>Начать заново</button></p>');
+      notice.querySelector("[data-draft-reset]").onclick = () => {
+        removeEntryDraft(draftKey);
+        drawer.close();
+        openEntryModal(entry, readOnly);
+      };
+      backdrop.querySelector("#m-form").prepend(notice);
+    }
+    const persistDraft = () => {
+      const current = draftSnapshot();
+      if (JSON.stringify(current) === pristine) removeEntryDraft(draftKey);
+      else writeEntryDraft(draftKey, { ...current, saved_at: Date.now(), base: entry?.updated_at || "" });
+    };
+    backdrop.querySelector("#m-form").addEventListener("input", persistDraft);
+    backdrop.querySelector("#m-form").addEventListener("change", persistDraft);
+  }
+
   const closeModal = drawer.close;
-  backdrop.querySelector("#m-cancel").onclick = closeModal;
+  backdrop.querySelector("#m-cancel").onclick = () => {
+    if (!busy && draftKey) removeEntryDraft(draftKey);
+    closeModal();
+  };
   if (!readOnly) backdrop.querySelector("#m-form").onsubmit = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -1639,6 +1743,7 @@ async function openEntryModal(entry, readOnly = false) {
           }),
         });
         savedID = entry.id;
+        if (draftKey) removeEntryDraft(draftKey);
       } else if (!savedID) {
         const partnerId = newPayload.org_name || null;
         const created = await api(`/entries`, {
@@ -1656,6 +1761,7 @@ async function openEntryModal(entry, readOnly = false) {
           }),
         });
         savedID = created.id;
+        if (draftKey) removeEntryDraft(draftKey);
       }
       fieldsBox
         .querySelectorAll("input,select,button")
