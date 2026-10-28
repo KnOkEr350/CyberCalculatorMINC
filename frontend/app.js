@@ -556,7 +556,7 @@ async function renderSettingsOverview(box) {
 async function renderSettingsScreen(root) {
   const screen = CyberCalcScreens.get("settings");
   const isAdmin = state.me.role === "super_admin";
-  const tabs = [{ id: "context", label: "Контекст и безопасность" }, { id: "tasks", label: "Задачи и эскалации" }, ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
+  const tabs = [{ id: "context", label: "Контекст и безопасность" }, { id: "tasks", label: "Задачи и эскалации" }, ...(canManageITCompanies() ? [{ id: "it-companies", label: "Реестр ИТ-компаний" }] : []), ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
   if (!tabs.some((tab) => tab.id === state.settingsTab)) state.settingsTab = "context";
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
   const content = root.querySelector("#settings-content");
