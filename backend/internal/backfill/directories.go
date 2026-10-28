@@ -19,11 +19,11 @@ const (
 	RuleITCompanyNoAccredation = "it_company.no_accreditation_number"
 )
 
-// DirectoriesReport — итог прогона по справочникам.
+// DirectoriesReport - итог прогона по справочникам.
 type DirectoriesReport struct {
-	// Detected — сколько находок обнаружено в этом прогоне по каждому правилу.
+	// Detected - сколько находок обнаружено в этом прогоне по каждому правилу.
 	Detected map[string]int
-	// Resolved — сколько ранее открытых находок закрыто, потому что причина исправлена.
+	// Resolved - сколько ранее открытых находок закрыто, потому что причина исправлена.
 	Resolved int
 	Total    int
 }
@@ -41,7 +41,7 @@ func (r DirectoriesReport) String() string {
 	return text
 }
 
-// directoryRule — запрос, возвращающий (entity_id, it_company_id, detail) для
+// directoryRule - запрос, возвращающий (entity_id, it_company_id, detail) для
 // строк, у которых правило нарушено.
 type directoryRule struct {
 	entity, code, query string
@@ -59,7 +59,7 @@ var directoryRules = []directoryRule{
 	{"partner", RulePartnerNoCompany, `SELECT id, NULL::uuid, 'Партнёр «' || name || '» не привязан к ИТ-компании'
 		FROM partners WHERE it_company_id IS NULL`},
 	// Два партнёра одной ИТ-компании с одним названием без учёта регистра и
-	// лишних пробелов: какой из них настоящий — решает человек.
+	// лишних пробелов: какой из них настоящий - решает человек.
 	{"partner", RulePartnerDuplicateName, `SELECT p.id, p.it_company_id, 'Название «' || p.name || '» повторяется у другого партнёра этой ИТ-компании'
 		FROM partners p WHERE p.it_company_id IS NOT NULL AND EXISTS (
 			SELECT 1 FROM partners q WHERE q.id <> p.id AND q.it_company_id = p.it_company_id

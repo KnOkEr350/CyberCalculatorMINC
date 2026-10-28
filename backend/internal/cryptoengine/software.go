@@ -14,7 +14,7 @@ import (
 	"fmt"
 )
 
-// SoftwareProviderName — провайдер на стандартной библиотеке Go. Это рабочая
+// SoftwareProviderName - провайдер на стандартной библиотеке Go. Это рабочая
 // реализация интерфейса Engine, но не производственный профиль: выбор
 // провайдера и допустимых видов подписи для поставки остаётся решением CRYPTO-00
 // (КриптоПро или иной сертифицированный провайдер подключается через тот же
@@ -113,7 +113,7 @@ func (s *Software) Decrypt(ctx context.Context, pkg Package, recipient Recipient
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// Провайдер, версия и алгоритм — жёсткая проверка: пакет со слабым
+	// Провайдер, версия и алгоритм - жёсткая проверка: пакет со слабым
 	// алгоритмом не должен расшифровываться «как получится».
 	if pkg.Provider != SoftwareProviderName || pkg.Version != softwareVersion || pkg.Algorithm != SoftwareCipherAlgorithm {
 		return nil, ErrInvalidPackage
@@ -268,7 +268,7 @@ func deriveKey(shared, ephemeralPublic, recipientPublic []byte) ([]byte, error) 
 	return hkdf.Key(sha256.New, shared, salt, kdfInfo, 32)
 }
 
-// MemoryKeyring — хранилище ключей в памяти процесса для тестов и локальной
+// MemoryKeyring - хранилище ключей в памяти процесса для тестов и локальной
 // разработки. В рабочем контуре ключи лежат в хранилище КриптоПро/HSM, а
 // приложение видит только ссылки.
 type MemoryKeyring struct {

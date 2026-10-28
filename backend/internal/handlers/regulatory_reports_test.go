@@ -47,7 +47,7 @@ func TestFormatRuDate(t *testing.T) {
 	cases := map[string]string{
 		"2026-05-01": "01.05.2026",
 		"2026-12-31": "31.12.2026",
-		"":           "",           // пусто — не наша забота, вернуть как есть
+		"":           "",           // пусто - не наша забота, вернуть как есть
 		"not-a-date": "not-a-date", // нераспознанный формат возвращается как есть
 	}
 	for in, want := range cases {
@@ -98,7 +98,7 @@ func TestBuildAnnex5RowsDropsZeroRows(t *testing.T) {
 		// строку p1 оба, без дублей.
 		{PartnerID: "p1", Partner: "МГУ", Agreement: "№ 01/26-МЦ", Period: "fact", Amount: money.Amount(50_000_00)},
 		{PartnerID: "p1", Partner: "МГУ", Agreement: "Доп. соглашение № 2", Period: "fact", Amount: money.Amount(50_000_00)},
-		// p2 — только план, факта нет: пустая строка, должна быть удалена.
+		// p2 - только план, факта нет: пустая строка, должна быть удалена.
 		{PartnerID: "p2", Partner: "Колледж связи № 54", Agreement: "№ СПО-54/А", Period: "plan", Amount: money.Amount(80_000_00)},
 	}
 	rows, planTotal, factTotal := buildAnnex5Rows(data, target)
@@ -135,7 +135,7 @@ func TestBuildAnnex5RowsDropsZeroRows(t *testing.T) {
 }
 
 func TestBuildAnnex5RowsRoundsPercentToHundredths(t *testing.T) {
-	// 1 / 3 норматива = 33.333…% — в ячейку формы должно попасть 33.33.
+	// 1 / 3 норматива = 33.333…% - в ячейку формы должно попасть 33.33.
 	data := []regulatoryRow{{PartnerID: "p1", Partner: "МГУ", Period: "fact", Amount: money.Amount(100)}}
 	rows, _, _ := buildAnnex5Rows(data, money.Amount(300))
 	if percent := rows[0][5].(float64); percent != 33.33 {
@@ -149,7 +149,7 @@ func TestBuildAnnex5RowsWithoutTargetShowsDash(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatalf("ожидали строки отчёта")
 	}
-	if percent := rows[0][5]; percent != "—" {
+	if percent := rows[0][5]; percent != "-" {
 		t.Fatalf("без настроенного норматива 3%% процент должен быть прочерком, получили %v", percent)
 	}
 }
@@ -177,7 +177,7 @@ func TestBuildPlanFactRowsShowsDashPercentWithoutPlan(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("ожидали 1 строку, получили %d: %+v", len(rows), rows)
 	}
-	if percent := rows[0][5]; percent != "—" {
+	if percent := rows[0][5]; percent != "-" {
 		t.Fatalf("при плане=0 и факте>0 процент дельты должен быть прочерком, получили %v", percent)
 	}
 }
@@ -210,7 +210,7 @@ func TestFilterRegulatoryRowsByRisk(t *testing.T) {
 }
 
 func TestTableCSVUsesSemicolonAndMoneyString(t *testing.T) {
-	body, err := tableCSV(regulatoryHeaders["plan_fact"], [][]interface{}{{"МГУ", "Преподаватели", money.Amount(100_50), money.Amount(200_00), 99.5, "—"}})
+	body, err := tableCSV(regulatoryHeaders["plan_fact"], [][]interface{}{{"МГУ", "Преподаватели", money.Amount(100_50), money.Amount(200_00), 99.5, "-"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestTableCSVUsesSemicolonAndMoneyString(t *testing.T) {
 	if !strings.HasPrefix(text, "\uFEFFПартнёр;Вид мероприятия") {
 		t.Fatalf("CSV header/BOM mismatch: %q", text)
 	}
-	if !strings.Contains(text, "100.50;200.00;99.50;—") {
+	if !strings.Contains(text, "100.50;200.00;99.50;-") {
 		t.Fatalf("CSV row does not contain formatted money and delta: %q", text)
 	}
 }
@@ -397,7 +397,7 @@ func TestBuildAnnex1SheetsPerOrganization(t *testing.T) {
 	if volume := row[5].(float64); volume != 64 {
 		t.Fatalf("значение показателя = %v, ожидалось 64 часа", volume)
 	}
-	// 264 960 ₽ за 64 часа — это тариф ВО 4,14 тыс. руб. за час.
+	// 264 960 ₽ за 64 часа - это тариф ВО 4,14 тыс. руб. за час.
 	if unitCost := row[6].(float64); unitCost != 4.14 {
 		t.Fatalf("стоимость единицы = %v тыс. руб., ожидалось 4.14", unitCost)
 	}

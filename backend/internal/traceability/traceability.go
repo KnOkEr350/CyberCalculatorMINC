@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-// Status — состояние задачи в плане.
+// Status - состояние задачи в плане.
 type Status string
 
 const (
@@ -31,7 +31,7 @@ const (
 	Open    Status = "не начато"
 )
 
-// Task — строка плана.
+// Task - строка плана.
 type Task struct {
 	ID     string
 	Title  string
@@ -62,7 +62,7 @@ func ParsePlan(r io.Reader) ([]Task, error) {
 			status = Partial
 		}
 		title := strings.TrimSpace(strings.SplitN(line, "|", 2)[0])
-		title = strings.TrimSpace(strings.Split(title, " — **")[0])
+		title = strings.TrimSpace(strings.Split(title, " - **")[0])
 		if existing, ok := byID[match[1]]; ok {
 			if rank(status) > rank(existing.Status) {
 				existing.Status = status
@@ -92,7 +92,7 @@ func rank(s Status) int {
 	return 0
 }
 
-// Kind — вид связи.
+// Kind - вид связи.
 type Kind string
 
 const (
@@ -112,15 +112,15 @@ func classify(path string) Kind {
 	return Code
 }
 
-// Row — задача со связями.
+// Row - задача со связями.
 type Row struct {
 	Task
 	Code, Tests, Docs []string
-	// Explicit — связи взяты из файла свидетельств, а не из упоминаний в тексте.
+	// Explicit - связи взяты из файла свидетельств, а не из упоминаний в тексте.
 	Explicit bool
 }
 
-// References — есть ли у задачи хоть одна связь.
+// References - есть ли у задачи хоть одна связь.
 func (r Row) References() int { return len(r.Code) + len(r.Tests) + len(r.Docs) }
 
 var idPattern = regexp.MustCompile(`\b([A-Z]{2,6}-\d{2})\b`)
@@ -165,10 +165,10 @@ func Scan(root string, known map[string]bool) (map[string]map[string]bool, error
 	return found, err
 }
 
-// Evidence — явные свидетельства: задача → пути. Путь может быть каталогом.
+// Evidence - явные свидетельства: задача → пути. Путь может быть каталогом.
 type Evidence map[string][]string
 
-// LoadEvidence читает файл свидетельств; отсутствующий файл — пустой набор.
+// LoadEvidence читает файл свидетельств; отсутствующий файл - пустой набор.
 func LoadEvidence(path string) (Evidence, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -238,7 +238,7 @@ func Build(root string) ([]Row, error) {
 }
 
 // Problems проверяет инвариант матрицы: у выполненной и частично выполненной
-// задачи есть хотя бы одна связь с кодом или тестом (документа мало — он не
+// задачи есть хотя бы одна связь с кодом или тестом (документа мало - он не
 // исполняет задачу, кроме свидетельств, явно названных документами), а каждое
 // свидетельство указывает на существующий файл или каталог.
 func Problems(root string, rows []Row) []string {
@@ -254,7 +254,7 @@ func Problems(root string, rows []Row) []string {
 			continue
 		}
 		if row.References() == 0 {
-			problems = append(problems, fmt.Sprintf("%s (%s): задача %s, но не связана ни с кодом, ни с тестом, ни с документом — упомяните её номер в тесте или коде либо добавьте путь в docs/traceability_evidence.json", row.ID, row.Title, row.Status))
+			problems = append(problems, fmt.Sprintf("%s (%s): задача %s, но не связана ни с кодом, ни с тестом, ни с документом - упомяните её номер в тесте или коде либо добавьте путь в docs/traceability_evidence.json", row.ID, row.Title, row.Status))
 		}
 	}
 	var evidenceIDs []string
@@ -290,11 +290,11 @@ func Markdown(rows []Row) string {
 	for _, row := range rows {
 		counts[row.Status]++
 	}
-	fmt.Fprintf(&b, "Задач: %d — выполнено %d, частично %d, не начато %d.\n\n", len(rows), counts[Done], counts[Partial], counts[Open])
+	fmt.Fprintf(&b, "Задач: %d - выполнено %d, частично %d, не начато %d.\n\n", len(rows), counts[Done], counts[Partial], counts[Open])
 	b.WriteString("| Задача | Название | Статус | Код | Тесты | Документы |\n|---|---|---|---|---|---|\n")
 	cell := func(paths []string) string {
 		if len(paths) == 0 {
-			return "—"
+			return "-"
 		}
 		shown := paths
 		suffix := ""

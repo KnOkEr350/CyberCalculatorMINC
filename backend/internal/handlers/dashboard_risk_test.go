@@ -14,7 +14,7 @@ import (
 	"cybercalc/internal/testfixtures"
 )
 
-// DASH-02: корзины риска не пересекаются — каждая запись попадает ровно в
+// DASH-02: корзины риска не пересекаются - каждая запись попадает ровно в
 // одну, а незнакомое состояние движка не создаёт четвёртую корзину и не
 // утекает в гарантированный объём.
 func TestRiskBucketStateIsExclusive(t *testing.T) {
@@ -29,7 +29,7 @@ func TestRiskBucketStateIsExclusive(t *testing.T) {
 		{"yellow", false, "yellow"},
 		{"red", true, "red"},
 		{"red", false, "red"},
-		{"", true, "red"},        // неизвестное состояние — не гарантия
+		{"", true, "red"},        // неизвестное состояние - не гарантия
 		{"unknown", true, "red"}, // новое состояние движка не должно теряться
 	}
 	allowed := map[string]bool{"green": true, "yellow": true, "red": true}
@@ -45,7 +45,7 @@ func TestRiskBucketStateIsExclusive(t *testing.T) {
 }
 
 // DASH-02 на реальной БД: сумма корзин совпадает с общим фактом дашборда, а
-// число записей в корзинах — с числом фактических мероприятий.
+// число записей в корзинах - с числом фактических мероприятий.
 func TestDashboardRiskBucketsSumUpToFactTotal(t *testing.T) {
 	db, year := integrationDB(t)
 	ctx := context.Background()

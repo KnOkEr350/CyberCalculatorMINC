@@ -61,7 +61,7 @@ func TestActivityMetricsUsesNormalisedInternshipHours(t *testing.T) {
 	for _, category := range []string{"internship", "employment_practice"} {
 		volume, _, unit := activityMetrics(category, both)
 		if volume != 240 {
-			t.Fatalf("%s: объём %v, ожидалось 240 — часы не должны удваиваться", category, volume)
+			t.Fatalf("%s: объём %v, ожидалось 240 - часы не должны удваиваться", category, volume)
 		}
 		if unit != "человеко-час" {
 			t.Fatalf("%s: единица измерения %q", category, unit)

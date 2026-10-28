@@ -12,7 +12,7 @@ import (
 	"cybercalc/internal/filestore"
 )
 
-// Report — итог прогона. Каждая строка исходной таблицы попадает ровно в один
+// Report - итог прогона. Каждая строка исходной таблицы попадает ровно в один
 // счётчик, поэтому отчёт сходится с числом вложений.
 type Report struct {
 	AlreadyAddressed int // уже в CAS
@@ -68,7 +68,7 @@ func Run(ctx context.Context, db *sql.DB, root string, sizeLimit int64) (Report,
 		}
 		file, err := filestore.Open(root, item.path)
 		if err != nil {
-			// Файла нет — строку не трогаем: метаданные и аудит важнее, чем
+			// Файла нет - строку не трогаем: метаданные и аудит важнее, чем
 			// аккуратность отчёта, и пропажу должен разобрать человек.
 			report.Missing++
 			continue

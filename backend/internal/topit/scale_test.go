@@ -31,6 +31,6 @@ func TestScaleBoundaries(t *testing.T) {
 		}
 	}
 	if UniversityNorm(rub(1000)) != rub(700) || UniversityNorm(money.Amount(1)) != 0 {
-		t.Fatal("норма вуза — 70% от гранта, вниз до копейки")
+		t.Fatal("норма вуза - 70% от гранта, вниз до копейки")
 	}
 }

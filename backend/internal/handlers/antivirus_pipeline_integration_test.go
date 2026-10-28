@@ -32,7 +32,7 @@ func fakeClamd(t *testing.T, reply string) string {
 			go func() {
 				defer conn.Close()
 				// Клиент шлёт команду, куски файла и нулевую длину; содержимое
-				// нам не нужно — важен только ответ.
+				// нам не нужно - важен только ответ.
 				buf := make([]byte, 32<<10)
 				conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 				for {
@@ -51,7 +51,7 @@ func fakeClamd(t *testing.T, reply string) string {
 	return listener.Addr().String()
 }
 
-// STORE-05 на реальной БД: угроза и недоступный сканер — разные исходы.
+// STORE-05 на реальной БД: угроза и недоступный сканер - разные исходы.
 // Заражённый файл не попадает в хранилище никогда, непроверенный принимается
 // только по политике и остаётся недоступным до проверки.
 func TestAntivirusPipelineStates(t *testing.T) {

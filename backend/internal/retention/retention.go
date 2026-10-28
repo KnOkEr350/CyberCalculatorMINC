@@ -90,7 +90,7 @@ func DrainDeletionQueue(ctx context.Context, db *sql.DB, root string) {
 		}
 		// STORE-01: содержимое адресуется хешем, поэтому один blob может
 		// принадлежать нескольким вложениям. Удаление последней ссылки
-		// освобождает файл, удаление любой другой — нет, иначе исчезли бы
+		// освобождает файл, удаление любой другой - нет, иначе исчезли бы
 		// подтверждающие документы, срок хранения которых ещё не истёк.
 		var referenced bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_path=$1)`, path).Scan(&referenced); err != nil {

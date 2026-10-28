@@ -16,7 +16,7 @@ import (
 	"cybercalc/internal/testfixtures"
 )
 
-// tenantScenario — изолированный арендатор: ИТ-компания, её вуз, партнёрская
+// tenantScenario - изолированный арендатор: ИТ-компания, её вуз, партнёрская
 // связь, соглашение и администратор компании.
 type tenantScenario struct {
 	admin, company, partner, agreement string
@@ -52,7 +52,7 @@ func newTenant(ctx context.Context, t *testing.T, f *testfixtures.Factory) tenan
 }
 
 // INT-03 на реальной БД: наставник берётся из справочника своей ОО. Ссылка на
-// наставника другого партнёра — потерянная связь, и она не должна приниматься
+// наставника другого партнёра - потерянная связь, и она не должна приниматься
 // ни по идентификатору, ни по совпадению ФИО. Имя в отчёт берётся из
 // справочника, а не из запроса.
 func TestMentorMustBelongToPartner(t *testing.T) {
@@ -88,7 +88,7 @@ func TestMentorMustBelongToPartner(t *testing.T) {
 				t.Fatalf("ФИО для отчёта берётся из справочника, получено %q", payload["mentor_full_name"])
 			}
 
-			// Наставник другого партнёра — потерянная связь.
+			// Наставник другого партнёра - потерянная связь.
 			if err := handlers.validateMentor(request, category, "fact", own.partner, "", map[string]interface{}{"mentor_id": foreignMentor}); err == nil {
 				t.Fatal("наставник другой ОО не должен приниматься")
 			}
@@ -110,7 +110,7 @@ func TestMentorMustBelongToPartner(t *testing.T) {
 	}
 }
 
-// DASH-06 на реальной БД: дашборд изолирован по арендатору — мероприятия
+// DASH-06 на реальной БД: дашборд изолирован по арендатору - мероприятия
 // другой ИТ-компании не попадают ни в итоги, ни в разбивку по видам.
 func TestDashboardIsolatesTenants(t *testing.T) {
 	db, year := integrationDB(t)
@@ -154,7 +154,7 @@ func TestDashboardIsolatesTenants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.PlanTotalRub != "200000.00" || resp.FactTotalRub != "100000.00" {
-		t.Fatalf("итоги дашборда план %s / факт %s — данные другой компании просочились",
+		t.Fatalf("итоги дашборда план %s / факт %s - данные другой компании просочились",
 			resp.PlanTotalRub, resp.FactTotalRub)
 	}
 	for _, row := range append(resp.PlanByCategory, resp.FactByCategory...) {
@@ -227,7 +227,7 @@ func TestPlanFactExportUsesActivityProjection(t *testing.T) {
 
 // WF-08 на реальной БД: Приложение № 4 строится только по неизменяемому снимку
 // на 1 мая. Без снимка форма не выдаётся, а снимок с нарушенной контрольной
-// суммой отвергается — подменить факт мимо снимка нельзя.
+// суммой отвергается - подменить факт мимо снимка нельзя.
 func TestAnnex4RequiresVerifiedSnapshot(t *testing.T) {
 	db, year := integrationDB(t)
 	ctx := context.Background()
@@ -276,7 +276,7 @@ func TestAnnex4RequiresVerifiedSnapshot(t *testing.T) {
 		}
 	}
 
-	// План заполнен, но снимка факта нет — форма недоступна.
+	// План заполнен, но снимка факта нет - форма недоступна.
 	if recorder := export(newPlanned()); recorder.Code != 409 {
 		t.Fatalf("без снимка ожидался отказ 409, получено %d: %s", recorder.Code, recorder.Body.String())
 	}

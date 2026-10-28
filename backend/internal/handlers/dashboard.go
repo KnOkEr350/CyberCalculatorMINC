@@ -47,7 +47,7 @@ type dashboardResponse struct {
 	TargetConfirmedRub   *money.Amount `json:"target_confirmed_fact_rub"`
 	// DASH-01: выполнение норматива считается точной денежной арифметикой на
 	// сервере и держится отдельно от процента реализации плана. Заполнены
-	// только при известном нормативе; дефицит и профицит не смешиваются —
+	// только при известном нормативе; дефицит и профицит не смешиваются -
 	// ненулевым бывает ровно один из них.
 	TargetDeficitRub    *money.Amount         `json:"target_deficit_rub,omitempty"`
 	TargetSurplusRub    *money.Amount         `json:"target_surplus_rub,omitempty"`
@@ -66,7 +66,7 @@ type dashboardResponse struct {
 	MandatoryHigherEd   []mandatoryChip       `json:"mandatory_higher_education"`
 }
 
-// mandatoryChip — чип обязательного минимума ВО (DASH-03). Обязательность
+// mandatoryChip - чип обязательного минимума ВО (DASH-03). Обязательность
 // считается на сервере и только по аудитории ВО: мероприятие для СПО или
 // школы не закрывает минимум высшего образования.
 type mandatoryChip struct {
@@ -259,7 +259,7 @@ func (h *DashboardHandlers) Get(w http.ResponseWriter, r *http.Request, u middle
 
 // riskBucketState раскладывает запись ровно по одной корзине дашборда
 // (DASH-02): гарантированный факт, прогноз и объём риска не пересекаются и в
-// сумме дают весь факт. Полный комплект без формального утверждения — это
+// сумме дают весь факт. Полный комплект без формального утверждения - это
 // прогноз, а не гарантия. Незнакомое состояние движка считается риском: в
 // гарантированный объём попадает только то, что доказано.
 func riskBucketState(state string, approved bool) string {
@@ -347,7 +347,7 @@ func riskBreakdownFromProjection(items []activityprojection.Contribution) (map[s
 
 // targetProgress считает выполнение норматива 3% (DASH-01) подтверждённым
 // фактом: нехватку, превышение и процент. Дефицит и профицит не смешиваются
-// — ненулевым может быть только один из них. Расчёт ведётся в копейках,
+// - ненулевым может быть только один из них. Расчёт ведётся в копейках,
 // поэтому копейки не теряются на дробной арифметике.
 func targetProgress(target, confirmed money.Amount) (deficit, surplus money.Amount, completionPct float64) {
 	if confirmed < target {
@@ -396,7 +396,7 @@ func higherEducationChips(fact []categoryBreakdown) []mandatoryChip {
 }
 
 // hideZeroPositions разбирает флаг «Скрыть нулевые позиции» (DASH-05).
-// Умолчание — показывать всё: скрытие данных включается явно.
+// Умолчание - показывать всё: скрытие данных включается явно.
 func hideZeroPositions(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "1", "true", "yes", "on":
@@ -538,7 +538,7 @@ type setBudgetTargetRequest struct {
 	SourceReference string        `json:"source_reference"`
 	NotifiedAt      string        `json:"notified_at"`
 	// DATA-11: год базы задаётся явно и сверяется с отчётным, а подтверждение
-	// ФНС — это дата и реквизит документа вместе.
+	// ФНС - это дата и реквизит документа вместе.
 	BasisYear      int    `json:"basis_year,omitempty"`
 	FNSConfirmedAt string `json:"fns_confirmed_at,omitempty"`
 	FNSReference   string `json:"fns_reference,omitempty"`
@@ -642,7 +642,7 @@ func (h *DashboardHandlers) SetBudgetTarget(w http.ResponseWriter, r *http.Reque
 }
 
 // parseDashboardSlices проверяет срезы дашборда из заготовки МЦ «Светофор»:
-// семестр (или его сезон) и цвет светофора — «можем подтвердить сейчас»,
+// семестр (или его сезон) и цвет светофора - «можем подтвердить сейчас»,
 // «подтвердить, но есть вопросы», «низкая вероятность».
 func parseDashboardSlices(semester, term, light string) (int, string, string, error) {
 	number := 0

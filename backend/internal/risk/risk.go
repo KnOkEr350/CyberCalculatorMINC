@@ -1,14 +1,14 @@
-// Package risk — общий движок правил риска (RISK-01, ADR-15, ADR-18).
+// Package risk - общий движок правил риска (RISK-01, ADR-15, ADR-18).
 //
-// Риск — внутренняя аналитика: он вычисляется из независимых осей
+// Риск - внутренняя аналитика: он вычисляется из независимых осей
 // проверки (готовность, допуск к зачёту, утверждение, юридическое сомнение) и
 // не хранится и не редактируется вручную. Ни одна ось не подменяется риском и
 // не подменяет его: движок только читает их результаты.
 //
-// Правила — упорядоченный перечень с идентификатором и уровнем, а результат
+// Правила - упорядоченный перечень с идентификатором и уровнем, а результат
 // объясним: каждый сработавший фактор называет своё правило. Уровень равен
 // самому тяжёлому из сработавших правил, поэтому добавить правило можно, не
-// меняя остальные. Набор правил версионируется: смена состава или уровня —
+// меняя остальные. Набор правил версионируется: смена состава или уровня -
 // новая версия, а результат всегда несёт версию, по которой посчитан.
 //
 // Пересчёт по событию обеспечен тем, что значение нигде не хранится: движок
@@ -16,10 +16,10 @@
 // утверждение отчёта, постановка сомнения) видно в следующем же ответе.
 package risk
 
-// RulesetVersion — версия набора правил. Меняется при любом изменении Rules.
+// RulesetVersion - версия набора правил. Меняется при любом изменении Rules.
 const RulesetVersion = "risk-1.0"
 
-// Level — уровень риска.
+// Level - уровень риска.
 type Level string
 
 const (
@@ -39,8 +39,8 @@ func (l Level) weight() int {
 	}
 }
 
-// State — цвет для существующих потребителей (дашборд, отчёты): READY — green,
-// MEDIUM — yellow, HIGH — red.
+// State - цвет для существующих потребителей (дашборд, отчёты): READY - green,
+// MEDIUM - yellow, HIGH - red.
 func (l Level) State() string {
 	switch l {
 	case Ready:
@@ -52,22 +52,22 @@ func (l Level) State() string {
 	}
 }
 
-// Inputs — результаты независимых проверок, над которыми работают правила.
+// Inputs - результаты независимых проверок, над которыми работают правила.
 type Inputs struct {
-	// ReadinessState — green, yellow или red по движку готовности комплекта.
+	// ReadinessState - green, yellow или red по движку готовности комплекта.
 	ReadinessState    string
 	ReadinessBlocking []string
 	ReadinessWarnings []string
-	// Eligible — запись допущена к зачёту нормативным согласованием.
+	// Eligible - запись допущена к зачёту нормативным согласованием.
 	Eligible bool
-	// Approved — отчётный комплект утверждён.
+	// Approved - отчётный комплект утверждён.
 	Approved bool
-	// Disputed — запись под действующим юридическим сомнением.
+	// Disputed - запись под действующим юридическим сомнением.
 	Disputed      bool
 	DisputeReason string
 }
 
-// Rule — правило: идентификатор, уровень, условие и текст причин.
+// Rule - правило: идентификатор, уровень, условие и текст причин.
 type Rule struct {
 	ID    string
 	Level Level
@@ -76,7 +76,7 @@ type Rule struct {
 	Messages func(Inputs) []string
 }
 
-// Rules — набор правил версии RulesetVersion в порядке показа причин.
+// Rules - набор правил версии RulesetVersion в порядке показа причин.
 var Rules = []Rule{
 	{
 		ID: "readiness.blocking", Level: High, Title: "Комплект не готов: есть блокирующие замечания",
@@ -128,7 +128,7 @@ var Rules = []Rule{
 		},
 	},
 	{
-		// Допущенная запись при неутверждённом комплекте — рассогласование
+		// Допущенная запись при неутверждённом комплекте - рассогласование
 		// осей: зачёту доверять нельзя, пока комплект не утверждён.
 		ID: "approval.not_approved", Level: Medium, Title: "Отчётный комплект не утверждён",
 		Messages: func(in Inputs) []string {
@@ -148,7 +148,7 @@ func nonNil(values []string) []string {
 	return values
 }
 
-// Finding — сработавшее правило с его причинами.
+// Finding - сработавшее правило с его причинами.
 type Finding struct {
 	Rule     string   `json:"rule"`
 	Level    Level    `json:"level"`
@@ -156,17 +156,17 @@ type Finding struct {
 	Messages []string `json:"messages"`
 }
 
-// Assessment — объяснимый результат.
+// Assessment - объяснимый результат.
 type Assessment struct {
 	Level    Level     `json:"level"`
 	Findings []Finding `json:"findings"`
 	Version  string    `json:"ruleset_version"`
 }
 
-// State — цвет результата.
+// State - цвет результата.
 func (a Assessment) State() string { return a.Level.State() }
 
-// Reasons — плоский перечень причин в порядке правил.
+// Reasons - плоский перечень причин в порядке правил.
 func (a Assessment) Reasons() []string {
 	out := []string{}
 	for _, finding := range a.Findings {

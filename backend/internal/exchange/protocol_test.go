@@ -62,7 +62,7 @@ func protocolFixture(t *testing.T) (ProtocolSource, Result) {
 }
 
 // CRYPTO-09: в протокол попадают все различия без исключения, а решения
-// оператора — с причиной и автором.
+// оператора - с причиной и автором.
 func TestProtocolListsEveryDifferenceAndDecision(t *testing.T) {
 	source, result := protocolFixture(t)
 	collision := find(t, result, StatusCollision)[0]

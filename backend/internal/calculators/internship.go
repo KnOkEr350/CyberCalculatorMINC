@@ -10,7 +10,7 @@ import (
 	"cybercalc/internal/models"
 )
 
-// internshipCalc — раздел «Стажировки» / «Практика с трудоустройством» / «ТОП ИТ».
+// internshipCalc - раздел «Стажировки» / «Практика с трудоустройством» / «ТОП ИТ».
 // Формула из ТЗ: (Нагрузка студента, ч/мес х 800 руб. + Нагрузка наставника,
 // ч/мес х 2390 руб.) х Продолжительность, мес.
 type internshipCalc struct{}
@@ -86,7 +86,7 @@ func (internshipCalc) Validate(payload map[string]interface{}) error {
 func (employmentPracticeCalc) Fields() []FieldSpec {
 	fields := internshipCalc{}.Fields()
 	// PRA-01: у практики есть самостоятельная карточка. Для неё курс,
-	// специальность и точный период — не пояснения, а обязательные
+	// специальность и точный период - не пояснения, а обязательные
 	// типизированные реквизиты, как и сведения о срочном ТД.
 	for index := range fields {
 		switch fields[index].Key {
@@ -195,13 +195,13 @@ func validateMentorAppointment(payload map[string]interface{}) error {
 	return nil
 }
 
-// minimumEmploymentAge — трудовой договор с обучающимся заключается не
+// minimumEmploymentAge - трудовой договор с обучающимся заключается не
 // ранее 14 лет (статья 63 ТК РФ).
 const minimumEmploymentAge = 14
 
-// weeklyHoursLimit — предельная продолжительность рабочего времени в неделю
-// по статье 92 ТК РФ: до 16 лет — 24 часа, от 16 до 18 лет — 35 часов.
-// Для совершеннолетних действует общая норма статьи 91 — 40 часов.
+// weeklyHoursLimit - предельная продолжительность рабочего времени в неделю
+// по статье 92 ТК РФ: до 16 лет - 24 часа, от 16 до 18 лет - 35 часов.
+// Для совершеннолетних действует общая норма статьи 91 - 40 часов.
 func weeklyHoursLimit(age float64) float64 {
 	switch {
 	case age < 16:
@@ -213,7 +213,7 @@ func weeklyHoursLimit(age float64) float64 {
 	}
 }
 
-// validateWorkingTimeLimit — жёсткая комплаенс-блокировка ТК РФ для практики
+// validateWorkingTimeLimit - жёсткая комплаенс-блокировка ТК РФ для практики
 // с трудоустройством (PRA-04).
 func validateWorkingTimeLimit(age, hours float64) error {
 	if math.IsNaN(age) || math.IsInf(age, 0) || age != math.Trunc(age) {

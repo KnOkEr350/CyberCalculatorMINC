@@ -46,9 +46,9 @@ func TestHideZeroPositionsFlag(t *testing.T) {
 func TestWithoutZeroPositionsKeepsMeaningfulRows(t *testing.T) {
 	rows := []categoryBreakdown{
 		{CategoryCode: "teachers", Audience: "vuz", AmountRub: money.Amount(100000), UnitCount: 14},
-		// Объём есть, затраты ещё не подтверждены — позиция не пустая.
+		// Объём есть, затраты ещё не подтверждены - позиция не пустая.
 		{CategoryCode: "ood_rpd", Audience: "vuz", AmountRub: 0, UnitCount: 2},
-		// Ни суммы, ни объёма — пустая позиция.
+		// Ни суммы, ни объёма - пустая позиция.
 		{CategoryCode: "edu_content", Audience: "school", AmountRub: 0, UnitCount: 0},
 	}
 	got := withoutZeroPositions(rows)

@@ -1,4 +1,4 @@
-# CyberCalculatorMINC — калькулятор затрат по Приказу Минцифры
+# CyberCalculatorMINC - калькулятор затрат по Приказу Минцифры
 
 Архитектура и границы масштабирования описаны в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Стандарт новых backend-модулей и эталонное направление зависимостей описаны в [backend/internal/modules/README.md](backend/internal/modules/README.md).
@@ -16,7 +16,7 @@
 
 ```
 .
-├── backend/                 # Go-бэкенд (единственная зависимость — lib/pq)
+├── backend/                 # Go-бэкенд (единственная зависимость - lib/pq)
 │   ├── cmd/server/          # точка входа, роутинг
 │   ├── internal/
 │   │   ├── auth/            # хеширование паролей (PBKDF2, stdlib) + сессии
@@ -53,7 +53,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Интерфейс откроется на `http://localhost:8080`, а с другого устройства — на
+Интерфейс откроется на `http://localhost:8080`, а с другого устройства - на
 `http://<IP-сервера>:8080`. По умолчанию nginx слушает `0.0.0.0`; адрес и порт
 настраиваются через `HTTP_BIND` и `HTTP_PORT`. Внешний трафик принимает nginx:
 запросы `/api/` балансируются между репликами backend, остальные запросы
@@ -76,7 +76,7 @@ curl -I http://127.0.0.1:8080
 docker compose up -d --build --remove-orphans
 ```
 
-Если локальный `curl` работает, а подключение с другого устройства — нет,
+Если локальный `curl` работает, а подключение с другого устройства - нет,
 проверьте, что TCP-порт 8080 разрешён в firewall сервера или облачной сети.
 
 Backend и PostgreSQL не публикуют порты наружу и доступны только внутри
@@ -84,11 +84,11 @@ docker-сети. Все backend-реплики используют общие P
 загруженных документов. Применение миграций защищено advisory lock, поэтому
 параллельный старт реплик безопасен.
 
-Пробы: `/api/live` проверяет только HTTP-процесс, `/api/ready` — готовность API и PostgreSQL.
+Пробы: `/api/live` проверяет только HTTP-процесс, `/api/ready` - готовность API и PostgreSQL.
 Прежний `/api/health` сохранён как alias `/api/ready`.
 
 При первом запуске, если в базе ещё нет ни одного администратора, автоматически
-создаётся учётная запись admin — email/пароль берутся из `ADMIN_BOOTSTRAP_EMAIL`
+создаётся учётная запись admin - email/пароль берутся из `ADMIN_BOOTSTRAP_EMAIL`
 / `ADMIN_BOOTSTRAP_PASSWORD` (см. `.env.example`). **Смените пароль сразу после
 первого входа** (Админ. панель → Пользователи → создать нового администратора → отключить
 bootstrap-аккаунт, либо обновить его пароль напрямую в БД).
@@ -96,21 +96,21 @@ bootstrap-аккаунт, либо обновить его пароль напр
 ## API (кратко)
 
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
-- `POST /api/auth/entity-type` — выбор «организация / вуз»
-- `GET /api/categories` — справочник категорий + поля формы + формула
+- `POST /api/auth/entity-type` - выбор «организация / вуз»
+- `GET /api/categories` - справочник категорий + поля формы + формула
 - `GET/POST /api/partners`
 - `GET/POST /api/it-companies`
-- `GET /api/it-companies/registry-search?q=` — публичная проверка аккредитации через ПроРеестр; сохранённые записи доступны в `/api/it-companies`
+- `GET /api/it-companies/registry-search?q=` - публичная проверка аккредитации через ПроРеестр; сохранённые записи доступны в `/api/it-companies`
 - `GET/POST /api/entries`, `PUT /api/entries/{id}` (требует `comment`)
 - `GET/POST /api/entries/{id}/attachments`, `GET /api/attachments/{id}/download`
 - `GET /api/dashboard`, `POST /api/dashboard/target`
-- `GET /api/reports/export?period_type=&report_year=&category_code=` — xlsx, лист «Сводный для МЦ» + лист на каждого партнёра
+- `GET /api/reports/export?period_type=&report_year=&category_code=` - xlsx, лист «Сводный для МЦ» + лист на каждого партнёра
 - `GET/POST /api/admin/users`, `PATCH /api/admin/users/{id}`
 - `GET/POST /api/admin/settings`
 - `GET /api/admin/logs`
 
 ## Известные ограничения MVP
 
-- Фронтенд — рабочий, но минималистичный (без drag&drop, пагинации таблиц и т.п.); при необходимости легко нарастить поверх текущего API.
-- Экспорт xlsx — валидный OOXML без стилей/форматирования ячеек (шрифты, границы), сфокусирован на данных.
-- Для категорий, для которых ни в ТЗ, ни в Приказе не задана формула/ставка («Реализация по Решению Минцифры», «ИТ-кружки для школьников», «Образовательный контент»), сумма вводится вручную — см. `DECISIONS.md`.
+- Фронтенд - рабочий, но минималистичный (без drag&drop, пагинации таблиц и т.п.); при необходимости легко нарастить поверх текущего API.
+- Экспорт xlsx - валидный OOXML без стилей/форматирования ячеек (шрифты, границы), сфокусирован на данных.
+- Для категорий, для которых ни в ТЗ, ни в Приказе не задана формула/ставка («Реализация по Решению Минцифры», «ИТ-кружки для школьников», «Образовательный контент»), сумма вводится вручную - см. `DECISIONS.md`.

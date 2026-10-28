@@ -17,8 +17,8 @@ import (
 //
 //	"CCBK1\n" | salt(16) | итерации PBKDF2 (uint32) | размер куска (uint32) | куски
 //
-// Каждый кусок — uint32 длины шифртекста и шифртекст AES-256-GCM. Ключ выводится
-// из парольной фразы PBKDF2-HMAC-SHA256. Nonce куска — номер куска, поэтому
+// Каждый кусок - uint32 длины шифртекста и шифртекст AES-256-GCM. Ключ выводится
+// из парольной фразы PBKDF2-HMAC-SHA256. Nonce куска - номер куска, поэтому
 // перестановка, пропуск и повтор кусков меняют nonce и не проходят проверку.
 // В AAD входят заголовок и признак последнего куска: обрезанный файл не имеет
 // последнего куска с этим признаком и отвергается, а не читается «до конца».
@@ -39,7 +39,7 @@ const (
 var (
 	ErrFormat       = errors.New("backup: файл не является резервной копией или повреждён заголовок")
 	ErrAuth         = errors.New("backup: неверная парольная фраза или файл изменён")
-	ErrTruncated    = errors.New("backup: копия обрезана — нет завершающего куска")
+	ErrTruncated    = errors.New("backup: копия обрезана - нет завершающего куска")
 	ErrPassphrase   = errors.New("backup: парольная фраза не короче 12 символов")
 	errChunkTooLong = errors.New("backup: недопустимый размер куска")
 )
@@ -257,7 +257,7 @@ func (r *openReader) Read(p []byte) (int, error) {
 		plain, openErr := r.gcm.Open(nil, nonce(r.counter), current, aad(r.h, final))
 		if openErr != nil {
 			// Не последний кусок, объявленный последним, и последний без признака
-			// различаются только признаком в AAD; обе ситуации — порча или обрезка.
+			// различаются только признаком в AAD; обе ситуации - порча или обрезка.
 			if !final {
 				if _, altErr := r.gcm.Open(nil, nonce(r.counter), current, aad(r.h, true)); altErr == nil {
 					return 0, fmt.Errorf("%w: после завершающего куска есть данные", ErrAuth)

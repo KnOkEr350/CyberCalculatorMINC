@@ -12,7 +12,7 @@ import (
 	"cybercalc/internal/tariffs"
 )
 
-// tariffItem — ставка, действующая на отчётный год, с основанием: по ней
+// tariffItem - ставка, действующая на отчётный год, с основанием: по ней
 // пользователь видит, из какой редакции Методики посчитана сумма.
 type tariffItem struct {
 	Code        string       `json:"code"`
@@ -97,7 +97,7 @@ func (h *AdminHandlers) PublishTariff(w http.ResponseWriter, r *http.Request, ad
 	}
 	req.SourceReference = strings.TrimSpace(req.SourceReference)
 	if req.SourceReference == "" || len([]rune(req.SourceReference)) > 2000 {
-		middleware.WriteError(w, http.StatusBadRequest, "укажите официальную редакцию — основание тарифа (до 2000 символов)")
+		middleware.WriteError(w, http.StatusBadRequest, "укажите официальную редакцию - основание тарифа (до 2000 символов)")
 		return
 	}
 	if req.AmountRub <= 0 {

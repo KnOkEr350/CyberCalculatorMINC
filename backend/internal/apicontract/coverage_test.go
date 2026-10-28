@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// QA-08: контракт описывает не только адреса, но и поведение — у каждой
+// QA-08: контракт описывает не только адреса, но и поведение - у каждой
 // операции должен быть и успешный ответ, и описание ошибки. Инвентарь
 // маршрутов сверяется в обе стороны в TestOpenAPIV1IsValidAndMatchesRegisteredRoutes.
 func TestEveryOperationDeclaresSuccessAndError(t *testing.T) {
@@ -50,7 +50,7 @@ func TestEveryOperationDeclaresSuccessAndError(t *testing.T) {
 				switch {
 				case strings.HasPrefix(code, "2"):
 					success = true
-				// Ошибку описывает либо общий default, либо явный код 4xx/5xx —
+				// Ошибку описывает либо общий default, либо явный код 4xx/5xx -
 				// так сделан, например, health с его 503.
 				case code == "default", strings.HasPrefix(code, "4"), strings.HasPrefix(code, "5"):
 					failure = true

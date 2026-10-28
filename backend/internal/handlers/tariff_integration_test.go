@@ -59,7 +59,7 @@ func TestSeededTariffsMatchTheShippedEdition(t *testing.T) {
 }
 
 // Версии не переписываются и не пересекаются: единственное допустимое
-// изменение — закрыть действующую версию датой окончания.
+// изменение - закрыть действующую версию датой окончания.
 func TestTariffVersionsAreImmutableAndNeverOverlap(t *testing.T) {
 	db, _ := integrationDB(t)
 	ctx := context.Background()

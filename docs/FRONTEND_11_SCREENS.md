@@ -4,12 +4,12 @@ Frontend использует единый registry `frontend/screens.js`, из 
 
 ## Модульная топология
 
-- `frontend/core/store.js` — единственное изменяемое состояние SPA;
-- `frontend/core/router.js` — выбор экрана и нормализация его фильтров;
-- `frontend/core/screen-loader.js` — кэшируемая динамическая загрузка ES modules;
-- `frontend/shell/app-shell.js` — sidebar/topbar/layout без предметного dispatch;
-- `frontend/screens/<screen>/index.js` — независимый entrypoint каждого экрана;
-- `frontend/screens/shared/` — общие адаптеры экранов одного типа.
+- `frontend/core/store.js` - единственное изменяемое состояние SPA;
+- `frontend/core/router.js` - выбор экрана и нормализация его фильтров;
+- `frontend/core/screen-loader.js` - кэшируемая динамическая загрузка ES modules;
+- `frontend/shell/app-shell.js` - sidebar/topbar/layout без предметного dispatch;
+- `frontend/screens/<screen>/index.js` - независимый entrypoint каждого экрана;
+- `frontend/screens/shared/` - общие адаптеры экранов одного типа.
 
 Registry хранит путь к модулю вместе с descriptor экрана. Shell не содержит
 ветвления по конкретным экранам: он передаёт активный descriptor загрузчику.

@@ -2,7 +2,7 @@
 //
 //	go run ./cmd/traceability > ../docs/TRACEABILITY.md
 //
-// Запускается из каталога backend; корень репозитория — на уровень выше.
+// Запускается из каталога backend; корень репозитория - на уровень выше.
 package main
 
 import (

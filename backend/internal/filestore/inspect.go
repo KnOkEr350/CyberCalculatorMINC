@@ -94,22 +94,22 @@ func Validate(name, path string, roots ...string) error {
 // Scan streams to clamd without exposing local filesystem paths. Failure is
 // fail-closed when a scanner is configured; infected files are never published.
 // STORE-05: вердикт антивируса. Раньше «заражён» и «сканер недоступен» были
-// одной ошибкой, и отличить угрозу от сбоя инфраструктуры было нечем — а
+// одной ошибкой, и отличить угрозу от сбоя инфраструктуры было нечем - а
 // решения по ним разные.
 type Verdict string
 
 const (
-	// VerdictClean — файл проверен и чист.
+	// VerdictClean - файл проверен и чист.
 	VerdictClean Verdict = "clean"
-	// VerdictInfected — сканер нашёл угрозу: файл не сохраняется никогда.
+	// VerdictInfected - сканер нашёл угрозу: файл не сохраняется никогда.
 	VerdictInfected Verdict = "infected"
-	// VerdictUnavailable — сканер не ответил; решение принимает политика.
+	// VerdictUnavailable - сканер не ответил; решение принимает политика.
 	VerdictUnavailable Verdict = "unavailable"
-	// VerdictSkipped — сканер не настроен (локальная разработка).
+	// VerdictSkipped - сканер не настроен (локальная разработка).
 	VerdictSkipped Verdict = "skipped"
 )
 
-// ScanResult — вердикт вместе с подписью угрозы, если она названа.
+// ScanResult - вердикт вместе с подписью угрозы, если она названа.
 type ScanResult struct {
 	Verdict   Verdict
 	Signature string

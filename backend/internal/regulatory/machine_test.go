@@ -26,7 +26,7 @@ func must(t *testing.T, state State, action Action, now time.Time, reason string
 	return next
 }
 
-// WF-03: проект соглашения — 14 дней на рассмотрение, 10 на доработку, 10 на
+// WF-03: проект соглашения - 14 дней на рассмотрение, 10 на доработку, 10 на
 // повторное рассмотрение. Проверяются последние дни каждого окна.
 func TestAgreementChainDurations(t *testing.T) {
 	state, err := New(KindAgreement, 2026)
@@ -64,7 +64,7 @@ func TestAgreementChainDurations(t *testing.T) {
 	}
 }
 
-// WF-04 и WF-05: цепочки перечней — 10/10/5 и 20/20/10.
+// WF-04 и WF-05: цепочки перечней - 10/10/5 и 20/20/10.
 func TestListChainsMatchTheOrder(t *testing.T) {
 	want := map[Kind]Chain{
 		KindAgreement:   {14, 10, 10},
@@ -122,22 +122,22 @@ func TestPreliminaryListCutoffAndSendDeadline(t *testing.T) {
 	// В день среза можно, и это не поздно.
 	onCutoff := must(t, state, ActionSend, msk("2026-11-01 00:00"), "")
 	if onCutoff.SentLate {
-		t.Fatal("отправка в день среза — не позднее срока")
+		t.Fatal("отправка в день среза - не позднее срока")
 	}
-	// 10 ноября — последний день без нарушения, вплоть до полуночи по Москве.
+	// 10 ноября - последний день без нарушения, вплоть до полуночи по Москве.
 	lastDay := must(t, state, ActionSend, msk("2026-11-10 23:59"), "")
 	if lastDay.SentLate {
-		t.Fatal("отправка 10 ноября — ещё в срок")
+		t.Fatal("отправка 10 ноября - ещё в срок")
 	}
-	// 11 ноября — нарушение, но отправка возможна и помечена.
+	// 11 ноября - нарушение, но отправка возможна и помечена.
 	late := must(t, state, ActionSend, msk("2026-11-11 00:00"), "")
 	if !late.SentLate {
 		t.Fatal("отправка 11 ноября должна быть помечена как поздняя")
 	}
-	// Московская дата, а не UTC: 10 ноября 22:00 UTC — уже 11 ноября 01:00 по Москве.
+	// Московская дата, а не UTC: 10 ноября 22:00 UTC - уже 11 ноября 01:00 по Москве.
 	utc := time.Date(2026, 11, 10, 22, 0, 0, 0, time.UTC)
 	if got := must(t, state, ActionSend, utc, ""); !got.SentLate {
-		t.Fatal("счёт идёт по московской дате: 22:00 UTC 10 ноября — это уже 11 ноября")
+		t.Fatal("счёт идёт по московской дате: 22:00 UTC 10 ноября - это уже 11 ноября")
 	}
 
 	m := MilestonesFor(KindPreliminary, 2026)
@@ -159,10 +159,10 @@ func TestFinalListCutoffAndSendDeadline(t *testing.T) {
 		t.Fatalf("итоговый перечень до среза 31 декабря: %v", err)
 	}
 	if got := must(t, state, ActionSend, msk("2027-03-01 23:59"), ""); got.SentLate {
-		t.Fatal("1 марта — ещё в срок")
+		t.Fatal("1 марта - ещё в срок")
 	}
 	if got := must(t, state, ActionSend, msk("2027-03-02 00:00"), ""); !got.SentLate {
-		t.Fatal("2 марта — поздно")
+		t.Fatal("2 марта - поздно")
 	}
 }
 
@@ -194,8 +194,8 @@ func TestDefaultApprovalHappensOnlyAfterTheLastDay(t *testing.T) {
 	}
 }
 
-// Молчание рецензента срабатывает в обоих окнах рассмотрения — первичном и
-// повторном, — а рассмотрение «в работе» срок не останавливает.
+// Молчание рецензента срабатывает в обоих окнах рассмотрения - первичном и
+// повторном, - а рассмотрение «в работе» срок не останавливает.
 func TestSilenceApprovesInBothReviewWindows(t *testing.T) {
 	state, _ := New(KindAgreement, 2026)
 	sent := must(t, state, ActionSend, msk("2026-03-02 10:00"), "")
@@ -214,7 +214,7 @@ func TestSilenceApprovesInBothReviewWindows(t *testing.T) {
 	}
 }
 
-// Пропуск срока доработки — просрочка, а не автоматический исход: Приказ говорит
+// Пропуск срока доработки - просрочка, а не автоматический исход: Приказ говорит
 // об этом на уровне позиций, поэтому процесс остаётся в доработке, событие
 // записывается один раз, а повторная отправка после срока не проходит.
 func TestReworkLapseIsRecordedOnceAndClosesResubmission(t *testing.T) {
@@ -299,7 +299,7 @@ func TestTransitionTable(t *testing.T) {
 	}
 }
 
-// Возврат на доработку — один раз: цепочка заканчивается согласованием или
+// Возврат на доработку - один раз: цепочка заканчивается согласованием или
 // оспариванием, а не бесконечным круговоротом.
 func TestOnlyOneReworkCycle(t *testing.T) {
 	now := msk("2026-03-02 10:00")
@@ -350,7 +350,7 @@ func TestNewRejectsBadInput(t *testing.T) {
 	}
 }
 
-// ADR-02: правило счёта дней — те же граничные случаи, что и у обработчиков.
+// ADR-02: правило счёта дней - те же граничные случаи, что и у обработчиков.
 func TestCalendarDeadlineBoundaries(t *testing.T) {
 	cases := []struct {
 		received string
@@ -368,7 +368,7 @@ func TestCalendarDeadlineBoundaries(t *testing.T) {
 			t.Errorf("%s + %d: последний день %s, ожидался %s", tc.received, tc.days, last, tc.lastDay)
 		}
 	}
-	// 22:00 UTC — уже следующая московская дата.
+	// 22:00 UTC - уже следующая московская дата.
 	utc := time.Date(2026, 11, 10, 22, 0, 0, 0, time.UTC)
 	if last, _ := CalendarDeadline(utc, 10); last != "2026-11-21" {
 		t.Errorf("22:00 UTC 10 ноября = 11 ноября по Москве: последний день %s", last)

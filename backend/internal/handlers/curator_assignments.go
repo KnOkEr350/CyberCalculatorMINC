@@ -13,7 +13,7 @@ import (
 	"cybercalc/internal/rbac"
 )
 
-// CuratorAssignmentHandlers — закрепление кураторов за партнёрами (DATA-09).
+// CuratorAssignmentHandlers - закрепление кураторов за партнёрами (DATA-09).
 type CuratorAssignmentHandlers struct{ DB *sql.DB }
 
 type curatorAssignmentRequest struct {
@@ -36,7 +36,7 @@ func canManageCuratorAssignments(u middleware.AuthUser) bool {
 	return u.EntityType == models.EntityOrganization && rbac.Allows(u.Role, rbac.ManageCuratorAssignments)
 }
 
-// assignmentTenant — арендатор, которым ограничен управляющий; пусто у
+// assignmentTenant - арендатор, которым ограничен управляющий; пусто у
 // системного администратора без арендатора.
 func assignmentTenant(u middleware.AuthUser) string {
 	if u.ITCompanyID != nil {
@@ -64,7 +64,7 @@ func writeAssignmentError(w http.ResponseWriter, err error) {
 }
 
 // List отдаёт закрепления. Управляющий видит закрепления своего арендатора,
-// куратор — только свои.
+// куратор - только свои.
 func (h *CuratorAssignmentHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	filter := curators.Filter{
 		CuratorID: strings.TrimSpace(r.URL.Query().Get("curator_id")), PartnerID: strings.TrimSpace(r.URL.Query().Get("partner_id")),

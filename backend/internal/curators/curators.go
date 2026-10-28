@@ -1,7 +1,7 @@
 // Package curators ведёт закрепление кураторов за партнёрами (DATA-09).
 //
-// Источник истины — таблица user_partner_assignments: период, отзыв, история и
-// граница арендатора проверяются на уровне БД. Здесь — операции над ней и
+// Источник истины - таблица user_partner_assignments: период, отзыв, история и
+// граница арендатора проверяются на уровне БД. Здесь - операции над ней и
 // выбор куратора для fallback (SEC-04).
 package curators
 
@@ -27,7 +27,7 @@ var (
 	ErrNothingToChange = errors.New("окончание не сдвигает период")
 )
 
-// BusinessLocation — московское время: календарные даты закрепления считаются
+// BusinessLocation - московское время: календарные даты закрепления считаются
 // по нему, как и сроки регламента.
 var BusinessLocation = func() *time.Location {
 	location, err := time.LoadLocation("Europe/Moscow")
@@ -37,7 +37,7 @@ var BusinessLocation = func() *time.Location {
 	return location
 }()
 
-// Today — московская дата на момент now.
+// Today - московская дата на момент now.
 func Today(now time.Time) time.Time {
 	year, month, day := now.In(BusinessLocation).Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
@@ -49,7 +49,7 @@ type queryer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-// Assignment — закрепление.
+// Assignment - закрепление.
 type Assignment struct {
 	ID          string `json:"id"`
 	UserID      string `json:"user_id"`
@@ -79,12 +79,12 @@ func scan(row interface{ Scan(...any) error }, today string) (Assignment, error)
 	return a, nil
 }
 
-// NewInput — параметры нового закрепления.
+// NewInput - параметры нового закрепления.
 type NewInput struct {
 	CuratorID  string
 	PartnerID  string
 	From       time.Time
-	Until      *time.Time // nil — без окончания
+	Until      *time.Time // nil - без окончания
 	AssignedBy string
 	Reason     string
 }
@@ -132,7 +132,7 @@ func Assign(ctx context.Context, db queryer, in NewInput, now time.Time) (Assign
 }
 
 // End заканчивает действующее или будущее закрепление указанным днём
-// включительно. Период можно только сократить: продление — новое закрепление,
+// включительно. Период можно только сократить: продление - новое закрепление,
 // иначе оно молча пересекло бы соседнее.
 func End(ctx context.Context, db queryer, id string, until time.Time, now time.Time) (Assignment, error) {
 	current, err := Get(ctx, db, id, now)
@@ -158,7 +158,7 @@ func End(ctx context.Context, db queryer, id string, until time.Time, now time.T
 }
 
 // Revoke отзывает закрепление: оно не действует ни в один день. Причина
-// обязательна — отзыв стирает период из зачёта, и это должно быть объяснимо.
+// обязательна - отзыв стирает период из зачёта, и это должно быть объяснимо.
 func Revoke(ctx context.Context, db queryer, id, by, reason string, now time.Time) (Assignment, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -198,7 +198,7 @@ func Get(ctx context.Context, db queryer, id string, now time.Time) (Assignment,
 type Filter struct {
 	CuratorID   string
 	PartnerID   string
-	ITCompanyID string // пусто — без ограничения арендатором
+	ITCompanyID string // пусто - без ограничения арендатором
 	ActiveOnly  bool
 }
 
@@ -255,7 +255,7 @@ func Sync(ctx context.Context, db *sql.DB, now time.Time) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	// Пересчёт — не «прямое изменение профиля»: без метки триггер users
+	// Пересчёт - не «прямое изменение профиля»: без метки триггер users
 	// принял бы его за новое закрепление и стал бы менять периоды.
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('curators.sync','on',true)`); err != nil {
 		return 0, err

@@ -137,7 +137,7 @@ func TestRegulatoryProcessThroughTheAPI(t *testing.T) {
 
 	t.Run("допустимые действия видны по ролям", func(t *testing.T) {
 		if got := decodeProcess(t, call.get(author, process.ID)).Allowed; strings.Join(got, ",") != "start_review,approve,request_rework" {
-			// Автор — суперадминистратор: он может зафиксировать ответ за контрагента.
+			// Автор - суперадминистратор: он может зафиксировать ответ за контрагента.
 			t.Errorf("допустимые действия автора-администратора: %v", got)
 		}
 		if got := decodeProcess(t, call.get(reviewer, process.ID)).Allowed; strings.Join(got, ",") != "start_review,approve,request_rework" {
@@ -193,7 +193,7 @@ func TestRegulatoryProcessThroughTheAPI(t *testing.T) {
 	}
 }
 
-// WF-04: до среза предварительный перечень не отправляется — отказ понятный,
+// WF-04: до среза предварительный перечень не отправляется - отказ понятный,
 // а не ошибка сервера.
 func TestPreliminaryListCannotBeSentBeforeItsCutoff(t *testing.T) {
 	db, _ := integrationDB(t)
@@ -222,7 +222,7 @@ func TestPreliminaryListCannotBeSentBeforeItsCutoff(t *testing.T) {
 	}
 }
 
-// Оспаривание — только после доработки и только с причиной.
+// Оспаривание - только после доработки и только с причиной.
 func TestDisputeRequiresReworkAndReason(t *testing.T) {
 	db, year := integrationDB(t)
 	ctx := context.Background()

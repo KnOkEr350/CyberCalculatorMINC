@@ -70,7 +70,7 @@ func TestDiffClassifiesEveryRecord(t *testing.T) {
 	}
 }
 
-// Идентификаторы экземпляра — не различие: у другого экземпляра они другие в
+// Идентификаторы экземпляра - не различие: у другого экземпляра они другие в
 // каждой записи, и иначе всё было бы расхождением.
 func TestDiffIgnoresInstanceIdentifiers(t *testing.T) {
 	local := teacherRecord("Иванов Иван Иванович", "Разработка ПО", 64)
@@ -88,8 +88,8 @@ func TestDiffIgnoresInstanceIdentifiers(t *testing.T) {
 	}
 }
 
-// Сравнение идёт по смыслу: 64 и 64.0 — одно число, пустая строка, null и
-// отсутствие поля — одно «не заполнено».
+// Сравнение идёт по смыслу: 64 и 64.0 - одно число, пустая строка, null и
+// отсутствие поля - одно «не заполнено».
 func TestDiffComparesValuesByMeaning(t *testing.T) {
 	local := teacherRecord("Иванов Иван Иванович", "Разработка ПО", 64)
 	incoming := teacherRecord("Иванов Иван Иванович", "Разработка ПО", 64)
@@ -108,7 +108,7 @@ func TestDiffComparesValuesByMeaning(t *testing.T) {
 		t.Fatalf("представление не должно давать расхождений: %+v", result.Items[0].Differences)
 	}
 
-	// Разница в строке с пробелами по краям — не расхождение, в содержимом — расхождение.
+	// Разница в строке с пробелами по краям - не расхождение, в содержимом - расхождение.
 	incoming.Payload["department"] = "Кафедра ИС"
 	local.Payload["department"] = " Кафедра ИС "
 	if r, _ := Diff([]Record{local}, []Record{incoming}); r.Counts[StatusIdentical] != 1 {
@@ -119,16 +119,16 @@ func TestDiffComparesValuesByMeaning(t *testing.T) {
 	if r.Counts[StatusCollision] != 1 || r.Items[0].Differences[0].Field != "payload.department" {
 		t.Fatalf("различие в содержимом должно находиться: %+v", r.Items)
 	}
-	// Число и строка с тем же текстом — разные значения.
+	// Число и строка с тем же текстом - разные значения.
 	incoming.Payload["department"] = "Кафедра ИС"
 	local.Payload["students_reach"] = 30
 	incoming.Payload["students_reach"] = "тридцать"
 	if r, _ := Diff([]Record{local}, []Record{incoming}); r.Counts[StatusCollision] != 1 {
-		t.Fatal("число и слово — разные значения")
+		t.Fatal("число и слово - разные значения")
 	}
 }
 
-// Поле, заполненное с одной стороны, — расхождение с локальным и входящим
+// Поле, заполненное с одной стороны, - расхождение с локальным и входящим
 // значением; отсутствие поля с одной стороны видно как пусто.
 func TestDiffReportsFieldPresentOnOneSide(t *testing.T) {
 	local := teacherRecord("Иванов Иван Иванович", "Разработка ПО", 64)
@@ -145,7 +145,7 @@ func TestDiffReportsFieldPresentOnOneSide(t *testing.T) {
 	}
 }
 
-// Повтор ключа внутри одной стороны — отдельный статус, а не «последняя запись
+// Повтор ключа внутри одной стороны - отдельный статус, а не «последняя запись
 // побеждает».
 func TestDiffFlagsAmbiguousKeys(t *testing.T) {
 	local := []Record{

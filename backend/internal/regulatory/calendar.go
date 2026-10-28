@@ -5,7 +5,7 @@ package regulatory
 
 import "time"
 
-// BusinessLocation — business timezone инстанса по ADR-02. Используется
+// BusinessLocation - business timezone инстанса по ADR-02. Используется
 // фиксированный UTC+3: образ не несёт tzdata, а в Москве нет перехода на
 // летнее время.
 var BusinessLocation = time.FixedZone("Europe/Moscow", 3*60*60)
@@ -14,11 +14,11 @@ var BusinessLocation = time.FixedZone("Europe/Moscow", 3*60*60)
 //
 //   - срок считается по датам в business timezone, а не сутками от метки
 //     времени: важна московская дата получения, а не час;
-//   - день получения не включается, первый день срока — следующий;
+//   - день получения не включается, первый день срока - следующий;
 //   - выходные и праздники не исключаются и не переносят срок;
 //   - срок истекает только после окончания последнего календарного дня.
 //
-// Возвращает последний день срока (YYYY-MM-DD) и момент истечения — начало
+// Возвращает последний день срока (YYYY-MM-DD) и момент истечения - начало
 // следующего за ним дня по Москве.
 func CalendarDeadline(receivedAt time.Time, days int) (lastDay string, expiresAt time.Time) {
 	year, month, day := receivedAt.In(BusinessLocation).Date()

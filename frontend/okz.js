@@ -25,7 +25,7 @@
           <div class="grid cols-3">
             <div class="field"><label for="okz-version">Обозначение версии *</label><input id="okz-version" name="version" maxlength="64" placeholder="2026.1" required></div>
             <div class="field"><label for="okz-effective">Действует с *</label><input id="okz-effective" name="effective_on" type="date" value="${today}" required></div>
-            <div class="field"><label for="okz-source-name">Источник *</label><input id="okz-source-name" name="source_name" maxlength="300" value="Росстандарт — ОК 010-2014 (МСКЗ-08)" required></div>
+            <div class="field"><label for="okz-source-name">Источник *</label><input id="okz-source-name" name="source_name" maxlength="300" value="Росстандарт - ОК 010-2014 (МСКЗ-08)" required></div>
             <div class="field"><label for="okz-source-url">Ссылка на источник</label><input id="okz-source-url" name="source_url" type="url" value="https://protect.gost.ru/classificators/details/0d7c57d3-084a-42e7-bdda-3c68bbc01731"></div>
             <div class="field"><label for="okz-file">CSV-файл *</label><input id="okz-file" name="file" type="file" accept=".csv,text/csv" required><div class="field-hint">Колонки code;name. Добавьте все уровни иерархии от 1 до 4 цифр.</div></div>
           </div>
@@ -37,7 +37,7 @@
         <h2>Поиск по активному справочнику</h2>
         <form id="okz-search" class="okz-search-toolbar">
           <input name="query" aria-label="Код или наименование ОКЗ" placeholder="Код или наименование">
-          <select name="level" aria-label="Уровень ОКЗ"><option value="">Все уровни</option><option value="1">1 — основная группа</option><option value="2">2 — подгруппа</option><option value="3">3 — малая группа</option><option value="4">4 — начальная группа</option></select>
+          <select name="level" aria-label="Уровень ОКЗ"><option value="">Все уровни</option><option value="1">1 - основная группа</option><option value="2">2 - подгруппа</option><option value="3">3 - малая группа</option><option value="4">4 - начальная группа</option></select>
           <button class="btn secondary" type="submit">Найти</button>
         </form>
         <div id="okz-search-result" aria-live="polite">Загрузка…</div>
@@ -68,7 +68,7 @@
         result.innerHTML = '<div class="empty-state"><b>Справочник ещё не загружен</b><span>Загрузите первую версию CSV в форме выше.</span></div>';
         return;
       }
-      const rows = page.items.map((item) => `<tr><td><code>${escapeHTML(item.code)}</code></td><td>${item.level}</td><td>${item.parent_code ? `<code>${escapeHTML(item.parent_code)}</code>` : "—"}</td><td>${escapeHTML(item.name)}</td></tr>`).join("");
+      const rows = page.items.map((item) => `<tr><td><code>${escapeHTML(item.code)}</code></td><td>${item.level}</td><td>${item.parent_code ? `<code>${escapeHTML(item.parent_code)}</code>` : "-"}</td><td>${escapeHTML(item.name)}</td></tr>`).join("");
       const from = page.total ? page.offset + 1 : 0;
       const to = Math.min(page.offset + page.items.length, page.total);
       result.innerHTML = `${page.items.length ? `<div class="table-wrap"><table><thead><tr><th>Код</th><th>Уровень</th><th>Родитель</th><th>Наименование</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">Совпадений не найдено.</p>'}

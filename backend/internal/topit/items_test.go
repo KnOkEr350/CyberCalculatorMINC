@@ -102,7 +102,7 @@ func TestSummaryKeepsUnconfirmedSupportOutOfTheTotal(t *testing.T) {
 	}
 }
 
-// TOP-08: РИД — тип, авторы и доли прав, которые в сумме дают ровно 100%.
+// TOP-08: РИД - тип, авторы и доли прав, которые в сумме дают ровно 100%.
 func TestRIDNormalizeShares(t *testing.T) {
 	today := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
 	share := func(v float64) *float64 { return &v }
@@ -129,7 +129,7 @@ func TestRIDNormalizeShares(t *testing.T) {
 			t.Errorf("%s: должно отвергаться", name)
 		}
 	}
-	// Поля РИД в чужой строке — ошибка.
+	// Поля РИД в чужой строке - ошибка.
 	if _, err := Normalize(Input{Kind: "case", Title: "Кейс", ImplementationOrg: "ООО", ImplementationStatus: "proposed", Description: "д", Authors: "кто-то"}, today); err == nil {
 		t.Error("авторы РИД в кейсе не допускаются")
 	}

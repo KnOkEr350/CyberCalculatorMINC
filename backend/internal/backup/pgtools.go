@@ -72,7 +72,7 @@ func PGDump(dsn string) func(context.Context, io.Writer) error {
 			return err
 		}
 		var stderr bytes.Buffer
-		// tool — путь, найденный по фиксированному имени; пользовательский ввод только в аргументе --dbname.
+		// tool - путь, найденный по фиксированному имени; пользовательский ввод только в аргументе --dbname.
 		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 		cmd := exec.CommandContext(ctx, tool, "--format=custom", "--no-password", "--dbname="+dbname)
 		cmd.Env, cmd.Stdout, cmd.Stderr = env, w, &stderr
@@ -143,5 +143,5 @@ func CompareFacts(want, got map[string]string) []string {
 	return diffs
 }
 
-// ErrDrillFailed — восстановление выполнено, но проверка целостности не пройдена.
+// ErrDrillFailed - восстановление выполнено, но проверка целостности не пройдена.
 var ErrDrillFailed = errors.New("backup: проверка восстановления не пройдена")

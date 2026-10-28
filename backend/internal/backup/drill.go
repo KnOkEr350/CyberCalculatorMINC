@@ -14,20 +14,20 @@ import (
 	"cybercalc/internal/filestore"
 )
 
-// Check — один пункт проверки восстановления.
+// Check - один пункт проверки восстановления.
 type Check struct {
 	Name   string
 	Passed bool
 	Detail string
 }
 
-// DrillResult — итог учебного восстановления.
+// DrillResult - итог учебного восстановления.
 type DrillResult struct {
 	Manifest Manifest
 	Checks   []Check
 }
 
-// Passed — все пункты пройдены.
+// Passed - все пункты пройдены.
 func (r DrillResult) Passed() bool {
 	for _, c := range r.Checks {
 		if !c.Passed {
@@ -37,15 +37,15 @@ func (r DrillResult) Passed() bool {
 	return len(r.Checks) > 0
 }
 
-// DrillOptions — параметры учебного восстановления (QA-11).
+// DrillOptions - параметры учебного восстановления (QA-11).
 type DrillOptions struct {
 	Bundle     io.Reader
 	Passphrase string
-	// AdminDSN — подключение с правом создавать и удалять базы; восстановление
+	// AdminDSN - подключение с правом создавать и удалять базы; восстановление
 	// идёт в отдельную временную базу, рабочая не затрагивается.
 	AdminDSN string
 	WorkDir  string
-	// Scratch — имя временной базы; пусто — генерируется.
+	// Scratch - имя временной базы; пусто - генерируется.
 	Scratch string
 }
 

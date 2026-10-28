@@ -15,7 +15,7 @@ import (
 )
 
 // DATA-11 на реальной БД: норматив 3% неотделим от своего основания. База
-// берётся за год N-2, подтверждение ФНС — это дата и документ вместе, а каждая
+// берётся за год N-2, подтверждение ФНС - это дата и документ вместе, а каждая
 // редакция остаётся в истории.
 func TestBudgetTargetKeepsBasisAndHistory(t *testing.T) {
 	db, _ := integrationDB(t)
@@ -37,7 +37,7 @@ func TestBudgetTargetKeepsBasisAndHistory(t *testing.T) {
 		handlers.SetBudgetTarget(recorder, request, user)
 		return recorder
 	}
-	// База 10 000 000,00 ₽ — норматив ровно 300 000,00 ₽.
+	// База 10 000 000,00 ₽ - норматив ровно 300 000,00 ₽.
 	const base, target = "10000000.00", "300000.00"
 
 	t.Run("год базы сверяется с отчётным", func(t *testing.T) {
@@ -49,7 +49,7 @@ func TestBudgetTargetKeepsBasisAndHistory(t *testing.T) {
 		}
 	})
 
-	t.Run("подтверждение ФНС — дата и документ вместе", func(t *testing.T) {
+	t.Run("подтверждение ФНС - дата и документ вместе", func(t *testing.T) {
 		half := set(fmt.Sprintf(`{"report_year":%d,"target_amount_rub":"%s","savings_base_rub":"%s",
 			"source_reference":"письмо Минцифры","notified_at":"%s","fns_confirmed_at":"%s"}`,
 			year, target, base, notified, notified))

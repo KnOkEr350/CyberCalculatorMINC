@@ -34,7 +34,7 @@ func TestIncomingHrDocumentsBelongToHr(t *testing.T) {
 	}
 }
 
-// INT-05: итоговую справку об обучении прикрепляет куратор — и со стороны
+// INT-05: итоговую справку об обучении прикрепляет куратор - и со стороны
 // ИТ-компании, и со стороны образовательной организации.
 func TestOutgoingCertificateBelongsToCurator(t *testing.T) {
 	if !canUploadDocument(companyUser(models.RoleCurator), "internship", "outgoing_certificate") {
@@ -70,7 +70,7 @@ func TestPracticeAgreementDocumentStaysWithCompany(t *testing.T) {
 	}
 }
 
-// SEC-06: AUDITOR_VIEWER — полностью read-only. Ни одна операция изменения
+// SEC-06: AUDITOR_VIEWER - полностью read-only. Ни одна операция изменения
 // данных ему недоступна.
 func TestAuditorViewerIsReadOnly(t *testing.T) {
 	auditor := companyUser(models.RoleAuditorViewer)

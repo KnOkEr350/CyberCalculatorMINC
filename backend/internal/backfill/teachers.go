@@ -19,11 +19,11 @@ const (
 	RuleTeacherReportLocked = "teachers.report_locked"
 )
 
-// TeachersReport — итог прогона. Каждая запись без сотрудника попадает ровно в
+// TeachersReport - итог прогона. Каждая запись без сотрудника попадает ровно в
 // один счётчик, поэтому отчёт сходится с числом обработанных записей.
 type TeachersReport struct {
 	Linked        int // сотрудник найден однозначно и связан
-	NameMissing   int // в записи нет ФИО и сотрудника — нечем искать
+	NameMissing   int // в записи нет ФИО и сотрудника - нечем искать
 	NoMatch       int // сотрудника с таким ФИО нет в справочнике ИТ-компании
 	Ambiguous     int // подходит несколько сотрудников
 	ReportLocked  int // сотрудник найден, но связывание сбросило бы утверждённый отчёт
@@ -31,7 +31,7 @@ type TeachersReport struct {
 	AlreadyLinked int // записи, где сотрудник уже указан (в работе не участвуют)
 }
 
-// Manual — число записей, оставшихся на ручное уточнение.
+// Manual - число записей, оставшихся на ручное уточнение.
 func (r TeachersReport) Manual() int {
 	return r.NameMissing + r.NoMatch + r.Ambiguous + r.ReportLocked
 }

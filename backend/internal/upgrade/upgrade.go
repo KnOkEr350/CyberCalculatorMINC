@@ -2,7 +2,7 @@
 // релиза, соответствие миграций, свежую и целую резервную копию, запас места.
 //
 // Схема БД меняется только вперёд: применённые миграции не правятся и не
-// удаляются. Откат — это откат образов приложения, поэтому проверка отката
+// удаляются. Откат - это откат образов приложения, поэтому проверка отката
 // говорит, сможет ли прежний релиз работать на текущей схеме.
 package upgrade
 
@@ -30,37 +30,37 @@ import (
 	"github.com/lib/pq"
 )
 
-// Migration — миграция с контрольной суммой (SHA-256 содержимого файла, как в
+// Migration - миграция с контрольной суммой (SHA-256 содержимого файла, как в
 // таблице schema_migrations).
 type Migration struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 }
 
-// Release — состав релиза, который подписывается.
+// Release - состав релиза, который подписывается.
 type Release struct {
 	Version   string            `json:"version"`
 	Previous  string            `json:"previous,omitempty"`
 	CreatedAt time.Time         `json:"created_at"`
 	Images    map[string]string `json:"images"` // сервис → digest образа
-	// Migrations — полный перечень миграций релиза.
+	// Migrations - полный перечень миграций релиза.
 	Migrations []Migration `json:"migrations"`
-	// Files — файлы автономного пакета (образы, конфигурация, сценарии) с
+	// Files - файлы автономного пакета (образы, конфигурация, сценарии) с
 	// контрольными суммами; пусто у релиза, доставляемого через реестр.
 	Files []Migration `json:"files,omitempty"`
 }
 
-// Gate — один пункт предполётной проверки.
+// Gate - один пункт предполётной проверки.
 type Gate struct {
 	Name   string
 	Passed bool
 	Detail string
 }
 
-// Report — итог: обновление допустимо, когда пройдены все пункты.
+// Report - итог: обновление допустимо, когда пройдены все пункты.
 type Report struct{ Gates []Gate }
 
-// OK — все пункты пройдены.
+// OK - все пункты пройдены.
 func (r Report) OK() bool {
 	for _, g := range r.Gates {
 		if !g.Passed {
@@ -77,7 +77,7 @@ func (r Report) String() string {
 		if !g.Passed {
 			mark = "СБОЙ"
 		}
-		fmt.Fprintf(&b, "%s %s — %s\n", mark, g.Name, g.Detail)
+		fmt.Fprintf(&b, "%s %s - %s\n", mark, g.Name, g.Detail)
 	}
 	return b.String()
 }
@@ -133,7 +133,7 @@ func ReadAppliedOrEmpty(ctx context.Context, db *sql.DB) ([]Migration, error) {
 	return applied, err
 }
 
-// Plan — что произойдёт при обновлении.
+// Plan - что произойдёт при обновлении.
 type Plan struct {
 	Pending  []string
 	Problems []string
@@ -175,19 +175,19 @@ func PlanUpgrade(release, applied []Migration) Plan {
 	return plan
 }
 
-// RollbackReport — может ли прежний релиз работать на текущей схеме.
+// RollbackReport - может ли прежний релиз работать на текущей схеме.
 type RollbackReport struct {
-	// Missing — миграции прежнего релиза, которых нет в базе: схема старее, чем
-	// ждёт прежний релиз (такой «откат» — на самом деле обновление).
+	// Missing - миграции прежнего релиза, которых нет в базе: схема старее, чем
+	// ждёт прежний релиз (такой «откат» - на самом деле обновление).
 	Missing []string
-	// Altered — миграции, применённые иначе, чем в прежнем релизе.
+	// Altered - миграции, применённые иначе, чем в прежнем релизе.
 	Altered []string
-	// NewerSchema — миграции, которых прежний релиз не знает. Откат допустим,
+	// NewerSchema - миграции, которых прежний релиз не знает. Откат допустим,
 	// если они только добавляют (расширение схемы); иначе решает человек.
 	NewerSchema []string
 }
 
-// Safe — откат не требует ничего, кроме подтверждения аддитивности.
+// Safe - откат не требует ничего, кроме подтверждения аддитивности.
 func (r RollbackReport) Safe() bool { return len(r.Missing) == 0 && len(r.Altered) == 0 }
 
 // CheckRollback сверяет прежний релиз с применёнными миграциями.
@@ -217,7 +217,7 @@ func CheckRollback(target, applied []Migration) RollbackReport {
 	return r
 }
 
-// Signed — подписанный релиз: канонический JSON и отсоединённая подпись Ed25519.
+// Signed - подписанный релиз: канонический JSON и отсоединённая подпись Ed25519.
 type Signed struct {
 	Release   json.RawMessage `json:"release"`
 	Signature string          `json:"signature"`
@@ -235,7 +235,7 @@ func Sign(release Release, key ed25519.PrivateKey) ([]byte, error) {
 	return json.Marshal(Signed{Release: body, Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(key, body))})
 }
 
-// ErrSignature — подпись не подтверждена.
+// ErrSignature - подпись не подтверждена.
 var ErrSignature = errors.New("upgrade: подпись релиза не подтверждена")
 
 // Verify проверяет подпись доверенным открытым ключом и возвращает релиз.
@@ -256,17 +256,17 @@ func Verify(data []byte, key ed25519.PublicKey) (Release, error) {
 	return release, nil
 }
 
-// Options — параметры предполётной проверки.
+// Options - параметры предполётной проверки.
 type Options struct {
 	Release Release
-	// MigrationsDir — каталог миграций, поставляемый с релизом.
+	// MigrationsDir - каталог миграций, поставляемый с релизом.
 	MigrationsDir string
-	// BackupPath и Passphrase — копия, сделанная перед обновлением.
+	// BackupPath и Passphrase - копия, сделанная перед обновлением.
 	BackupPath string
 	Passphrase string
-	// MaxBackupAge — насколько свежей должна быть копия.
+	// MaxBackupAge - насколько свежей должна быть копия.
 	MaxBackupAge time.Duration
-	// DataDir и MinFreeBytes — запас места под обновление.
+	// DataDir и MinFreeBytes - запас места под обновление.
 	DataDir      string
 	MinFreeBytes uint64
 	Now          func() time.Time
@@ -371,7 +371,7 @@ func BuildFiles(root string, skip ...string) ([]Migration, error) {
 			return nil
 		}
 		if !d.Type().IsRegular() {
-			return fmt.Errorf("upgrade: %s — не обычный файл (ссылка или особый тип)", rel)
+			return fmt.Errorf("upgrade: %s - не обычный файл (ссылка или особый тип)", rel)
 		}
 		sum, err := hashFile(path)
 		if err != nil {
@@ -399,7 +399,7 @@ func hashFile(path string) (string, error) {
 
 // VerifyTree сверяет каталог автономного пакета с подписанным перечнем файлов:
 // не должно быть ни изменённых, ни отсутствующих, ни лишних файлов. Лишний
-// файл — тоже нарушение: в проверенный пакет нельзя подложить сценарий.
+// файл - тоже нарушение: в проверенный пакет нельзя подложить сценарий.
 func VerifyTree(root string, release Release, skip ...string) []string {
 	actual, err := BuildFiles(root, skip...)
 	if err != nil {

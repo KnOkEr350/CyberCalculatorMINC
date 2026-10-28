@@ -8,7 +8,7 @@ import (
 )
 
 // CRYPTO-06: правила нормализации закреплены таблицей. Одинаковые по смыслу
-// записи получают один ключ, разные — разные.
+// записи получают один ключ, разные - разные.
 func TestKeyNormalizationRules(t *testing.T) {
 	base := teacherRecord("Иванов Иван Иванович", "Разработка ПО", 64)
 	baseKey, err := KeyOf(base)
@@ -39,7 +39,7 @@ func TestKeyNormalizationRules(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if name == "кавычки и дефисы" {
-			// Дефис между словами разделяет их: «Иванов-Иван» — два слова.
+			// Дефис между словами разделяет их: «Иванов-Иван» - два слова.
 			if key.Person != "иванов иван иванович" {
 				t.Errorf("%s: ФИО %q", name, key.Person)
 			}
@@ -72,7 +72,7 @@ func TestKeyNormalizationRules(t *testing.T) {
 	}
 }
 
-// Число из JSON, из БД и из Go — одно и то же значение ключа: «3», 3, 3.0 и
+// Число из JSON, из БД и из Go - одно и то же значение ключа: «3», 3, 3.0 и
 // json.Number("3") дают один семестр.
 func TestKeyTreatsNumbersUniformly(t *testing.T) {
 	var keys []Key
@@ -130,7 +130,7 @@ func TestKeyFieldsPerCategory(t *testing.T) {
 	}
 }
 
-// Запись, которую нельзя сопоставить, — ошибка: пустой ключ совпал бы со всеми
+// Запись, которую нельзя сопоставить, - ошибка: пустой ключ совпал бы со всеми
 // такими же записями сразу.
 func TestRecordWithoutMatchKeyIsRejected(t *testing.T) {
 	if _, err := KeyOf(Record{CategoryCode: "teachers", Payload: map[string]interface{}{"academic_hours": 64}}); !errors.Is(err, ErrNoMatchKey) {

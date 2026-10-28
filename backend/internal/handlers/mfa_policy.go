@@ -11,14 +11,14 @@ import (
 )
 
 // SEC-07: политика второго фактора хранится в настройках, а не выводится из
-// окружения. Требование 2FA — управленческое решение, и включать его должен
+// окружения. Требование 2FA - управленческое решение, и включать его должен
 // системный администратор, а не переменная среды на сервере.
 const (
 	settingMFARequired   = "mfa_required"
 	settingMFAGraceHours = "mfa_grace_period_hours"
 )
 
-// MFAPolicy — действующая политика второго фактора.
+// MFAPolicy - действующая политика второго фактора.
 type MFAPolicy struct {
 	Required   bool
 	GraceHours int
@@ -68,7 +68,7 @@ func MFAEnforcedFor(policy MFAPolicy, createdAt time.Time, now time.Time) bool {
 // ResetMFA снимает второй фактор с учётной записи. Нужен, когда сотрудник
 // потерял устройство и коды восстановления: иначе доступ теряется навсегда.
 // Операция администраторская, поэтому она закрывает все сессии пользователя и
-// попадает в журнал — сброс 2FA слишком силён, чтобы оставлять его незаметным.
+// попадает в журнал - сброс 2FA слишком силён, чтобы оставлять его незаметным.
 func (h *AdminHandlers) ResetMFA(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser, userID string) {
 	if admin.Role != models.RoleSuperAdmin {
 		middleware.WriteError(w, http.StatusForbidden, "второй фактор сбрасывает только системный администратор")

@@ -18,7 +18,7 @@ import (
 	"cybercalc/internal/xlsx"
 )
 
-// QA-10: формирование отчётов по HTTP на согласованном объёме арендатора —
+// QA-10: формирование отчётов по HTTP на согласованном объёме арендатора -
 // 10 000 утверждённых мероприятий (по 5 000 плана и факта) при 10 000 чужих.
 // Бюджет и допущение по объёму записаны в docs/PERFORMANCE.md; чужие строки
 // обязаны отсекаться запросом, а не после выборки.
@@ -123,7 +123,7 @@ func TestReportGenerationOnAgreedVolume(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, query string
-		wantRows    int // строк первого листа: данные и итог; 0 — не проверять
+		wantRows    int // строк первого листа: данные и итог; 0 - не проверять
 	}{
 		{"выгрузка факта по мероприятиям", "period_type=fact", reportLoadOwnEntries/2 + 2},
 		{"конструктор план-факт-дельта", "report_type=plan_fact&format=xlsx", 0},
@@ -154,7 +154,7 @@ func TestReportGenerationOnAgreedVolume(t *testing.T) {
 				if err != nil {
 					t.Fatalf("файл отчёта не читается: %v", err)
 				}
-				// Строки арендатора видны все, чужие — ни одной.
+				// Строки арендатора видны все, чужие - ни одной.
 				if len(rows) != tc.wantRows {
 					t.Fatalf("на первом листе %d строк, ожидалось %d (заголовок, данные и итог)", len(rows), tc.wantRows+1)
 				}

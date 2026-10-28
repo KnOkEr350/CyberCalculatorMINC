@@ -12,8 +12,8 @@ import (
 	"testing"
 )
 
-// STORE-01: адрес файла — это его содержимое. Одинаковые байты занимают один
-// blob, разные — разные, а адрес совпадает с SHA-256 потока.
+// STORE-01: адрес файла - это его содержимое. Одинаковые байты занимают один
+// blob, разные - разные, а адрес совпадает с SHA-256 потока.
 func TestBlobIsAddressedByItsContent(t *testing.T) {
 	root := t.TempDir()
 	content := []byte("акт сдачи-приёмки работ")
@@ -39,7 +39,7 @@ func TestBlobIsAddressedByItsContent(t *testing.T) {
 		t.Fatalf("свежий blob должен проходить проверку: %v", err)
 	}
 
-	// Те же байты — тот же адрес и ни одного лишнего файла.
+	// Те же байты - тот же адрес и ни одного лишнего файла.
 	second, err := CreateBlob(root, bytes.NewReader(content), 1<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestBlobIsAddressedByItsContent(t *testing.T) {
 		t.Fatalf("в хранилище %d файлов, ожидался один", got)
 	}
 
-	// Другие байты — другой адрес.
+	// Другие байты - другой адрес.
 	other, err := CreateBlob(root, strings.NewReader("другой документ"), 1<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestBlobRejectsOversizedStream(t *testing.T) {
 	if got := countBlobs(t, root); got != 0 {
 		t.Fatalf("после отказа в хранилище осталось %d файлов", got)
 	}
-	// Ровно по лимиту — допустимо.
+	// Ровно по лимиту - допустимо.
 	if _, err := CreateBlob(root, bytes.NewReader(make([]byte, 100)), 100); err != nil {
 		t.Fatalf("файл ровно по лимиту должен приниматься: %v", err)
 	}

@@ -19,14 +19,14 @@ type ChainSource interface {
 	Chain(ctx context.Context, certificateID string) ([]cryptoengine.CertificateRef, error)
 }
 
-// ImportPolicy — что получатель считает допустимым.
+// ImportPolicy - что получатель считает допустимым.
 type ImportPolicy struct {
-	// Recipient — кто открывает пакет; закрытый ключ берётся по ссылке.
+	// Recipient - кто открывает пакет; закрытый ключ берётся по ссылке.
 	Recipient cryptoengine.RecipientSecretRef
-	// Signature — срок, доверенные корни и отозванные сертификаты.
+	// Signature - срок, доверенные корни и отозванные сертификаты.
 	Signature cryptoengine.SignaturePolicy
 	Chains    ChainSource
-	// AllowedCiphers и AllowedSignatures — закрытые списки «провайдер/алгоритм».
+	// AllowedCiphers и AllowedSignatures - закрытые списки «провайдер/алгоритм».
 	// Пакет с любым другим алгоритмом отклоняется: понизить стойкость подменой
 	// заголовка нельзя.
 	AllowedCiphers    map[string]bool
@@ -37,10 +37,10 @@ type ImportPolicy struct {
 	ExpectedPeriod string
 }
 
-// CipherKey и SignatureKey — ключи разрешённых списков.
+// CipherKey и SignatureKey - ключи разрешённых списков.
 func CipherKey(provider, algorithm string) string { return provider + "/" + algorithm }
 
-// Imported — проверенное содержимое пакета. БД к этому моменту не тронута:
+// Imported - проверенное содержимое пакета. БД к этому моменту не тронута:
 // применять результат или нет, решает оператор после просмотра различий.
 type Imported struct {
 	Manifest Manifest
@@ -79,7 +79,7 @@ func Open(ctx context.Context, engine cryptoengine.Engine, policy ImportPolicy, 
 		manifest.RecordCount < 0 || manifest.RecordCount > MaxRecords {
 		return Imported{}, ErrPackageFormat
 	}
-	// 3. Алгоритмы — только из закрытых списков.
+	// 3. Алгоритмы - только из закрытых списков.
 	if !policy.AllowedCiphers[CipherKey(manifest.Cipher.Provider, manifest.Cipher.Algorithm)] {
 		return Imported{}, fmt.Errorf("%w: шифр %s/%s", ErrAlgorithmNotAllowed, manifest.Cipher.Provider, manifest.Cipher.Algorithm)
 	}
@@ -145,7 +145,7 @@ func Open(ctx context.Context, engine cryptoengine.Engine, policy ImportPolicy, 
 	if err != nil {
 		return Imported{}, err
 	}
-	// 9. Распаковка с жёстким пределом и только после этого — разбор JSON.
+	// 9. Распаковка с жёстким пределом и только после этого - разбор JSON.
 	plaintext, err := decompress(compressed)
 	if err != nil {
 		return Imported{}, err

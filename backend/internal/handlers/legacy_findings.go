@@ -64,8 +64,8 @@ type directoryFinding struct {
 	DetectedAt string `json:"detected_at"`
 }
 
-// LegacyDirectoryFindings отдаёт строки справочников — партнёров, соглашений,
-// ИТ-компании, — перенесённые с пробелами или неоднозначные (DATA-13).
+// LegacyDirectoryFindings отдаёт строки справочников - партнёров, соглашений,
+// ИТ-компании, - перенесённые с пробелами или неоднозначные (DATA-13).
 // Арендатор видит только свои находки.
 func (h *AdminHandlers) LegacyDirectoryFindings(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
 	limit := 200

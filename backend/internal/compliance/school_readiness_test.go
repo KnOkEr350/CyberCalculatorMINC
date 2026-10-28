@@ -4,7 +4,7 @@ import "testing"
 
 // SCH-07: готовность школьного трека собирается из соглашения с РОИВ или
 // школой, сформированных групп участников, акта сдачи-приёмки, а для
-// цифрового контента — ещё и подтверждённых логов ФГИС «Моя школа».
+// цифрового контента - ещё и подтверждённых логов ФГИС «Моя школа».
 func TestSchoolReadinessCombinesAgreementGroupsActAndLogs(t *testing.T) {
 	for _, category := range []string{"it_clubs", "teacher_training"} {
 		t.Run(category, func(t *testing.T) {
@@ -12,14 +12,14 @@ func TestSchoolReadinessCombinesAgreementGroupsActAndLogs(t *testing.T) {
 			if full.State != "green" || !full.Ready || !full.Eligible {
 				t.Fatalf("полный комплект должен быть готов и допустим: %+v", full)
 			}
-			// Соглашение и группы — основания зачёта, их отсутствие блокирует.
+			// Соглашение и группы - основания зачёта, их отсутствие блокирует.
 			for _, document := range []string{"school_agreement", "participant_groups"} {
 				got := Evaluate(category, "fact", map[string]interface{}{}, without(schoolDocuments(), document))
 				if got.State != "red" || got.Eligible {
 					t.Fatalf("без документа %q зачёт невозможен: %+v", document, got)
 				}
 			}
-			// Акт — закрывающий документ: без него строка в зоне внимания.
+			// Акт - закрывающий документ: без него строка в зоне внимания.
 			act := Evaluate(category, "fact", map[string]interface{}{}, without(schoolDocuments(), "acceptance_act"))
 			if act.State != "yellow" {
 				t.Fatalf("без акта сдачи-приёмки ожидалась жёлтая зона: %+v", act)

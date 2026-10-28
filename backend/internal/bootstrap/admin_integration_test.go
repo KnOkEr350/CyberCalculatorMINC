@@ -89,7 +89,7 @@ func TestEnsureAdminCreatesAndRestoresAccess(t *testing.T) {
 		t.Fatal("пароль действующего администратора не должен переписываться при перезапуске")
 	}
 
-	// Учётную запись отключили — доступа в систему нет. Оператор задаёт новый
+	// Учётную запись отключили - доступа в систему нет. Оператор задаёт новый
 	// пароль в конфигурации и перезапускает службу.
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET is_active=false WHERE lower(email)=$1`, email); err != nil {
 		t.Fatal(err)

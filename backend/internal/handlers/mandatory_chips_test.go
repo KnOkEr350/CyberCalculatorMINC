@@ -12,9 +12,9 @@ import (
 // поэтому мероприятие для СПО закрывало минимум, обязательный для вузов.
 func TestHigherEducationChipsIgnoreNonUniversityAudiences(t *testing.T) {
 	fact := []categoryBreakdown{
-		// Преподаватели есть, но только в колледже — минимум ВО не закрыт.
+		// Преподаватели есть, но только в колледже - минимум ВО не закрыт.
 		{CategoryCode: "teachers", Audience: "kolledj", AmountRub: money.Amount(50000000)},
-		// ООП/РПД подтверждены в вузе — этот минимум закрыт.
+		// ООП/РПД подтверждены в вузе - этот минимум закрыт.
 		{CategoryCode: "ood_rpd", Audience: "vuz", AmountRub: money.Amount(203985000)},
 	}
 	chips := map[string]mandatoryChip{}
@@ -38,7 +38,7 @@ func TestHigherEducationChipsIgnoreNonUniversityAudiences(t *testing.T) {
 	}
 }
 
-// Каждый чип обязан объяснять своё правило, а альтернатива ТОП-ИТ — условие
+// Каждый чип обязан объяснять своё правило, а альтернатива ТОП-ИТ - условие
 // пункта 22 Порядка, иначе пользователь не поймёт, почему минимум закрыт.
 func TestHigherEducationChipsExplainTheirRule(t *testing.T) {
 	for _, chip := range higherEducationChips(nil) {

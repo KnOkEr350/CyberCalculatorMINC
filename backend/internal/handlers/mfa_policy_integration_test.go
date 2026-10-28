@@ -22,7 +22,7 @@ func TestMFAGracePeriodEndsAndPolicyGovernsEnforcement(t *testing.T) {
 		now    time.Time
 		want   bool
 	}{
-		{"2FA не требуется — принуждения нет", MFAPolicy{Required: false, GraceHours: 0}, created.Add(time.Hour), false},
+		{"2FA не требуется - принуждения нет", MFAPolicy{Required: false, GraceHours: 0}, created.Add(time.Hour), false},
 		{"без льготного периода требование действует сразу", MFAPolicy{Required: true}, created, true},
 		{"внутри льготного периода", MFAPolicy{Required: true, GraceHours: 48}, created.Add(47 * time.Hour), false},
 		{"на границе льготного периода", MFAPolicy{Required: true, GraceHours: 48}, created.Add(48 * time.Hour), true},
@@ -97,7 +97,7 @@ func TestMFAPolicyAndResetAreAdministered(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Сброс — полномочие системного администратора.
+		// Сброс - полномочие системного администратора.
 		orgAdmin := middleware.AuthUser{ID: tenant.admin, Role: models.RoleOrgAdmin,
 			EntityType: models.EntityOrganization, ITCompanyID: &tenant.company}
 		denied := httptest.NewRecorder()

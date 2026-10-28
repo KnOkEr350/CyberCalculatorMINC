@@ -31,7 +31,7 @@ func TestDefinitionsAreUniqueAndComplete(t *testing.T) {
 	}
 }
 
-// Значения редакции поставки — это те суммы, что записаны в Методике. Тест
+// Значения редакции поставки - это те суммы, что записаны в Методике. Тест
 // фиксирует их отдельно от кода расчёта: подмена ставки правкой таблицы не
 // должна проходить незамеченной.
 func TestShippedEditionMatchesOrder270(t *testing.T) {
@@ -69,7 +69,7 @@ func TestShippedEditionMatchesOrder270(t *testing.T) {
 	}
 }
 
-// Незаданная ставка — ошибка, а не ноль: сумма без ставки хуже отказа.
+// Незаданная ставка - ошибка, а не ноль: сумма без ставки хуже отказа.
 func TestMissingRateIsAnErrorNotZero(t *testing.T) {
 	card := Card{rates: map[string]Rate{}}
 	if _, err := card.Rat(TeacherHourVuz); err == nil {

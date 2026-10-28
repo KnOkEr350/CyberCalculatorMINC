@@ -8,7 +8,7 @@ import (
 	"cybercalc/internal/xlsx"
 )
 
-// Action — решение оператора по записи с расхождением.
+// Action - решение оператора по записи с расхождением.
 type Action string
 
 const (
@@ -23,7 +23,7 @@ var actionLabels = map[Action]string{
 	ActionAdd:    "добавить",
 }
 
-// Decision — решение оператора вместе с причиной и автором: без причины
+// Decision - решение оператора вместе с причиной и автором: без причины
 // решение по спорной записи не имеет смысла.
 type Decision struct {
 	Action Action
@@ -55,7 +55,7 @@ var statusLabels = map[Status]string{
 // исключения и решение оператора по каждому. Решение, которого ещё нет,
 // показывается как «не принято»: протокол честно отражает незакрытые вопросы.
 //
-// Идентичные записи в перечень различий не входят — их число видно в сводке.
+// Идентичные записи в перечень различий не входят - их число видно в сводке.
 func BuildProtocol(source ProtocolSource, result Result, decisions map[string]Decision) ([]byte, error) {
 	summary := [][]interface{}{
 		{"Отправитель (организация)", source.SenderOrgID},
@@ -104,11 +104,11 @@ func BuildProtocol(source ProtocolSource, result Result, decisions map[string]De
 				rows = append(rows, concat(base, []interface{}{diff.Field, display(diff.Local), display(diff.Incoming)}, tail))
 			}
 		case item.Status == StatusAmbiguous:
-			rows = append(rows, concat(base, []interface{}{"—", item.Detail, ""}, tail))
+			rows = append(rows, concat(base, []interface{}{"-", item.Detail, ""}, tail))
 		case item.Local != nil:
-			rows = append(rows, concat(base, []interface{}{"—", display(item.Local.Payload), ""}, tail))
+			rows = append(rows, concat(base, []interface{}{"-", display(item.Local.Payload), ""}, tail))
 		case item.Incoming != nil:
-			rows = append(rows, concat(base, []interface{}{"—", "", display(item.Incoming.Payload)}, tail))
+			rows = append(rows, concat(base, []interface{}{"-", "", display(item.Incoming.Payload)}, tail))
 		}
 	}
 	summary = append(summary, []interface{}{"Различий без решения", undecided})

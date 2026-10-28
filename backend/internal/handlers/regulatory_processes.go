@@ -14,7 +14,7 @@ import (
 	"cybercalc/internal/regulatory"
 )
 
-// RegulatoryHandlers — регламентные процессы Приказа № 270: проект
+// RegulatoryHandlers - регламентные процессы Приказа № 270: проект
 // соглашения, предварительный и итоговый перечни (WF-01, WF-03–WF-05).
 type RegulatoryHandlers struct {
 	DB *sql.DB
@@ -51,7 +51,7 @@ type eventView struct {
 	At      string `json:"occurred_at"`
 }
 
-// processAccess — как пользователь связан с соглашением процесса.
+// processAccess - как пользователь связан с соглашением процесса.
 type processAccess struct {
 	author   bool // подготовка и отправка: ИТ-организация соглашения
 	reviewer bool // рассмотрение: образовательная организация соглашения
@@ -91,7 +91,7 @@ func (h *RegulatoryHandlers) accessToAgreement(ctx context.Context, u middleware
 	return access, nil
 }
 
-// authorizedActions — какие действия из допустимых процессом доступны
+// authorizedActions - какие действия из допустимых процессом доступны
 // пользователю. Автор отправляет и дорабатывает, рецензент отвечает;
 // сотрудник ИТ-организации может зафиксировать ответ контрагента, но только
 // с указанием основания.

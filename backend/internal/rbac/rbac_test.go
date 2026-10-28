@@ -7,7 +7,7 @@ import (
 )
 
 // SEC-01: модель разрешений описана данными. Роль, добавленная в модель и не
-// внесённая в таблицу, не получает ничего — и это должно быть видно сразу, а
+// внесённая в таблицу, не получает ничего - и это должно быть видно сразу, а
 // не проявиться отсутствующей проверкой в одном из обработчиков.
 func TestEveryModelRoleIsDescribed(t *testing.T) {
 	for _, role := range All() {
@@ -87,7 +87,7 @@ func TestSpecialistsDoNotReachReportingAuthority(t *testing.T) {
 	if Allows(models.RoleCurator, ApproveReports) {
 		t.Error("куратор не может утверждать собственный отчёт")
 	}
-	// Утверждение справочника — только у системного администратора.
+	// Утверждение справочника - только у системного администратора.
 	for _, role := range All() {
 		if role == models.RoleSuperAdmin {
 			continue
@@ -99,7 +99,7 @@ func TestSpecialistsDoNotReachReportingAuthority(t *testing.T) {
 }
 
 // Горизонтальный обход: профиль образовательной организации ограничен своей
-// организацией в любой роли, а куратор ИТ-компании — своим закреплением.
+// организацией в любой роли, а куратор ИТ-компании - своим закреплением.
 func TestScopeNeverWidensForEducationProfile(t *testing.T) {
 	for _, role := range All() {
 		if got := ScopeOf(role, models.EntityEduInst); got != ScopePartner {
@@ -121,7 +121,7 @@ func TestScopeNeverWidensForEducationProfile(t *testing.T) {
 func TestLegalSpecialistIsReadOnly(t *testing.T) {
 	definition := Roles[models.RoleLegalSpecialist]
 	if len(definition.Permissions) != 1 || definition.Permissions[0] != ReadTenantData {
-		t.Fatalf("юрист должен иметь ровно одно полномочие — чтение: %v", definition.Permissions)
+		t.Fatalf("юрист должен иметь ровно одно полномочие - чтение: %v", definition.Permissions)
 	}
 	for _, permission := range everyPermission() {
 		if permission == ReadTenantData {
@@ -154,7 +154,7 @@ func TestAuditorIsStrictlyReadOnly(t *testing.T) {
 func everyPermission() []Permission { return Permissions() }
 
 // Каждое объявленное полномочие кому-то принадлежит: неиспользуемое
-// полномочие — признак, что проверка потерялась.
+// полномочие - признак, что проверка потерялась.
 func TestEveryPermissionIsGrantedToSomeone(t *testing.T) {
 	for _, permission := range everyPermission() {
 		granted := false

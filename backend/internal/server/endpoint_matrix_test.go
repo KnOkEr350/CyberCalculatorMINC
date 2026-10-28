@@ -13,7 +13,7 @@ import (
 	"cybercalc/internal/platform/featureflags"
 )
 
-// publicOperations — единственные операции, доступные без входа в систему.
+// publicOperations - единственные операции, доступные без входа в систему.
 // Список закрытый: новый маршрут по умолчанию требует аутентификации, и чтобы
 // открыть его всем, нужно осознанно добавить строку сюда.
 var publicOperations = map[string]string{
@@ -63,7 +63,7 @@ func TestEveryRegisteredEndpointRequiresAuthentication(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, httptest.NewRequest(operation.Method, path, nil))
 		// Безопасный метод отклоняется отсутствием сессии; изменяющий сначала
-		// упирается в защиту от межсайтовых запросов — она срабатывает раньше
+		// упирается в защиту от межсайтовых запросов - она срабатывает раньше
 		// и тоже не пускает запрос к обработчику.
 		if operation.Method == http.MethodGet || operation.Method == http.MethodHead {
 			if recorder.Code != http.StatusUnauthorized {

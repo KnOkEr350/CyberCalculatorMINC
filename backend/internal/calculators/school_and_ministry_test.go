@@ -24,7 +24,7 @@ func TestSchoolProgramClassRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	validator := calc.(payloadValidator)
-	allowed := []string{"5-11", "7", "5, 6, 7", "8—9", "с 10 по 11", ""}
+	allowed := []string{"5-11", "7", "5, 6, 7", "8-9", "с 10 по 11", ""}
 	for _, value := range allowed {
 		payload := schoolProgramPayload()
 		payload["class_range"] = value
@@ -60,7 +60,7 @@ func TestSchoolProgramClassRange(t *testing.T) {
 	}
 }
 
-// SCH-03: Вид 7 — разработка программы плюс часы на каждого обученного
+// SCH-03: Вид 7 - разработка программы плюс часы на каждого обученного
 // учителя (`programs×1408570 + hours×teachers×3790`).
 func TestTeacherTrainingFormulaCountsHoursPerTeacher(t *testing.T) {
 	calc, err := Get("teacher_training")
@@ -94,7 +94,7 @@ func TestTeacherTrainingFormulaCountsHoursPerTeacher(t *testing.T) {
 	}
 }
 
-// SCH-04: Вид 8 — человеко-месяцы доступа: школьник 6 800 ₽, учитель 8 590 ₽.
+// SCH-04: Вид 8 - человеко-месяцы доступа: школьник 6 800 ₽, учитель 8 590 ₽.
 func TestEducationalContentCountsPersonMonths(t *testing.T) {
 	calc, err := Get("edu_content")
 	if err != nil {

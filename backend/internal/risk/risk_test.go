@@ -61,7 +61,7 @@ func TestEachAxisMovesTheLevelIndependently(t *testing.T) {
 func TestLevelIsTheWorstRuleAndReasonsKeepTheirOrder(t *testing.T) {
 	got := Evaluate(Inputs{ReadinessState: "red", ReadinessBlocking: []string{"нет акта"}, Eligible: false, Disputed: true, DisputeReason: "подпись"})
 	if got.Level != High {
-		t.Fatalf("самое тяжёлое правило — HIGH: %s", got.Level)
+		t.Fatalf("самое тяжёлое правило - HIGH: %s", got.Level)
 	}
 	want := []string{"нет акта", "Юридическое сомнение: подпись", "Мероприятие не прошло нормативное согласование"}
 	if !reflect.DeepEqual(got.Reasons(), want) {

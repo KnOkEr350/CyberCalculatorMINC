@@ -14,10 +14,10 @@ import (
 	"cybercalc/internal/cryptoengine"
 )
 
-// ExportRequest — что и кому отправляется.
+// ExportRequest - что и кому отправляется.
 type ExportRequest struct {
 	OrganizationID string
-	// Signer — представитель отправителя. Закрытый ключ здесь не передаётся:
+	// Signer - представитель отправителя. Закрытый ключ здесь не передаётся:
 	// подписывает провайдер по ссылке на ключ.
 	Signer     cryptoengine.SignerRef
 	Recipients []cryptoengine.RecipientRef
@@ -36,7 +36,7 @@ type payloadDocument struct {
 //
 // Открытый текст существует только в памяти этого вызова и сразу уходит на
 // шифрование: ни временных файлов, ни журналов с содержимым нет. Ключ
-// содержимого один, но обёрнут отдельно для каждого получателя — пакет
+// содержимого один, но обёрнут отдельно для каждого получателя - пакет
 // открывает только тот, кому он адресован.
 func Export(ctx context.Context, engine cryptoengine.Engine, request ExportRequest) ([]byte, error) {
 	if err := validateExport(request); err != nil {
@@ -142,7 +142,7 @@ func validateExport(request ExportRequest) error {
 
 // sortedRecords упорядочивает записи по ключу: один и тот же набор всегда даёт
 // один и тот же открытый текст. Заодно отсекаются записи без ключа и
-// дубликаты — отправлять данные, которые получатель не сможет сопоставить,
+// дубликаты - отправлять данные, которые получатель не сможет сопоставить,
 // бессмысленно.
 func sortedRecords(records []Record) ([]Record, error) {
 	type keyed struct {

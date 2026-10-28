@@ -49,7 +49,7 @@ func (manualCalc) Fields() []FieldSpec {
 
 // Validate проверяет динамические показатели мероприятия по Решению
 // Минцифры (MIN-02) и подтверждённую стоимость (MIN-03). Метрика, единица и
-// объёмы задаются самим Решением, поэтому система не знает их наперёд — но
+// объёмы задаются самим Решением, поэтому система не знает их наперёд - но
 // обязана убедиться, что значения имеют правильный тип и смысл.
 func (manualCalc) Validate(payload map[string]interface{}) error {
 	instructionType, err := str(payload, "instruction_type")
@@ -97,7 +97,7 @@ func (manualCalc) Validate(payload map[string]interface{}) error {
 	if err != nil {
 		return fmt.Errorf("укажите единицу измерения объёма из Решения Минцифры")
 	}
-	// Единица измерения — это название («модуль ПО», «мероприятие»), а не
+	// Единица измерения - это название («модуль ПО», «мероприятие»), а не
 	// число: числовая единица означает, что поля перепутали местами.
 	if _, numeric := new(big.Rat).SetString(strings.ReplaceAll(unit, ",", ".")); numeric {
 		return fmt.Errorf("единица измерения должна быть названием, а не числом: %q", unit)

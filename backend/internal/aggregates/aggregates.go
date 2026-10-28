@@ -1,10 +1,10 @@
 // Package aggregates держит кэш агрегатов вклада мероприятий (RISK-08).
 //
 // Кэш строится из общей проекции (activityprojection.Reader) и ничего не
-// добавляет к источнику: каждая сумма — та же, что даёт проекция. Пересборка
+// добавляет к источнику: каждая сумма - та же, что даёт проекция. Пересборка
 // идемпотентна, атомарна по (арендатор, год) и защищена от параллельного
 // запуска. Verify пересчитывает срез с нуля и сообщает любое расхождение с
-// кэшем — на этом держится проверка «суммы совпадают с источником».
+// кэшем - на этом держится проверка «суммы совпадают с источником».
 package aggregates
 
 import (
@@ -19,7 +19,7 @@ import (
 	"cybercalc/internal/platform/activityprojection"
 )
 
-// Row — одна строка кэша.
+// Row - одна строка кэша.
 type Row struct {
 	PartnerID, AgreementID, CategoryCode, Audience string
 	PlanEntries, FactEntries                       int
@@ -133,14 +133,14 @@ func Read(ctx context.Context, db *sql.DB, tenantID string, year int) ([]Row, er
 	return out, rows.Err()
 }
 
-// Mismatch — расхождение между кэшем и заново посчитанным срезом.
+// Mismatch - расхождение между кэшем и заново посчитанным срезом.
 type Mismatch struct {
 	Key    string
 	Detail string
 }
 
 // Verify пересчитывает срез из источника и сравнивает с кэшем построчно.
-// Пустой результат — кэш точен. Отсутствующая или лишняя строка — расхождение.
+// Пустой результат - кэш точен. Отсутствующая или лишняя строка - расхождение.
 func Verify(ctx context.Context, db *sql.DB, reader activityprojection.Reader, tenantID string, year int) ([]Mismatch, error) {
 	fresh, _, err := fromProjection(ctx, reader, tenantID, year)
 	if err != nil {

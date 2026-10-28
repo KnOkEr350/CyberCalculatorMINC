@@ -369,7 +369,7 @@ type updateSettingRequest struct {
 }
 
 // UpdateSetting позволяет админу регулировать, например,
-// attachment_retention_days ("но администратор может это регулировать" — ТЗ).
+// attachment_retention_days ("но администратор может это регулировать" - ТЗ).
 func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, admin middleware.AuthUser) {
 	var req updateSettingRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -396,7 +396,7 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 		}
 	}
 	// SEC-02: режим инстанса определяет, кого система считает контрагентом, и
-	// меняет смысл всего реестра партнёров. Такое переключение — полномочие
+	// меняет смысл всего реестра партнёров. Такое переключение - полномочие
 	// системного администратора, а не любого администратора организации.
 	if req.Key == "system_owner_role" {
 		if admin.Role != models.RoleSuperAdmin {
@@ -408,7 +408,7 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 			return
 		}
 	}
-	// SEC-07: требование второго фактора и льготный период — политика доступа
+	// SEC-07: требование второго фактора и льготный период - политика доступа
 	// ко всей системе, поэтому их задаёт только системный администратор.
 	if req.Key == settingMFARequired || req.Key == settingMFAGraceHours {
 		if admin.Role != models.RoleSuperAdmin {
@@ -454,7 +454,7 @@ func (h *AdminHandlers) UpdateSetting(w http.ResponseWriter, r *http.Request, ad
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
 		return
 	}
-	// audit_log.entity_id имеет тип UUID, а ключ настройки — строка; сам ключ
+	// audit_log.entity_id имеет тип UUID, а ключ настройки - строка; сам ключ
 	// сохраняется в new_value, поэтому UUID для этого типа события не задаём.
 	if logAudit(r.Context(), tx, "settings", "", "settings_change", admin.ID, "", nil, req) != nil || tx.Commit() != nil {
 		middleware.WriteError(w, 500, "ошибка сохранения")

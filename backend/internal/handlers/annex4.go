@@ -81,7 +81,7 @@ func activityMetrics(category string, payload map[string]interface{}) (volume, r
 
 func annex4Key(partnerID, category string) string { return partnerID + "\x00" + category }
 
-// annex4Headers — 13 граф годового плана мероприятий (Приложение № 4 к
+// annex4Headers - 13 граф годового плана мероприятий (Приложение № 4 к
 // Приказу № 270): план на 31 декабря и факт на 1 мая в одной форме.
 var annex4Headers = []string{
 	"№ п/п", "Наименование ОО / РОИВ", "Реквизиты соглашения", "Уровень образования",
@@ -240,7 +240,7 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	// Приложение № 4 читает факт исключительно из подписанного снимка на
-	// 1 мая (WF-08) — источник фиксируется в реестре (REPORT-11), а не
+	// 1 мая (WF-08) - источник фиксируется в реестре (REPORT-11), а не
 	// только внутри самого файла, чтобы его можно было найти без скачивания.
 	filters := reportFilters("partner_id", partnerFilter, "agreement_id", strings.TrimSpace(r.URL.Query().Get("agreement_id")),
 		"snapshot_id", snapshotID, "snapshot_sha256", snapshotHash)

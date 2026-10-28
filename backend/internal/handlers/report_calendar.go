@@ -22,7 +22,7 @@ type regulatoryMilestone struct {
 
 // regulatoryMilestones возвращает контрольные даты отчётного года. Счёт дней
 // ведётся по московским датам (ADR-02): «осталось дней» не должно зависеть от
-// часового пояса браузера, а сама дата — от времени суток.
+// часового пояса браузера, а сама дата - от времени суток.
 func regulatoryMilestones(year int, now time.Time) []regulatoryMilestone {
 	nowYear, nowMonth, nowDay := now.In(businessLocation).Date()
 	today := time.Date(nowYear, nowMonth, nowDay, 0, 0, 0, 0, businessLocation)

@@ -12,7 +12,7 @@ import (
 )
 
 // OPS-12 на реальной БД: срез состояния подсистем собирается целиком и
-// показывает то, по чему принимают решения — сроки, снимок, хранилище, журнал,
+// показывает то, по чему принимают решения - сроки, снимок, хранилище, журнал,
 // базу. Инстанс стоит в закрытом контуре, и другого источника этих данных нет.
 func TestOperationsMetricsCoverEverySubsystem(t *testing.T) {
 	db, _ := integrationDB(t)
@@ -48,7 +48,7 @@ func TestOperationsMetricsCoverEverySubsystem(t *testing.T) {
 		if metrics.Timers.ReportYear == 0 || metrics.Snapshot.ReportYear == 0 {
 			t.Fatal("срез должен называть отчётный год")
 		}
-		// Целостность журнала — то, ради чего срез и смотрят.
+		// Целостность журнала - то, ради чего срез и смотрят.
 		if !metrics.Audit.ChainVerified {
 			t.Fatalf("цепочка журнала должна быть целой: %s", metrics.Audit.ChainProblem)
 		}

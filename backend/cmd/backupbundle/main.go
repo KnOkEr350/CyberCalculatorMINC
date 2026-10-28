@@ -104,7 +104,7 @@ func main() {
 			if !check.Passed {
 				mark = "СБОЙ"
 			}
-			fmt.Printf("%s %s — %s\n", mark, check.Name, check.Detail)
+			fmt.Printf("%s %s - %s\n", mark, check.Name, check.Detail)
 		}
 		if err != nil {
 			fail("учебное восстановление не пройдено: %v", err)

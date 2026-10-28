@@ -68,7 +68,7 @@ func TestEscalationSkipsAdministratorsWithoutThePermission(t *testing.T) {
 	if d.Route != RouteSuperAdmin || d.Assignee != "sa" {
 		t.Fatalf("ORG_ADMIN без полномочия должен быть пропущен: %+v", d)
 	}
-	// Полномочия нет ни у кого из администраторов — исполнителя нет.
+	// Полномочия нет ни у кого из администраторов - исполнителя нет.
 	none := Resolve(Requirement{Role: models.RoleLegalSpecialist, Permission: rbac.Permission("does.not.exist")},
 		Candidates{OrgAdmins: []string{"oa"}, SuperAdmins: []string{"sa"}})
 	if none.Route != RouteUnassigned {
@@ -86,8 +86,8 @@ func TestCanExecute(t *testing.T) {
 		want       bool
 	}{
 		{"специалист выполняет своё", models.RoleHRSpecialist, true, RouteSpecialist, rbac.EditInternshipEntries, true},
-		{"куратор — делегированное", models.RoleCurator, true, RouteCurator, rbac.EditInternshipEntries, true},
-		{"куратор — недоделегированное", models.RoleCurator, true, RouteCurator, rbac.ApproveReports, false},
+		{"куратор - делегированное", models.RoleCurator, true, RouteCurator, rbac.EditInternshipEntries, true},
+		{"куратор - недоделегированное", models.RoleCurator, true, RouteCurator, rbac.ApproveReports, false},
 		{"куратор по маршруту curator не получает свои полномочия сверх делегированных", models.RoleCurator, true, RouteCurator, rbac.ManagePartnerStructure, false},
 		{"не исполнитель", models.RoleOrgAdmin, false, RouteOrgAdmin, rbac.ApproveReports, false},
 		{"администратор при эскалации", models.RoleOrgAdmin, true, RouteOrgAdmin, rbac.ApproveReports, true},

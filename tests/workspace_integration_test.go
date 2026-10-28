@@ -392,7 +392,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 		"labor_contract_type", "labor_contract_number", "labor_contract_date",
 		"mentor_assignment_start", "mentor_assignment_end", "mentor_order_number", "mentor_order_date",
 		"Номер договора о практической подготовке", "Дата договора о практической подготовке",
-		// PRA-04: возраст и недельные часы обязательны — без них нечем
+		// PRA-04: возраст и недельные часы обязательны - без них нечем
 		// подтвердить нормы ТК РФ (ст. 63, 92), и практика к зачёту не
 		// принимается.
 		"student_age", "weekly_hours",

@@ -12,12 +12,12 @@ import (
 )
 
 // QA-01 / OOP-02 / TCH-04: соответствие формул Приложению № 6 к Приказу
-// № 270. Главный объект проверки — CalculateAmount: именно его результат
+// № 270. Главный объект проверки - CalculateAmount: именно его результат
 // сохраняется в entries.formula_amount_rub при ручном вводе и XLSX-импорте,
 // и тарифы в нём заданы отдельно от float-калькуляторов экранов.
 //
-// Тарифы ниже записаны строками ровно так, как они напечатаны в Приказе, —
-// в тыс. руб. с десятичной запятой, — чтобы каждую цифру можно было сверить
+// Тарифы ниже записаны строками ровно так, как они напечатаны в Приказе, -
+// в тыс. руб. с десятичной запятой, - чтобы каждую цифру можно было сверить
 // с первоисточником без пересчёта в уме.
 
 // annex6 переводит тариф Приказа из «тыс. руб.» (например, "2039,85") в
@@ -40,7 +40,7 @@ type conformanceCase struct {
 	category string
 	audience models.Audience
 	payload  map[string]interface{}
-	// want — ожидаемая сумма, выраженная через тарифы Приказа.
+	// want - ожидаемая сумма, выраженная через тарифы Приказа.
 	want func(t *testing.T) money.Amount
 }
 
@@ -62,13 +62,13 @@ func conformanceCases() []conformanceCase {
 		conformanceCase{"Вид 1 ВО, 64 ак. часа (пример ТЗ: 264 960 ₽)", "teachers", models.AudienceVuz,
 			map[string]interface{}{"academic_hours": 64.0},
 			func(t *testing.T) money.Amount { return times(t, "4,14", 64) }},
-		conformanceCase{"Вид 1 ВО, полчаса — без потери копеек", "teachers", models.AudienceVuz,
+		conformanceCase{"Вид 1 ВО, полчаса - без потери копеек", "teachers", models.AudienceVuz,
 			map[string]interface{}{"academic_hours": 0.5},
 			func(t *testing.T) money.Amount { return annex6(t, "4,14") / 2 }},
 	)
 
 	// Вид 2. Астрономический час стажёра 0,8; час наставника 2,39 (ВО и СПО
-	// одинаково). Стажировка и практика с трудоустройством — одна формула.
+	// одинаково). Стажировка и практика с трудоустройством - одна формула.
 	for _, category := range []string{"internship", "employment_practice"} {
 		cases = append(cases,
 			conformanceCase{category + ": 1 ч студента", category, models.AudienceVuz,
@@ -99,7 +99,7 @@ func conformanceCases() []conformanceCase {
 		{"rpd", "vo", "expertise", "55,00", models.AudienceVuz},
 		{"rpd", "spo", "development", "270,75", models.AudienceKolledj},
 		{"rpd", "spo", "update", "150", models.AudienceKolledj},
-		// Экспертиза РПД для СПО дороже, чем для ВО, — так в самом Приказе.
+		// Экспертиза РПД для СПО дороже, чем для ВО, - так в самом Приказе.
 		{"rpd", "spo", "expertise", "58,06", models.AudienceKolledj},
 	}
 	for _, c := range oop {
@@ -132,7 +132,7 @@ func conformanceCases() []conformanceCase {
 		conformanceCase{"Вид 7: 1 ч на 1 учителя", "teacher_training", models.AudienceSchool,
 			map[string]interface{}{"developed_programs_count": 0.0, "academic_hours_per_teacher": 1.0, "trained_teachers_count": 1.0},
 			func(t *testing.T) money.Amount { return annex6(t, "3,79") }},
-		conformanceCase{"Вид 7: пример ADR-12 — 1 программа, 72 ч, 10 учителей", "teacher_training", models.AudienceSchool,
+		conformanceCase{"Вид 7: пример ADR-12 - 1 программа, 72 ч, 10 учителей", "teacher_training", models.AudienceSchool,
 			map[string]interface{}{"developed_programs_count": 1.0, "academic_hours_per_teacher": 72.0, "trained_teachers_count": 10.0},
 			func(t *testing.T) money.Amount { return annex6(t, "1408,57") + times(t, "3,79", 720) }},
 	)

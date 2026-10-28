@@ -12,11 +12,11 @@ import (
 	"cybercalc/internal/topit"
 )
 
-// TopItemHandlers — составляющие программы ТОП-ИТ/ТОП-ИИ: неденежная
+// TopItemHandlers - составляющие программы ТОП-ИТ/ТОП-ИИ: неденежная
 // поддержка, стипендиаты, производственные кейсы (TOP-04, TOP-06, TOP-07).
 type TopItemHandlers struct{ DB *sql.DB }
 
-// topItemRequest — строка составляющей программы; поля и правила — в topit.Input.
+// topItemRequest - строка составляющей программы; поля и правила - в topit.Input.
 type topItemRequest struct {
 	Kind  string `json:"kind"`
 	Title string `json:"title"`
@@ -46,7 +46,7 @@ type topItemRequest struct {
 	Authors            string   `json:"authors,omitempty"`
 	UniversitySharePct *float64 `json:"university_share_pct,omitempty"`
 	CompanySharePct    *float64 `json:"company_share_pct,omitempty"`
-	// DocumentIDs — вложения записи, подтверждающие строку.
+	// DocumentIDs - вложения записи, подтверждающие строку.
 	DocumentIDs []string `json:"document_ids,omitempty"`
 }
 
@@ -113,7 +113,7 @@ func (h *TopItemHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"items": items, "summary": summary, "progress": progress})
 }
 
-// progress — шкала софинансирования (ADR-14) и норма вуза от гранта.
+// progress - шкала софинансирования (ADR-14) и норма вуза от гранта.
 func (h *TopItemHandlers) progress(r *http.Request, entryID string) (map[string]interface{}, error) {
 	var planned, grant sql.NullString
 	var spent string

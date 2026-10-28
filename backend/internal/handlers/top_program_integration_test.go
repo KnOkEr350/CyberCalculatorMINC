@@ -14,7 +14,7 @@ import (
 )
 
 // TOP-01, TOP-04, TOP-06, TOP-07 на реальной БД: паспорт программы выводится
-// из payload, а составляющие — поддержка, стипендиаты, кейсы — проверяются
+// из payload, а составляющие - поддержка, стипендиаты, кейсы - проверяются
 // правилами вида, правами роли и границей арендатора.
 func TestTopProgramModelAndItems(t *testing.T) {
 	db, year := integrationDB(t)
@@ -124,7 +124,7 @@ func TestTopProgramModelAndItems(t *testing.T) {
 			t.Fatalf("сводка: %+v", s)
 		}
 		// ADR-14: план X = 300 000 из паспорта, списано 225 000 → 75%, жёлтая зона;
-		// норма вуза — 70% от гранта 1 500 000,50.
+		// норма вуза - 70% от гранта 1 500 000,50.
 		if _, err := db.ExecContext(ctx, `UPDATE entries SET payload=payload||'{"actual_spent_amount_rub":"225000"}' WHERE id::text=$1`, entry); err != nil {
 			t.Fatal(err)
 		}
@@ -238,7 +238,7 @@ func TestTopProgramModelAndItems(t *testing.T) {
 			return rec.Code
 		}
 		if del(hr) != 403 || del(author) != 200 || del(author) != 404 {
-			t.Fatal("удаляет автор, повторное удаление — 404, кадровая служба — 403")
+			t.Fatal("удаляет автор, повторное удаление - 404, кадровая служба - 403")
 		}
 		var audited int
 		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM audit_log WHERE entity_type='top_program_item' AND entity_id=$1`, supportID).Scan(&audited); err != nil || audited != 3 {

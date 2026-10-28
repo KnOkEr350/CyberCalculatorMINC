@@ -32,7 +32,7 @@ type Config struct {
 	CookieSecure      bool
 	ScannerAddress    string
 	// STORE-05: что делать, когда антивирус не ответил. По умолчанию
-	// "reject" — непроверенный файл не принимается; "quarantine" принимает
+	// "reject" - непроверенный файл не принимается; "quarantine" принимает
 	// его, но держит недоступным до повторной проверки.
 	ScannerUnavailablePolicy string
 	UploadQuotaBytes         int64

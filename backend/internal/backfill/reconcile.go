@@ -6,22 +6,22 @@ import (
 	"fmt"
 )
 
-// Gate — один барьер сверки перед отключением старого чтения (INTG-04).
+// Gate - один барьер сверки перед отключением старого чтения (INTG-04).
 type Gate struct {
 	Name   string
 	Passed bool
 	Detail string
 }
 
-// ReconcileReport — результат сверки: перейти на новую модель можно, когда
+// ReconcileReport - результат сверки: перейти на новую модель можно, когда
 // пройдены все барьеры целостности, а открытых находок переноса не осталось.
 type ReconcileReport struct {
 	Gates []Gate
-	// OpenFindings — не разобранные находки переноса записей и справочников.
+	// OpenFindings - не разобранные находки переноса записей и справочников.
 	OpenFindings int
 }
 
-// Consistent — все барьеры целостности пройдены.
+// Consistent - все барьеры целостности пройдены.
 func (r ReconcileReport) Consistent() bool {
 	for _, gate := range r.Gates {
 		if !gate.Passed {
@@ -31,7 +31,7 @@ func (r ReconcileReport) Consistent() bool {
 	return true
 }
 
-// ReadyForCutover — целостность подтверждена и разбирать больше нечего.
+// ReadyForCutover - целостность подтверждена и разбирать больше нечего.
 func (r ReconcileReport) ReadyForCutover() bool { return r.Consistent() && r.OpenFindings == 0 }
 
 func (r ReconcileReport) String() string {
@@ -45,7 +45,7 @@ func (r ReconcileReport) String() string {
 	return text
 }
 
-// gates — проверки «должно быть 0»: каждая возвращает число нарушающих строк.
+// gates - проверки «должно быть 0»: каждая возвращает число нарушающих строк.
 var gates = []struct{ name, description, query string }{
 	{"ood_rpd.typed_matches_payload", "типизированные поля ООП/РПД совпадают с payload",
 		`SELECT count(*) FROM entries WHERE category_code='ood_rpd'

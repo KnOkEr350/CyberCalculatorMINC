@@ -170,7 +170,7 @@ func (h *EntryHandlers) Import(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, err.Error())
 		return
 	}
-	// DATA-07: все строки файла считаются по одной редакции ставок — той, что
+	// DATA-07: все строки файла считаются по одной редакции ставок - той, что
 	// действует на отчётный год импорта.
 	importTariffs, err := tariffs.Load(r.Context(), h.DB, year)
 	if err != nil {

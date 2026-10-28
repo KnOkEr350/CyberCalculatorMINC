@@ -40,14 +40,14 @@ func TestRiskMatrixProgramsAndDisciplines(t *testing.T) {
 		documents []string
 		want      string
 	}{
-		{"полный пакет — зелёная зона", nil, programDocuments(), "green"},
-		{"ОО не предоставила проект — красная зона",
+		{"полный пакет - зелёная зона", nil, programDocuments(), "green"},
+		{"ОО не предоставила проект - красная зона",
 			nil, without(programDocuments(), "program_project"), "red"},
-		{"эксперт не назначен для экспертизы — красная зона",
+		{"эксперт не назначен для экспертизы - красная зона",
 			func(p map[string]interface{}) { delete(p, "expert_full_name") }, programDocuments(), "red"},
-		{"заключение не подписано — жёлтая зона",
+		{"заключение не подписано - жёлтая зона",
 			nil, without(programDocuments(), "expert_conclusion"), "yellow"},
-		{"Учёный совет не утвердил — жёлтая зона",
+		{"Учёный совет не утвердил - жёлтая зона",
 			nil, without(programDocuments(), "academic_council_protocol"), "yellow"},
 	}
 	for _, tc := range cases {
@@ -96,16 +96,16 @@ func TestRiskMatrixTopIT(t *testing.T) {
 		documents []string
 		want      string
 	}{
-		{"освоено 100% и есть письмо АЦ — зелёная зона", 1000, topDocuments(), "green"},
-		{"освоено больше плана — зелёная зона", 1200, topDocuments(), "green"},
-		// ТЗ §7.5: 70–99.9% — зона внимания, а не выполнение.
-		{"освоено 70% — жёлтая зона внимания", 700, topDocuments(), "yellow"},
-		{"освоено 99.9% — жёлтая зона внимания", 999, topDocuments(), "yellow"},
-		{"освоено меньше 70% — красная зона", 699, topDocuments(), "red"},
-		{"договор не подписан — красная зона", 1000, without(topDocuments(), "top_agreement"), "red"},
-		{"средства не переведены — красная зона", 1000, without(topDocuments(), "payment_order"), "red"},
-		{"отчёт о списании не предоставлен — красная зона", 1000, without(topDocuments(), "spending_act"), "red"},
-		{"нет письма АНО АЦ — жёлтая зона", 1000, without(topDocuments(), "ano_letter"), "yellow"},
+		{"освоено 100% и есть письмо АЦ - зелёная зона", 1000, topDocuments(), "green"},
+		{"освоено больше плана - зелёная зона", 1200, topDocuments(), "green"},
+		// ТЗ §7.5: 70–99.9% - зона внимания, а не выполнение.
+		{"освоено 70% - жёлтая зона внимания", 700, topDocuments(), "yellow"},
+		{"освоено 99.9% - жёлтая зона внимания", 999, topDocuments(), "yellow"},
+		{"освоено меньше 70% - красная зона", 699, topDocuments(), "red"},
+		{"договор не подписан - красная зона", 1000, without(topDocuments(), "top_agreement"), "red"},
+		{"средства не переведены - красная зона", 1000, without(topDocuments(), "payment_order"), "red"},
+		{"отчёт о списании не предоставлен - красная зона", 1000, without(topDocuments(), "spending_act"), "red"},
+		{"нет письма АНО АЦ - жёлтая зона", 1000, without(topDocuments(), "ano_letter"), "yellow"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,10 +128,10 @@ func TestRiskMatrixSchoolTrack(t *testing.T) {
 			documents []string
 			want      string
 		}{
-			{"соглашение, группы и акт — зелёная зона", schoolDocuments(), "green"},
-			{"нет соглашения со школой или РОИВ — красная зона", without(schoolDocuments(), "school_agreement"), "red"},
-			{"группы учащихся не сформированы — красная зона", without(schoolDocuments(), "participant_groups"), "red"},
-			{"нет акта сдачи-приёмки — жёлтая зона", without(schoolDocuments(), "acceptance_act"), "yellow"},
+			{"соглашение, группы и акт - зелёная зона", schoolDocuments(), "green"},
+			{"нет соглашения со школой или РОИВ - красная зона", without(schoolDocuments(), "school_agreement"), "red"},
+			{"группы учащихся не сформированы - красная зона", without(schoolDocuments(), "participant_groups"), "red"},
+			{"нет акта сдачи-приёмки - жёлтая зона", without(schoolDocuments(), "acceptance_act"), "yellow"},
 		}
 		for _, tc := range cases {
 			t.Run(category+": "+tc.name, func(t *testing.T) {

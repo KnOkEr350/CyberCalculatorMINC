@@ -87,10 +87,10 @@ func TestProcessChainIsPersistedWithHistory(t *testing.T) {
 	if !errors.Is(err, ErrExists) || again.ID != created.ID {
 		t.Fatalf("повторное создание должно вернуть тот же процесс: %v %s/%s", err, again.ID, created.ID)
 	}
-	// Другой вид и другой год — отдельные процессы.
+	// Другой вид и другой год - отдельные процессы.
 	other, err := Create(ctx, db, KindFinal, s.agreement, 2026, s.admin)
 	if err != nil || other.ID == created.ID {
-		t.Fatalf("другой вид — другой процесс: %v", err)
+		t.Fatalf("другой вид - другой процесс: %v", err)
 	}
 
 	process, events, err := Act(ctx, db, created.ID, ActionSend, s.admin, "", msk("2026-03-02 15:00"), nil)
@@ -153,7 +153,7 @@ func TestProcessChainIsPersistedWithHistory(t *testing.T) {
 	}
 }
 
-// WF-04 / WF-05: согласование по молчанию выполняет фоновое задание — только
+// WF-04 / WF-05: согласование по молчанию выполняет фоновое задание - только
 // после срока, без человека, один раз, и переход виден как действие системы.
 func TestSilenceApprovalIsAutomaticAndIdempotent(t *testing.T) {
 	db := integrationDB(t)
@@ -224,7 +224,7 @@ func TestReworkLapseIsRecordedOnceByTheWorker(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Срок доработки — до 15 марта; 16-го задание фиксирует пропуск.
+	// Срок доработки - до 15 марта; 16-го задание фиксирует пропуск.
 	if _, lapsed, err := ExpireDue(ctx, db, msk("2026-03-16 00:00"), s.agreement); err != nil || lapsed != 1 {
 		t.Fatalf("пропуск доработки должен фиксироваться: lapsed=%d err=%v", lapsed, err)
 	}
@@ -264,7 +264,7 @@ func TestActionAfterSilenceSeesTheDefaultApproval(t *testing.T) {
 	if _, _, err := Act(ctx, db, p.ID, ActionSend, s.admin, "", msk("2026-03-02 10:00"), nil); err != nil {
 		t.Fatal(err)
 	}
-	// Рецензент отвечает 17 марта — на следующий день после срока (до 16-го).
+	// Рецензент отвечает 17 марта - на следующий день после срока (до 16-го).
 	_, applied, err := Act(ctx, db, p.ID, ActionRequestRework, s.admin, "поздние замечания", msk("2026-03-17 09:00"), nil)
 	if !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("ответ после срока: %v", err)

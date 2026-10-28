@@ -120,7 +120,7 @@ func requireAgreement(w http.ResponseWriter, r *http.Request, db *sql.DB, u midd
 	return true
 }
 
-// clause22Basis — обоснование освобождения по п. 22: конкретная иная ОО «B»
+// clause22Basis - обоснование освобождения по п. 22: конкретная иная ОО «B»
 // и записи обязательных Видов 1 и 3, на которых оно держится. ADR-03 требует
 // показывать их, чтобы освобождение можно было проверить, а не принимать на
 // слово.
@@ -213,15 +213,15 @@ func clause22Records(ctx context.Context, q workflowQuerier, agreementID string,
 	return records, teachers, programs, nil
 }
 
-// mandatoryHigherEducationActivities — обязательные виды мероприятий для
+// mandatoryHigherEducationActivities - обязательные виды мероприятий для
 // соглашения с ОО высшего образования по ADR-11: Вид 1 (преподаватели) и
 // Вид 3 (ООП/РПД). Для СПО и школ обязательных видов нет.
 var mandatoryHigherEducationActivities = []string{"teachers", "ood_rpd"}
 
-// clause22AlternativeSatisfied — условие п. 22 Порядка в трактовке ADR-03:
+// clause22AlternativeSatisfied - условие п. 22 Порядка в трактовке ADR-03:
 // ТОП-ИТ/ТОП-ИИ освобождает ОО «A» от прочих видов, если в иной ОО «B» в том
 // же году одновременно реализованы обязательные Вид 1 (преподаватели) и Вид 3
-// (ООП/РПД). Стажировки, практика и решения Минцифры — вариативные виды и в
+// (ООП/РПД). Стажировки, практика и решения Минцифры - вариативные виды и в
 // условие не входят: раньше их требование лишало компанию законного
 // освобождения.
 func clause22AlternativeSatisfied(teachers, programs bool) bool {
@@ -255,7 +255,7 @@ func buildWorkflow(ctx context.Context, q workflowQuerier, u middleware.AuthUser
 	if readyAt.Valid {
 		resp.ReadyAt = &readyAt.Time
 		// Приказ № 270: 10 календарных дней на рассмотрение предварительного
-		// перечня, 20 — итогового; счёт по датам по ADR-02.
+		// перечня, 20 - итогового; счёт по датам по ADR-02.
 		resp.ReviewDays = 10
 		if period == "fact" {
 			resp.ReviewDays = 20

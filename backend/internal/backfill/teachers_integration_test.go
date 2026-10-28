@@ -94,7 +94,7 @@ func TestTeacherBackfillLinksWhatIsUnambiguousAndFlagsTheRest(t *testing.T) {
 	}
 	ivanov := staff("Иванов Иван Иванович")
 	staff("Петров Пётр")
-	staff("Петров  Пётр") // тот же человек с лишним пробелом — совпадение неоднозначно
+	staff("Петров  Пётр") // тот же человек с лишним пробелом - совпадение неоднозначно
 
 	year := time.Now().Year()
 	entry := func(name string, period string, extra string) string {
@@ -177,7 +177,7 @@ func TestTeacherBackfillLinksWhatIsUnambiguousAndFlagsTheRest(t *testing.T) {
 		}
 	}
 
-	// Утверждённый отчёт остался утверждённым — дозаполнение его не сбросило.
+	// Утверждённый отчёт остался утверждённым - дозаполнение его не сбросило.
 	var status string
 	if err := db.QueryRowContext(ctx, `SELECT status FROM agreement_reports WHERE agreement_id::text=$1 AND report_year=$2 AND period_type='fact'`,
 		agreement.ID, year).Scan(&status); err != nil {
@@ -214,7 +214,7 @@ func TestTeacherBackfillLinksWhatIsUnambiguousAndFlagsTheRest(t *testing.T) {
 		t.Fatalf("пометок было %d, стало %d; ожидалось по одной на запись", before, after)
 	}
 
-	// Оператор исправил запись вручную — пометка снимается при следующем прогоне.
+	// Оператор исправил запись вручную - пометка снимается при следующем прогоне.
 	if _, err := db.ExecContext(ctx, `UPDATE entries SET staff_member_id=$1::uuid WHERE id::text=$2`, ivanov, unknown); err != nil {
 		t.Fatal(err)
 	}

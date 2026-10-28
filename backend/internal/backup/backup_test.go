@@ -27,7 +27,7 @@ func randomBytes(t testing.TB, n int) []byte {
 	return b
 }
 
-// fixture — каталог с вложениями и конфигурацией и ожидаемое содержимое.
+// fixture - каталог с вложениями и конфигурацией и ожидаемое содержимое.
 type fixture struct {
 	uploads string
 	config  map[string]string
@@ -125,7 +125,7 @@ func TestWrongPassphraseAndFormat(t *testing.T) {
 	}
 }
 
-// Любая порча байта — в заголовке, куске или длине — обнаруживается.
+// Любая порча байта - в заголовке, куске или длине - обнаруживается.
 func TestAnyCorruptionIsDetected(t *testing.T) {
 	data := newFixture(t).create(t)
 	positions := []int{0, 5, headerSize - 1, headerSize, headerSize + 3, headerSize + 100, len(data) / 2, len(data) - 1}
@@ -251,7 +251,7 @@ func TestCreateRefusesUnsafeSources(t *testing.T) {
 	empty.Dump = func(context.Context, io.Writer) error { return nil }
 	os.Remove(filepath.Join(f.uploads, "link"))
 	if _, err := Create(context.Background(), io.Discard, passphrase, empty); err == nil {
-		t.Fatal("пустой дамп базы — не копия")
+		t.Fatal("пустой дамп базы - не копия")
 	}
 	failing := f.source()
 	failing.Dump = func(context.Context, io.Writer) error { return errors.New("pg_dump упал") }

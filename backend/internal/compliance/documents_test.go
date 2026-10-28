@@ -2,7 +2,7 @@ package compliance
 
 import "testing"
 
-// OOP-03: комплект Вида 3 — проект программы, подписанное заключение
+// OOP-03: комплект Вида 3 - проект программы, подписанное заключение
 // компании и решение об утверждении образовательной организацией.
 func TestProgramApprovalDocuments(t *testing.T) {
 	required := map[string]string{
@@ -37,7 +37,7 @@ func TestProgramApprovalDocuments(t *testing.T) {
 	}
 }
 
-// TOP-09: комплект Вида 4 — договор софинансирования, платёжное поручение,
+// TOP-09: комплект Вида 4 - договор софинансирования, платёжное поручение,
 // акт о расходовании и письмо-согласование АНО АЦ.
 func TestTopITAnoDocuments(t *testing.T) {
 	full := Evaluate("top_it", "fact", topPayload(1000), topDocuments())
@@ -61,7 +61,7 @@ func TestTopITAnoDocuments(t *testing.T) {
 	}
 }
 
-// MIN-04: комплект Вида 5 задаётся самим Решением Минцифры — обязательны
+// MIN-04: комплект Вида 5 задаётся самим Решением Минцифры - обязательны
 // решение с исходным поручением и первичные документы о расходах.
 func TestMinistryDecisionDocuments(t *testing.T) {
 	documents := []string{"ministry_decision", "expense_evidence"}

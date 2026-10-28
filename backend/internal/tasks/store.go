@@ -24,7 +24,7 @@ var (
 	ErrPartnerTenant = errors.New("партнёр не относится к ИТ-компании задачи")
 )
 
-// Task — сохранённая задача.
+// Task - сохранённая задача.
 type Task struct {
 	ID                 string `json:"id"`
 	ITCompanyID        string `json:"it_company_id"`
@@ -44,7 +44,7 @@ type Task struct {
 	CompletedAt        string `json:"completed_at,omitempty"`
 }
 
-// Event — запись истории задачи.
+// Event - запись истории задачи.
 type Event struct {
 	Action       string `json:"action"`
 	FromAssignee string `json:"from_assignee,omitempty"`
@@ -76,7 +76,7 @@ func (t Task) requirement() Requirement {
 }
 
 // candidates читает активных пользователей для каждого шага цепочки. Внутри
-// шага предпочтение у того, у кого меньше открытых задач, затем — по
+// шага предпочтение у того, у кого меньше открытых задач, затем - по
 // идентификатору: раздача детерминирована и не копит всё на одном человеке.
 func candidates(ctx context.Context, db queryer, t Task, now time.Time) (Candidates, error) {
 	var c Candidates
@@ -127,7 +127,7 @@ type queryer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-// NewTask — постановка задачи.
+// NewTask - постановка задачи.
 type NewTask struct {
 	TenantID    string
 	PartnerID   string
@@ -234,7 +234,7 @@ func Get(ctx context.Context, db queryer, id string) (Task, error) {
 	return t, err
 }
 
-// History — история задачи в порядке событий.
+// History - история задачи в порядке событий.
 func History(ctx context.Context, db queryer, id string) ([]Event, error) {
 	rows, err := db.QueryContext(ctx, `SELECT action,COALESCE(from_assignee::text,''),COALESCE(to_assignee::text,''),route,
 			COALESCE(reason,''),COALESCE(actor_id::text,''),system_action,occurred_at::text
@@ -287,7 +287,7 @@ func List(ctx context.Context, db queryer, f Filter) ([]Task, error) {
 // только если решение отличается: пока исполнитель остаётся допустимым на том
 // же шаге, он сохраняется, чтобы плановый пересчёт не гонял задачу между
 // одинаково подходящими людьми. Ручная попытка без изменений тоже остаётся в
-// истории — по ADR-22 записываются и попытки переназначения.
+// истории - по ADR-22 записываются и попытки переназначения.
 func Reassign(ctx context.Context, tx *sql.Tx, id, actor, reason string, now time.Time) (Task, bool, error) {
 	task, err := scanTask(tx.QueryRowContext(ctx, `SELECT `+taskColumns+` FROM workflow_tasks WHERE id::text=$1 FOR UPDATE`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -338,7 +338,7 @@ func Reassign(ctx context.Context, tx *sql.Tx, id, actor, reason string, now tim
 	return updated, true, err
 }
 
-// stillValid — действующий исполнитель по-прежнему среди кандидатов своего шага.
+// stillValid - действующий исполнитель по-прежнему среди кандидатов своего шага.
 func stillValid(t Task, route Route, c Candidates) bool {
 	var pool []string
 	switch route {
@@ -360,7 +360,7 @@ func stillValid(t Task, route Route, c Candidates) bool {
 }
 
 // Complete закрывает задачу от имени исполнителя. Полномочия проверяет
-// вызывающий по CanExecute; здесь — состояние и атомарность.
+// вызывающий по CanExecute; здесь - состояние и атомарность.
 func Complete(ctx context.Context, tx *sql.Tx, id, actor string) (Task, error) {
 	task, err := scanTask(tx.QueryRowContext(ctx, `SELECT `+taskColumns+` FROM workflow_tasks WHERE id::text=$1 FOR UPDATE`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -383,13 +383,13 @@ func Complete(ctx context.Context, tx *sql.Tx, id, actor string) (Task, error) {
 
 // CloseBySubject закрывает открытую задачу вида и предмета без участия
 // исполнителя: событие workflow само сняло причину задачи (например, отчёт
-// проверен другим сотрудником или возвращён в черновик). status — done или
-// cancelled; закрытие фиксируется системным событием, автор — тот, чьё действие
+// проверен другим сотрудником или возвращён в черновик). status - done или
+// cancelled; закрытие фиксируется системным событием, автор - тот, чьё действие
 // его вызвало (для done он обязателен: таблица требует, чтобы у выполненной
 // задачи был исполнитель). Возвращает число закрытых задач; повтор ничего не меняет.
 func CloseBySubject(ctx context.Context, tx *sql.Tx, kind, subjectType, subjectID, status, actor string) (int, error) {
 	if status != "done" && status != "cancelled" {
-		return 0, fmt.Errorf("%w: статус закрытия — done или cancelled", ErrInvalid)
+		return 0, fmt.Errorf("%w: статус закрытия - done или cancelled", ErrInvalid)
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id::text,COALESCE(assignee_id::text,''),route FROM workflow_tasks
 		WHERE kind=$1 AND subject_type=$2 AND subject_id=$3 AND status='open' FOR UPDATE`, kind, subjectType, subjectID)
@@ -435,7 +435,7 @@ func CloseBySubject(ctx context.Context, tx *sql.Tx, kind, subjectType, subjectI
 // дороге или чей исполнитель больше не действует: специалист появился, куратор
 // перестал быть закреплённым, пользователь отключён. Возвращает число
 // переназначенных. tenantIDs ограничивает проход этими арендаторами; в работе не
-// задаётся. Каждая задача — в своей транзакции; повторный запуск ничего
+// задаётся. Каждая задача - в своей транзакции; повторный запуск ничего
 // не меняет.
 func RedispatchOpen(ctx context.Context, db *sql.DB, now time.Time, tenantIDs ...string) (int, error) {
 	rows, err := db.QueryContext(ctx, `SELECT w.id::text FROM workflow_tasks w
@@ -475,7 +475,7 @@ func RedispatchOpen(ctx context.Context, db *sql.DB, now time.Time, tenantIDs ..
 			return changed, fmt.Errorf("задача %s: %w", id, err)
 		}
 		if moved {
-			// Действие системы, а не человека: в журнале аудита актор — система.
+			// Действие системы, а не человека: в журнале аудита актор - система.
 			if err := platformaudit.Write(ctx, tx, platformaudit.Event{Actor: platformaudit.UserActor(""),
 				Action: "reassign", Entity: platformaudit.Entity{Type: "workflow_task", ID: id},
 				Before: before, After: after, Comment: after.FallbackReason}); err != nil {

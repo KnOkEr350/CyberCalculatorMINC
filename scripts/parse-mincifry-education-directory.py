@@ -126,7 +126,7 @@ class Record:
 
 
 def compact(value: str) -> str:
-    return re.sub(r"\s+", "", value.replace("\u00ad", "").replace("–", "-").replace("—", "-"))
+    return re.sub(r"\s+", "", value.replace("\u00ad", "").replace("–", "-").replace("-", "-"))
 
 
 def consume_title(text: str, start: int, expected: str) -> int:
@@ -138,7 +138,7 @@ def consume_title(text: str, start: int, expected: str) -> int:
         index += 1
         if char.isspace() or char == "\u00ad":
             continue
-        if char in "–—":
+        if char in "–-":
             char = "-"
         collected += char
         if not target.startswith(collected):

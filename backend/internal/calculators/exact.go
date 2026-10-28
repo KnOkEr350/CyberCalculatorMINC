@@ -83,7 +83,7 @@ func CalculateAmountWith(card tariffs.Card, code string, audience models.Audienc
 		// TOP-02: в зачёт норматива идёт фактически списанная вузом сумма
 		// (ТЗ §7.5). Раньше точный путь всегда брал объём по отчёту, поэтому
 		// на экране показывалась списанная сумма, а в БД сохранялась
-		// перечисленная — зачёт получался завышенным.
+		// перечисленная - зачёт получался завышенным.
 		amountKey := "cofinancing_amount_rub"
 		if _, ok := p["actual_spent_amount_rub"]; ok {
 			amountKey = "actual_spent_amount_rub"

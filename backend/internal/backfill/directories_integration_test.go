@@ -222,7 +222,7 @@ func TestReconcileGatesCatchBrokenIntegrity(t *testing.T) {
 	// Открытые находки не дают объявить переход готовым, даже при целостности.
 	clean := ReconcileReport{Gates: []Gate{{Name: "x", Passed: true}}}
 	if !clean.ReadyForCutover() {
-		t.Fatal("целостность без находок — переход готов")
+		t.Fatal("целостность без находок - переход готов")
 	}
 	clean.OpenFindings = 3
 	if clean.ReadyForCutover() || !clean.Consistent() {

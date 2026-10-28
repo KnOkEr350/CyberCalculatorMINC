@@ -1,7 +1,7 @@
 // Package middleware содержит сквозную логику HTTP-слоя: аутентификацию,
 // проверку ролей и общие помощники для JSON-ответов. Роутинг выполняется
 // стандартным net/http.ServeMux (Go 1.22+, с поддержкой методов и
-// параметров пути) — сторонний роутер не используется.
+// параметров пути) - сторонний роутер не используется.
 package middleware
 
 import (
@@ -92,7 +92,7 @@ func RequireAuth(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthU
 	}
 }
 
-// RequireAdmin — то же самое, но только для роли admin.
+// RequireAdmin - то же самое, но только для роли admin.
 func RequireAdmin(db *sql.DB, next func(http.ResponseWriter, *http.Request, AuthUser)) http.HandlerFunc {
 	return RequireAuth(db, func(w http.ResponseWriter, r *http.Request, u AuthUser) {
 		if u.Role != models.RoleAdmin {

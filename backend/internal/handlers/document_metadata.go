@@ -22,9 +22,9 @@ type attachmentMetadataRequest struct {
 
 // UpdateMetadata задаёт реквизиты документа и сведения о подписи (DATA-12).
 //
-// Право на это — у стороны-владельца документа: тот, кто вправе загрузить
+// Право на это - у стороны-владельца документа: тот, кто вправе загрузить
 // документ такого типа, вправе описать его реквизиты, но профиль другой
-// стороны — нет. Изменение реквизитов возвращает документ на проверку:
+// стороны - нет. Изменение реквизитов возвращает документ на проверку:
 // одобрение относилось к прежним сведениям, и оставлять его в силе нельзя.
 func (h *AttachmentHandlers) UpdateMetadata(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, attachmentID string) {
 	var req attachmentMetadataRequest
@@ -101,7 +101,7 @@ func (h *AttachmentHandlers) UpdateMetadata(w http.ResponseWriter, r *http.Reque
 	middleware.WriteJSON(w, http.StatusOK, map[string]interface{}{"status": "ok", "review_reset": changed})
 }
 
-// regulatoryToday — московская дата «сегодня» для проверки дат документов.
+// regulatoryToday - московская дата «сегодня» для проверки дат документов.
 func regulatoryToday() time.Time {
 	year, month, day := time.Now().In(businessLocation).Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
@@ -128,7 +128,7 @@ type legalDisputeRequest struct {
 	AttachmentID string `json:"attachment_id,omitempty"`
 }
 
-// canDisputeLegally — кто вправе поставить запись под сомнение и снять его:
+// canDisputeLegally - кто вправе поставить запись под сомнение и снять его:
 // те же роли, что проверяют документы. Юрист при этом не получает права менять
 // сами данные записи.
 func canDisputeLegally(u middleware.AuthUser) bool {

@@ -188,7 +188,7 @@ func TestClause22ExemptionOnDatabase(t *testing.T) {
 				t.Fatalf("topITAlternativeBasis() = %+v, освобождение ожидалось: %v", basis, tc.wantExemption)
 			}
 			if basis != nil {
-				// ADR-03: освобождение должно быть проверяемым — видно, какая
+				// ADR-03: освобождение должно быть проверяемым - видно, какая
 				// ОО и какие именно записи Видов 1 и 3 его подтверждают.
 				if basis.AgreementID != agreementB {
 					t.Fatalf("основание ссылается на соглашение %s, ожидалось %s", basis.AgreementID, agreementB)

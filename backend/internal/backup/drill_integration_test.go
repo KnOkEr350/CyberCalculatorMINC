@@ -88,7 +88,7 @@ func TestBackupAndRestoreDrillOnARealDatabase(t *testing.T) {
 		var out bytes.Buffer
 		if _, err := Create(ctx, &out, passphrase, Source{Dump: PGDump(sourceDSN), UploadsDir: uploads, AppVersion: "drill",
 			Facts: facts, Rounds: fastRounds, Now: func() time.Time { return time.Now() }}); err != nil {
-			// Клиент старее сервера — свойство окружения, а не ошибка копии.
+			// Клиент старее сервера - свойство окружения, а не ошибка копии.
 			if strings.Contains(err.Error(), "server version") {
 				t.Skip("версия pg_dump не подходит к серверу:", err)
 			}

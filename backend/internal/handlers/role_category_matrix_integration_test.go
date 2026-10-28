@@ -13,11 +13,11 @@ import (
 )
 
 // SEC-09: матрица «роль × вид мероприятия × действие» на настоящих обработчиках.
-// Ожидания записаны здесь независимо от access.go — по ТЗ §7.5: авторская
+// Ожидания записаны здесь независимо от access.go - по ТЗ §7.5: авторская
 // сторона (администраторы и куратор) работает со всеми видами, кадровая служба
-// — только со стажировками и практикой, финансовая — правит выплаты
+// - только со стажировками и практикой, финансовая - правит выплаты
 // преподавателей, юрист и аудитор ничего не меняют, а профиль образовательной
-// организации — контрагент и не автор.
+// организации - контрагент и не автор.
 func TestRoleByCategoryMatrix(t *testing.T) {
 	db, year := integrationDB(t)
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func TestRoleByCategoryMatrix(t *testing.T) {
 		{"legal_specialist", org(models.RoleLegalSpecialist)}, {"auditor_viewer", org(models.RoleAuditorViewer)},
 		{"edu_curator", middleware.AuthUser{ID: tn.admin, Role: models.RoleCurator, EntityType: models.EntityEduInst, PartnerID: &tn.partner}},
 	}
-	// allowed[роль] — виды, к которым роль допускается: create, update.
+	// allowed[роль] - виды, к которым роль допускается: create, update.
 	all := map[string]bool{}
 	for _, c := range categories {
 		all[c] = true
@@ -85,7 +85,7 @@ func TestRoleByCategoryMatrix(t *testing.T) {
 
 			// Изменение: комментарий есть, поэтому дальше роли остаётся только
 			// содержательная проверка (400). Финансист по своему Виду 1 доходит
-			// до проверки полей выплаты: отказ там — не отказ по виду.
+			// до проверки полей выплаты: отказ там - не отказ по виду.
 			rec = httptest.NewRecorder()
 			req = httptest.NewRequest("PUT", "/api/entries/"+entries[category], strings.NewReader(`{"comment":"проверка доступа","payload":{}}`))
 			req.Header.Set("Content-Type", "application/json")

@@ -13,7 +13,7 @@ import (
 )
 
 // DATA-02 на реальной БД: каждое изменение соглашения, его сторон, ответственных
-// и видов оставляет снимок; история только дополняется; куратор соглашения —
+// и видов оставляет снимок; история только дополняется; куратор соглашения -
 // куратор той же ИТ-компании.
 func TestAgreementHistoryAndCurator(t *testing.T) {
 	db, _ := integrationDB(t)
@@ -85,7 +85,7 @@ func TestAgreementHistoryAndCurator(t *testing.T) {
 		got = revisions()
 		people, _ := snapshotOf(got[len(got)-1])["responsible_people"].([]interface{})
 		if len(got) != 3 || len(people) != 3 {
-			t.Fatalf("добавление ответственного — новая редакция: %d %+v", len(got), people)
+			t.Fatalf("добавление ответственного - новая редакция: %d %+v", len(got), people)
 		}
 	})
 

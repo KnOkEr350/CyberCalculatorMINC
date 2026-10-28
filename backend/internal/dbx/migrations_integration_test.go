@@ -53,7 +53,7 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('internship',$1,'fact',2026,'vuz','{"mentor_full_name":"Иванов Иван Иванович"}',30340,$2) RETURNING id`, partner, user).Scan(&entry); e != nil {
 		t.Fatal(e)
 	}
-	// OOP-06: старые записи «ООП и РПД» — полная и с недостающими сведениями.
+	// OOP-06: старые записи «ООП и РПД» - полная и с недостающими сведениями.
 	var oopComplete, oopIncomplete string
 	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('ood_rpd',$1,'fact',2026,'vuz','{"doc_type":"RPD","level":"vo","activity_type":"development","program_name":"Базы данных","expert_full_name":"Петров П.П."}',300000,$2) RETURNING id`, partner, user).Scan(&oopComplete); e != nil {
 		t.Fatal(e)
@@ -61,14 +61,14 @@ func TestWorkspaceMigrationPreservesLegacyData(t *testing.T) {
 	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('ood_rpd',$1,'fact',2026,'vuz','{"program_name":"Без вида документа"}',1,$2) RETURNING id`, partner, user).Scan(&oopIncomplete); e != nil {
 		t.Fatal(e)
 	}
-	// TOP-11: старые записи Вида 4 — по вузу и по колледжу.
+	// TOP-11: старые записи Вида 4 - по вузу и по колледжу.
 	var topVuz, topCollege string
 	for audience, target := range map[string]*string{"vuz": &topVuz, "kolledj": &topCollege} {
 		if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('top_it',$1,'fact',2026,$2,'{"project_name":"Проект","program_name":"Программа","program_wave":"2","partner_role":"anchor","grant_amount_rub":"1500000,50"}',100,$3) RETURNING id`, partner, audience, user).Scan(target); e != nil {
 			t.Fatal(e)
 		}
 	}
-	// SCH-08: старые записи школьного трека — полная и нарушающая правила.
+	// SCH-08: старые записи школьного трека - полная и нарушающая правила.
 	var schoolGood, schoolBad string
 	if e := db.QueryRow(`INSERT INTO entries(category_code,partner_id,period_type,report_year,audience,payload,amount_rub,created_by) VALUES('it_clubs',$1,'fact',2026,'school','{"program_name":"Кружок","class_range":"5-7","budget_funding":"absent","citizen_funding":"absent","acceptance_act_reference":"Акт 5"}',530890,$2) RETURNING id`, partner, user).Scan(&schoolGood); e != nil {
 		t.Fatal(e)

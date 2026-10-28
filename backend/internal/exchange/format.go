@@ -37,7 +37,7 @@ const (
 	CompressionGzip = "gzip"
 )
 
-// plaintextLimit — действующий предел распаковки. Переменная, а не константа,
+// plaintextLimit - действующий предел распаковки. Переменная, а не константа,
 // чтобы тест «бомбы» не разворачивал сотни мегабайт.
 var plaintextLimit = MaxPlaintextBytes
 
@@ -55,7 +55,7 @@ var (
 	ErrInvalidExportRequest = errors.New("некорректный запрос на экспорт")
 )
 
-// Manifest — подписываемое описание пакета.
+// Manifest - подписываемое описание пакета.
 type Manifest struct {
 	Format      string              `json:"format"`
 	Version     int                 `json:"version"`
@@ -98,7 +98,7 @@ type signatureDocument struct {
 	Value         []byte `json:"value"`
 }
 
-// container — разобранный, но ещё не проверенный пакет.
+// container - разобранный, но ещё не проверенный пакет.
 type container struct {
 	manifestBytes []byte
 	signature     cryptoengine.Signature
@@ -140,7 +140,7 @@ func writeUint32(out *bytes.Buffer, value uint32) {
 }
 
 // parseContainer разбирает файл строго: заявленные длины проверяются до
-// выделения памяти, лишние байты в конце — ошибка, а не «игнорируем».
+// выделения памяти, лишние байты в конце - ошибка, а не «игнорируем».
 func parseContainer(data []byte) (container, error) {
 	if len(data) > MaxPackageBytes {
 		return container{}, ErrPackageTooLarge
@@ -211,7 +211,7 @@ func readBlock32(reader *bytes.Reader, limit int) ([]byte, error) {
 
 // parseManifest разбирает манифест и требует, чтобы сохранённые байты были
 // канонической записью: подпись покрывает именно их, и «почти такой же» JSON с
-// другим порядком ключей — уже другой документ.
+// другим порядком ключей - уже другой документ.
 func parseManifest(raw []byte) (Manifest, error) {
 	var manifest Manifest
 	decoder := json.NewDecoder(bytes.NewReader(raw))

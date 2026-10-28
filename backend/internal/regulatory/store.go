@@ -15,7 +15,7 @@ var (
 	ErrExists   = errors.New("процесс этого вида уже создан для соглашения и года")
 )
 
-// Process — сохранённый процесс: состояние и его адрес.
+// Process - сохранённый процесс: состояние и его адрес.
 type Process struct {
 	ID          string
 	AgreementID string
@@ -24,7 +24,7 @@ type Process struct {
 	UpdatedAt   time.Time
 }
 
-// StoredEvent — переход из истории процесса.
+// StoredEvent - переход из истории процесса.
 type StoredEvent struct {
 	Event
 	ActorID string
@@ -123,7 +123,7 @@ func Events(ctx context.Context, db queryer, id string) ([]StoredEvent, error) {
 
 // Act выполняет действие в одной транзакции. Процесс блокируется на время
 // перехода: два одновременных ответа рецензента не могут оба «выиграть».
-// Перед действием применяется согласование по молчанию — иначе действие
+// Перед действием применяется согласование по молчанию - иначе действие
 // пришло бы в процесс, который уже согласован истёкшим сроком.
 //
 // hook, если задан, выполняется в той же транзакции после записи перехода:
@@ -146,7 +146,7 @@ func Act(ctx context.Context, db *sql.DB, id string, action Action, actorID, rea
 	}
 
 	var applied []StoredEvent
-	// Сначала — то, что произошло само: истёкший срок.
+	// Сначала - то, что произошло само: истёкший срок.
 	expired, expiryEvent := ExpireIfDue(process.State, now)
 	if expiryEvent != nil {
 		if err := persist(ctx, tx, process.ID, expired, *expiryEvent, ""); err != nil {
@@ -224,7 +224,7 @@ func persist(ctx context.Context, db queryer, id string, state State, event Even
 // меняет.
 //
 // agreementIDs ограничивает проход процессами этих соглашений; в работе не
-// задаётся — задание обходит все. Ограничение нужно проверкам на общей базе,
+// задаётся - задание обходит все. Ограничение нужно проверкам на общей базе,
 // чтобы проход одного теста не переводил чужие процессы.
 func ExpireDue(ctx context.Context, db *sql.DB, now time.Time, agreementIDs ...string) (approved, lapsed int, err error) {
 	rows, err := db.QueryContext(ctx, `SELECT id::text FROM regulatory_processes

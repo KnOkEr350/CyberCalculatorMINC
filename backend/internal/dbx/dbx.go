@@ -1,5 +1,5 @@
 // Package dbx отвечает за подключение к PostgreSQL и применение миграций.
-// database/sql — стандартная библиотека; github.com/lib/pq — единственный
+// database/sql - стандартная библиотека; github.com/lib/pq - единственный
 // сторонний пакет во всём проекте (см. go.mod), он лишь реализует протокол
 // PostgreSQL для database/sql и не является ORM/фреймворком.
 package dbx

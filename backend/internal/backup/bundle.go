@@ -51,14 +51,14 @@ var (
 	ErrIncomplete = errors.New("backup: в копии нет обязательного файла")
 )
 
-// FileEntry — файл в копии.
+// FileEntry - файл в копии.
 type FileEntry struct {
 	Path   string `json:"path"`
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"`
 }
 
-// Manifest — опись копии.
+// Manifest - опись копии.
 type Manifest struct {
 	Format     int               `json:"format"`
 	CreatedAt  time.Time         `json:"created_at"`
@@ -67,22 +67,22 @@ type Manifest struct {
 	Files      []FileEntry       `json:"files"`
 }
 
-// Source — что копировать.
+// Source - что копировать.
 type Source struct {
 	// Dump пишет дамп базы; без него копия не создаётся.
 	Dump func(context.Context, io.Writer) error
-	// UploadsDir — каталог хранилища вложений (может отсутствовать).
+	// UploadsDir - каталог хранилища вложений (может отсутствовать).
 	UploadsDir string
-	// ConfigFiles — имя в копии → путь на диске.
+	// ConfigFiles - имя в копии → путь на диске.
 	ConfigFiles map[string]string
 	AppVersion  string
 	Facts       map[string]string
-	// Rounds — число итераций PBKDF2; ноль означает рабочее значение.
+	// Rounds - число итераций PBKDF2; ноль означает рабочее значение.
 	Rounds int
 	Now    func() time.Time
 }
 
-// ValidEntryPath — путь внутри копии: относительный, без «..», без служебных
+// ValidEntryPath - путь внутри копии: относительный, без «..», без служебных
 // символов. Проверяется и при создании, и при восстановлении.
 func ValidEntryPath(p string) bool {
 	if p == "" || len(p) > maxPathLength || strings.ContainsAny(p, "\x00\\") || path.IsAbs(p) {
@@ -245,7 +245,7 @@ func copyFile(ctx context.Context, w io.Writer, source string) error {
 }
 
 // copyTree копирует обычные файлы каталога; символические ссылки и файлы
-// особых типов не копируются, а прерывают копию: молча пропущенный файл —
+// особых типов не копируются, а прерывают копию: молча пропущенный файл -
 // это тихая потеря данных.
 func copyTree(ctx context.Context, rw recordWriter, root, prefix string, manifest *Manifest) error {
 	info, err := os.Stat(root)
@@ -267,7 +267,7 @@ func copyTree(ctx context.Context, rw recordWriter, root, prefix string, manifes
 			return nil
 		}
 		if !d.Type().IsRegular() {
-			return fmt.Errorf("backup: %s — не обычный файл (ссылка или особый тип)", p)
+			return fmt.Errorf("backup: %s - не обычный файл (ссылка или особый тип)", p)
 		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil {

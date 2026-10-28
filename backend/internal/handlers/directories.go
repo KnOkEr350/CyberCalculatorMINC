@@ -32,7 +32,7 @@ func (h *EntryHandlers) validateMentor(r *http.Request, category, periodType, pa
 	}
 	// Snapshot used in reports: callers cannot forge a mentor's full name.
 	payload["mentor_full_name"] = name
-	// Отсутствующее поле — пустая строка, а не "<nil>": fmt.Sprint(nil) выглядел
+	// Отсутствующее поле - пустая строка, а не "<nil>": fmt.Sprint(nil) выглядел
 	// бы заполненным значением и уводил проверку в SQL с некорректной датой.
 	text := func(key string) string {
 		value, _ := payload[key].(string)

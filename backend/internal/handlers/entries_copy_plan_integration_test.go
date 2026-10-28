@@ -97,7 +97,7 @@ func TestCopyPlanToFact(t *testing.T) {
 	if recorder, _ = run(foreign, body); recorder.Code != 409 {
 		t.Fatalf("чужой арендатор: ожидался 409, получено %d %s", recorder.Code, recorder.Body.String())
 	}
-	// Фильтр по виду без записей — отказ, а не пустой успех.
+	// Фильтр по виду без записей - отказ, а не пустой успех.
 	if recorder, _ = run(tenant, map[string]interface{}{"agreement_id": tenant.agreement, "report_year": year, "category_code": "teachers"}); recorder.Code != 409 {
 		t.Fatalf("пустая выборка: ожидался 409, получено %d", recorder.Code)
 	}

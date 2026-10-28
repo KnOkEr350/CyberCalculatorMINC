@@ -11,7 +11,7 @@ import (
 
 // TCH-01 на реальной БД: нагрузка определяется ключом «сотрудник + учебное
 // заведение + дисциплина + год + период». Повтор того же ключа не принимается,
-// а различие в любой его части — это уже другая нагрузка.
+// а различие в любой его части - это уже другая нагрузка.
 func TestTeachingLoadAtomicKeyRejectsDuplicates(t *testing.T) {
 	db, year := integrationDB(t)
 	ctx := context.Background()
@@ -66,7 +66,7 @@ func TestTeachingLoadAtomicKeyRejectsDuplicates(t *testing.T) {
 	})
 
 	t.Run("название дисциплины нормализуется", func(t *testing.T) {
-		// Тот же курс с другим регистром и лишними пробелами — это не новая
+		// Тот же курс с другим регистром и лишними пробелами - это не новая
 		// дисциплина, иначе ключ обходился бы опечаткой.
 		if err := insert(tenant.partner, staff, "  разработка   ПО ", "3", "plan", year); err == nil {
 			t.Fatal("различие только в регистре и пробелах не создаёт новую нагрузку")
@@ -119,7 +119,7 @@ func TestTeachingLoadAtomicKeyRejectsDuplicates(t *testing.T) {
 			audience,payload,amount_rub,formula_amount_rub,cost_method,created_by)
 			VALUES('teachers',$1,$2,$3,'plan',$4,'vuz',$5::jsonb,264960,264960,'average',$6)`,
 			foreign.partner, foreign.agreement, foreign.company, year, payload, foreign.admin); err != nil {
-			t.Fatalf("та же нагрузка у другой ИТ-компании — её собственная: %v", err)
+			t.Fatalf("та же нагрузка у другой ИТ-компании - её собственная: %v", err)
 		}
 	})
 

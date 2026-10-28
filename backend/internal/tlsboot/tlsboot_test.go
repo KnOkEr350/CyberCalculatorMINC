@@ -167,7 +167,7 @@ func TestInstallSwitchesAtomicallyAndKeepsTheLiveOneOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if liveFile(t, store, "fullchain.pem") != string(first.Cert) {
-		t.Fatal("действующая пара — первая")
+		t.Fatal("действующая пара - первая")
 	}
 	info, err := os.Stat(filepath.Join(store.Dir, "live", "privkey.pem"))
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -283,12 +283,12 @@ func TestRenewOnlyWhenNeeded(t *testing.T) {
 	if !info.NotAfter.After(first.NotAfter) {
 		t.Fatalf("новая пара должна действовать дольше: %v и %v", info.NotAfter, first.NotAfter)
 	}
-	// Смена имён — новый выпуск, даже если срок далёк.
+	// Смена имён - новый выпуск, даже если срок далёк.
 	renewed, _, err = store.Renew(ca, append(hosts, "extra.internal"), before, now.Add(48*time.Hour))
 	if err != nil || !renewed {
 		t.Fatalf("новое имя требует нового сертификата: %v %v", renewed, err)
 	}
-	// Испорченный файл — тоже повод выпустить заново.
+	// Испорченный файл - тоже повод выпустить заново.
 	if err := os.WriteFile(filepath.Join(store.Live(), "privkey.pem"), []byte("мусор"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestStatusReportsExpiryAndMissingPair(t *testing.T) {
 	ca, roots := newCA(t)
 	store := Store{Dir: t.TempDir()}
 	if _, _, err := store.Status("calculator.internal", roots, time.Hour, now); err == nil {
-		t.Fatal("без установленной пары статус — ошибка")
+		t.Fatal("без установленной пары статус - ошибка")
 	}
 	_, info, err := store.Renew(ca, []string{"calculator.internal"}, 0, now)
 	if err != nil {

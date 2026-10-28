@@ -7,22 +7,22 @@ import (
 	"time"
 )
 
-// Kind — вид регламентного процесса.
+// Kind - вид регламентного процесса.
 type Kind string
 
 const (
-	// KindAgreement — проект соглашения: 14 дней на рассмотрение, 10 на
+	// KindAgreement - проект соглашения: 14 дней на рассмотрение, 10 на
 	// доработку, 10 на повторное рассмотрение.
 	KindAgreement Kind = "agreement"
-	// KindPreliminary — предварительный перечень: срез на 1 ноября, отправка
+	// KindPreliminary - предварительный перечень: срез на 1 ноября, отправка
 	// не позднее 10 ноября, цепочка 10/10/5.
 	KindPreliminary Kind = "preliminary"
-	// KindFinal — итоговый перечень: срез на 31 декабря, отправка не позднее
+	// KindFinal - итоговый перечень: срез на 31 декабря, отправка не позднее
 	// 1 марта следующего года, цепочка 20/20/10.
 	KindFinal Kind = "final"
 )
 
-// Chain — длительность трёх окон в календарных днях: рассмотрение, доработка
+// Chain - длительность трёх окон в календарных днях: рассмотрение, доработка
 // автором и повторное рассмотрение.
 type Chain struct {
 	Review   int
@@ -30,7 +30,7 @@ type Chain struct {
 	ReReview int
 }
 
-// Chains — цепочки Приказа № 270 (ADR-02).
+// Chains - цепочки Приказа № 270 (ADR-02).
 var Chains = map[Kind]Chain{
 	KindAgreement:   {Review: 14, Rework: 10, ReReview: 10},
 	KindPreliminary: {Review: 10, Rework: 10, ReReview: 5},
@@ -40,7 +40,7 @@ var Chains = map[Kind]Chain{
 // Kinds перечисляет виды в стабильном порядке.
 func Kinds() []Kind { return []Kind{KindAgreement, KindPreliminary, KindFinal} }
 
-// Status — состояние процесса (WF-01).
+// Status - состояние процесса (WF-01).
 type Status string
 
 const (
@@ -54,12 +54,12 @@ const (
 	StatusDisputed        Status = "disputed"         // оспорен после доработки
 )
 
-// Terminal — из этих состояний процесс не выходит.
+// Terminal - из этих состояний процесс не выходит.
 func (s Status) Terminal() bool {
 	return s == StatusApproved || s == StatusDefaultApproved || s == StatusDisputed
 }
 
-// Window — какое окно срока сейчас идёт.
+// Window - какое окно срока сейчас идёт.
 type Window string
 
 const (
@@ -69,7 +69,7 @@ const (
 	WindowReReview Window = "rereview"
 )
 
-// Action — действие над процессом.
+// Action - действие над процессом.
 type Action string
 
 const (
@@ -86,7 +86,7 @@ func Actions() []Action {
 	return []Action{ActionSend, ActionStartReview, ActionApprove, ActionRequestRework, ActionResubmit, ActionDispute}
 }
 
-// ExpireAction — служебное действие: согласование по молчанию.
+// ExpireAction - служебное действие: согласование по молчанию.
 const (
 	ActionDefaultApprove Action = "default_approve"
 	ActionReworkLapsed   Action = "rework_lapsed"
@@ -100,27 +100,27 @@ var (
 	ErrWindowClosed      = errors.New("срок доработки истёк")
 )
 
-// State — состояние процесса. Все сроки — календарные даты по Москве.
+// State - состояние процесса. Все сроки - календарные даты по Москве.
 type State struct {
 	Kind       Kind
 	ReportYear int
 	Status     Status
 	Window     Window
-	// DueDate — последний день текущего окна; ExpiresAt — момент, с которого
+	// DueDate - последний день текущего окна; ExpiresAt - момент, с которого
 	// окно считается истёкшим (начало следующего дня по Москве).
 	DueDate   string
 	ExpiresAt time.Time
-	// Round: 0 — до отправки, 1 — первичное рассмотрение, 2 — после доработки.
+	// Round: 0 - до отправки, 1 - первичное рассмотрение, 2 - после доработки.
 	Round  int
 	SentAt *time.Time
-	// SentLate — перечень отправлен позже установленной даты.
+	// SentLate - перечень отправлен позже установленной даты.
 	SentLate bool
 	Remarks  string
 	// ReworkLapsedAt фиксирует пропуск окна доработки (идемпотентно).
 	ReworkLapsedAt *time.Time
 }
 
-// Milestones — контрольные даты вида: срез и крайний срок отправки. У проекта
+// Milestones - контрольные даты вида: срез и крайний срок отправки. У проекта
 // соглашения их нет.
 type Milestones struct {
 	Cutoff  time.Time // с этой даты перечень может быть отправлен
@@ -153,20 +153,20 @@ func New(kind Kind, reportYear int) (State, error) {
 	return State{Kind: kind, ReportYear: reportYear, Status: StatusDraft}, nil
 }
 
-// Event — запись о переходе. System отмечает действие, выполненное самой
+// Event - запись о переходе. System отмечает действие, выполненное самой
 // системой (согласование по молчанию), а не человеком.
 type Event struct {
 	Action Action
 	From   Status
 	To     Status
 	Reason string
-	// DueDate — срок окна, открытого этим переходом.
+	// DueDate - срок окна, открытого этим переходом.
 	DueDate string
 	At      time.Time
 	System  bool
 }
 
-// Input — контекст действия.
+// Input - контекст действия.
 type Input struct {
 	Now    time.Time
 	Reason string
@@ -232,7 +232,7 @@ func Apply(state State, action Action, in Input) (State, Event, error) {
 		closeWindow()
 
 	case ActionRequestRework:
-		// Возврат на доработку — один раз: после повторной отправки
+		// Возврат на доработку - один раз: после повторной отправки
 		// рассмотрение заканчивается согласованием или оспариванием.
 		if state.Round != 1 || (state.Status != StatusSent && state.Status != StatusInReview) {
 			return fail("вернуть на доработку можно при первичном рассмотрении, а не %s (круг %d)", state.Status, state.Round)
@@ -275,7 +275,7 @@ func Apply(state State, action Action, in Input) (State, Event, error) {
 // календарного дня срока). Повторный вызов ничего не меняет: у завершённого
 // процесса окна нет.
 //
-// Окно доработки по истечении состояния не меняет: пропуск срока автором —
+// Окно доработки по истечении состояния не меняет: пропуск срока автором -
 // это просрочка, о которой Приказ говорит на уровне позиций перечня
 // («позиция считается отсутствующей»), а не всего процесса. Пропуск
 // фиксируется отдельным событием.
@@ -307,7 +307,7 @@ func ExpireIfDue(state State, now time.Time) (State, *Event) {
 	return state, nil
 }
 
-// Allowed перечисляет действия, допустимые сейчас, — для интерфейса и для
+// Allowed перечисляет действия, допустимые сейчас, - для интерфейса и для
 // проверки прав: пользователю не предлагается то, что процесс не примет.
 func Allowed(state State, now time.Time) []Action {
 	if state.Status.Terminal() {

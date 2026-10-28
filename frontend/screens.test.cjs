@@ -92,7 +92,7 @@ function shippedByDockerfile(dockerfile, rel) {
 }
 
 // Регрессия: /components/ui.js был подключён в index.html, но не попадал в
-// образ nginx — в проде скрипт отдавал 404, CyberCalcUI не определялся, и
+// образ nginx - в проде скрипт отдавал 404, CyberCalcUI не определялся, и
 // дашборд падал на первом fmtMoney().
 test("ships every script and stylesheet referenced by index.html into the container", () => {
   const html = fs.readFileSync(require.resolve("./index.html"), "utf8");

@@ -18,7 +18,7 @@ import (
 type Calculator interface {
 	// Calculate возвращает рассчитанную сумму в рублях по данным payload.
 	Calculate(audience models.Audience, payload map[string]interface{}) (float64, error)
-	// Fields описывает ожидаемые поля payload — используется UI и для валидации.
+	// Fields описывает ожидаемые поля payload - используется UI и для валидации.
 	Fields() []FieldSpec
 }
 

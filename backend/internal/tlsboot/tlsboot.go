@@ -37,7 +37,7 @@ const (
 	KeepVersions      = 3
 )
 
-// PEM — пара сертификат и ключ в PEM.
+// PEM - пара сертификат и ключ в PEM.
 type PEM struct{ Cert, Key []byte }
 
 func serial() (*big.Int, error) {
@@ -184,7 +184,7 @@ func IssueServer(ca PEM, hosts []string, validity time.Duration, now time.Time) 
 	return PEM{Cert: append(encodeCert(der), ca.Cert...), Key: keyPEM}, nil
 }
 
-// Info — сведения о проверенной паре.
+// Info - сведения о проверенной паре.
 type Info struct {
 	Subject   string
 	Hosts     []string
@@ -234,7 +234,7 @@ func strongKey(pub crypto.PublicKey) (string, error) {
 	return "", errors.New("tlsboot: тип ключа не поддерживается")
 }
 
-// Validate проверяет пару перед установкой. roots — доверенные корни; пусто
+// Validate проверяет пару перед установкой. roots - доверенные корни; пусто
 // означает системные (подходит для сертификата публичного центра).
 func Validate(pair PEM, host string, roots *x509.CertPool, now time.Time) (Info, error) {
 	chain, err := parseChain(pair.Cert)
@@ -301,7 +301,7 @@ func Pool(data []byte) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// Store — каталог с версиями пары и указателем live на действующую.
+// Store - каталог с версиями пары и указателем live на действующую.
 type Store struct{ Dir string }
 
 func (s Store) versions() string { return filepath.Join(s.Dir, "versions") }
@@ -317,7 +317,7 @@ func (s Store) Live() string {
 }
 
 // Install проверяет пару и делает её действующей. Проверка идёт до записи, а
-// переключение — одной атомарной подменой указателя: nginx видит либо старую
+// переключение - одной атомарной подменой указателя: nginx видит либо старую
 // пару целиком, либо новую целиком. Прежняя версия остаётся для отката.
 func (s Store) Install(pair PEM, host string, roots *x509.CertPool, now time.Time) (Info, error) {
 	info, err := Validate(pair, host, roots, now)
@@ -393,7 +393,7 @@ func (s Store) list() []string {
 	return names
 }
 
-// prune оставляет последние версии, действующую — всегда.
+// prune оставляет последние версии, действующую - всегда.
 func (s Store) prune() {
 	names := s.list()
 	live := filepath.Base(s.Live())

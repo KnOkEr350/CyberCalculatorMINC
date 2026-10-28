@@ -60,9 +60,9 @@ func reportEntryStatus(row reportEntryRow) string {
 }
 
 // «Сформировать годовой план активностей» / «отчёт по реализованным
-// мероприятиям» / «отчёт по стажировкам» — по каждому партнёру + сводный
+// мероприятиям» / «отчёт по стажировкам» - по каждому партнёру + сводный
 // для МЦ (выгрузка в xls). Один эндпоинт параметризован period_type и,
-// опционально, category_code (для отчёта по стажировкам — internship,
+// опционально, category_code (для отчёта по стажировкам - internship,
 // employment_practice).
 func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	q := r.URL.Query()
@@ -190,7 +190,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	wb := xlsx.New()
 	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Группа лиц", "Договор о взаимодействии", "Категория активности", "Аудитория", "Метод стоимости", "Сумма по методике, руб.", "Сумма в отчёте, руб.", "Параметры", "Статус отчёта"}
 
-	// Сводный лист для МЦ — все партнёры вместе.
+	// Сводный лист для МЦ - все партнёры вместе.
 	var consolidated [][]interface{}
 	var total money.Amount
 	preliminary := false
@@ -198,7 +198,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		if d.ReportStatus != "approved" || !d.Eligible {
 			preliminary = true
 		}
-		partnerName := "—"
+		partnerName := "-"
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
 		}
@@ -266,7 +266,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			}
 			docRows = append(docRows, cells)
 		}
-		body, e := docx.Table(fmt.Sprintf("%s — %d. Суммы в рублях", map[string]string{"plan": "План мероприятий", "fact": "Реализованные мероприятия"}[periodType], year), headers, docRows)
+		body, e := docx.Table(fmt.Sprintf("%s - %d. Суммы в рублях", map[string]string{"plan": "План мероприятий", "fact": "Реализованные мероприятия"}[periodType], year), headers, docRows)
 		if e != nil {
 			middleware.WriteError(w, 500, "ошибка Word")
 			return

@@ -99,7 +99,7 @@ func TestTeachingLoadImportIsAtomicAndReportsErrors(t *testing.T) {
 		t.Fatal("файл с ошибками не должен коммититься")
 	}
 	if got := countEntries(); got != 0 {
-		t.Fatalf("после отклонённого импорта в базе %d записей, ожидалось 0 — импорт не атомарен", got)
+		t.Fatalf("после отклонённого импорта в базе %d записей, ожидалось 0 - импорт не атомарен", got)
 	}
 
 	// Корректный файл проходит целиком.
@@ -131,7 +131,7 @@ func TestTeachingLoadImportIsAtomicAndReportsErrors(t *testing.T) {
 func uploadWorkbook(t *testing.T, handlers EntryHandlers, user middleware.AuthUser, path string, book []byte) []byte {
 	t.Helper()
 	code, body := uploadWorkbookStatus(t, handlers, user, path, book)
-	// 200 — предпросмотр или отклонённый файл, 201 — зафиксированный импорт.
+	// 200 - предпросмотр или отклонённый файл, 201 - зафиксированный импорт.
 	if code != 200 && code != 201 {
 		t.Fatalf("импорт вернул %d: %s", code, body)
 	}

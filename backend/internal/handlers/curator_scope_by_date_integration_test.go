@@ -103,7 +103,7 @@ func TestCuratorScopeFollowsAssignmentDatesPerRequest(t *testing.T) {
 	if got := scope(); got != "" {
 		t.Fatalf("закончившееся закрепление не должно давать доступ, увидели %q", got)
 	}
-	// Кэш указывает на чужого партнёра, а закрепление — на своего: верно закрепление.
+	// Кэш указывает на чужого партнёра, а закрепление - на своего: верно закрепление.
 	if _, err := curators.Assign(ctx, db, curators.NewInput{CuratorID: curator.ID, PartnerID: partnerB, From: today, AssignedBy: root.ID}, now); err != nil {
 		t.Fatal(err)
 	}

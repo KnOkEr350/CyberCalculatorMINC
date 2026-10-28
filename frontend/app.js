@@ -1,4 +1,4 @@
-// Калькулятор затрат по Приказу Минцифры — bootstrap и общие экранные
+// Калькулятор затрат по Приказу Минцифры - bootstrap и общие экранные
 // операции. Store, router, shell и lazy entrypoints экранов вынесены отдельно.
 const state = CyberCalcStore.state;
 
@@ -192,7 +192,7 @@ function fmtMoney(v) {
 
 function fmtReportDate(value) {
   const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
@@ -415,8 +415,8 @@ function regulatoryTimelineMarkup(milestones) {
   return `<div class="card"><h2>Регламентный календарь приказа № 270</h2><div class="readiness-list">${rows || '<p class="muted">Контрольные даты недоступны.</p>'}</div></div>`;
 }
 
-// Строка активных действий (экран 1): то, что требует шага прямо сейчас — задачи
-// в работе, записи с замечаниями, ближайший регламентный срок — и быстрые
+// Строка активных действий (экран 1): то, что требует шага прямо сейчас - задачи
+// в работе, записи с замечаниями, ближайший регламентный срок - и быстрые
 // переходы к вводу данных. Числа берутся из тех же ответов сервера, что и
 // остальной экран, и сами ничего не считают.
 function activeActionsMarkup({ tasks, attention, milestones, quickScreens }) {
@@ -503,16 +503,16 @@ async function renderReportsScreen(root) {
   const planFactCSVQuery = new URLSearchParams(planFactQuery);
   planFactCSVQuery.set("format", "csv");
   const reportHint = !partner
-    ? "Можно формировать общие рабочие выгрузки; выберите партнёра для справки об отсутствии, а партнёра и соглашение — для типовых соглашений."
+    ? "Можно формировать общие рабочие выгрузки; выберите партнёра для справки об отсутствии, а партнёра и соглашение - для типовых соглашений."
     : !agreement
       ? "Справку об отсутствии можно сформировать по всем соглашениям партнёра без факта; для типового соглашения выберите конкретное соглашение."
     : approved
-      ? "Отчёт утверждён — рабочие и регламентные выгрузки доступны."
+      ? "Отчёт утверждён - рабочие и регламентные выгрузки доступны."
       : `Текущий статус: ${statusLabels[workflow?.status] || "не определён"}; рабочие выгрузки доступны до финального утверждения.`;
 
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div><span class="year-badge">${state.year}</span></section>
     <div class="card report-builder"><div class="flex between"><div><h2>Конструктор среза</h2></div><span class="status-badge ${approved ? "active" : "pending"}">${escapeHTML(statusLabels[workflow?.status] || "Контекст не выбран")}</span></div>
-      <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div><div class="field"><label>Риск для конструктора</label><select id="report-risk"><option value="" ${!state.reportRiskFilter ? "selected" : ""}>Все зоны риска</option><option value="green" ${state.reportRiskFilter === "green" ? "selected" : ""}>🟢 Гарантировано</option><option value="yellow" ${state.reportRiskFilter === "yellow" ? "selected" : ""}>🟡 В процессе</option><option value="red" ${state.reportRiskFilter === "red" ? "selected" : ""}>🔴 В зоне риска</option></select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">Все</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">— Выберите —</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
+      <div class="grid cols-3"><div class="field"><label>Год</label><input id="report-year" type="number" min="2000" max="2100" value="${state.year}"></div><div class="field"><label>Период</label><select id="report-period"><option value="plan" ${state.period === "plan" ? "selected" : ""}>План</option><option value="fact" ${state.period === "fact" ? "selected" : ""}>Факт</option></select></div><div class="field"><label>Вид мероприятия</label><select id="report-category"><option value="">Все виды</option>${availableCategories.map((category) => `<option value="${category.code}" ${category.code === state.reportCategory ? "selected" : ""}>${escapeHTML(category.name)}</option>`).join("")}</select></div><div class="field"><label>Риск для конструктора</label><select id="report-risk"><option value="" ${!state.reportRiskFilter ? "selected" : ""}>Все зоны риска</option><option value="green" ${state.reportRiskFilter === "green" ? "selected" : ""}>🟢 Гарантировано</option><option value="yellow" ${state.reportRiskFilter === "yellow" ? "selected" : ""}>🟡 В процессе</option><option value="red" ${state.reportRiskFilter === "red" ? "selected" : ""}>🔴 В зоне риска</option></select></div>${fixedPartner ? `<div class="field"><label>Партнёр</label><input value="${escapeHTML(partner?.name || "Назначенная организация")}" readonly></div>` : `<div class="field"><label>Партнёр</label><select id="report-partner"><option value="">Все</option>${state.partners.map((item) => `<option value="${item.id}" ${item.id === state.partnerID ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("")}</select></div>`}<div class="field"><label>Соглашение</label><select id="report-agreement"><option value="">- Выберите -</option>${state.agreements.map((item) => `<option value="${item.id}" ${item.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(item))}</option>`).join("")}</select></div></div><p class="context-status">${escapeHTML(reportHint)}</p>
     </div>
     <div class="report-format-grid">${reportLink(`/api/reports/export?${categoryQuery}`, "Excel по выбранному срезу", "Категория, партнёр, год и план/факт.", true)}${reportLink(`/api/reports/export?${planFactQuery}`, "План–факт–дельта", "Абсолютная и процентная дельта по партнёрам и видам с учётом фильтра риска.", hasCompanyContext)}${reportLink(`/api/reports/export?${planFactCSVQuery}`, "План–факт–дельта CSV", "Тот же конструктор в CSV для быстрой сверки.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex1" })}`, "Приложение № 1", "Детализированный перечень мероприятий.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2" })}`, "Приложение № 2", "Реестр стажировок, часов и трудовых договоров.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex2", mode: "mentors" })}`, "Отчёт по наставникам", "Часы сопровождения и закреплённые стажёры по каждому наставнику.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex3" })}`, "Приложение № 3", "DOCX-справка по одному соглашению или всем соглашениям партнёра без факта.", hasCompanyContext && hasPartnerContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "annex5" })}`, "Приложение № 5", "Сводный отчёт и выполнение норматива 3%.", hasCompanyContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ report_type: "annex4", report_year: state.year, ...(state.partnerID ? { partner_id: state.partnerID } : {}) })}`, "Приложение № 4", hasMaySnapshot ? "13 граф формы приказа № 270; факт читается из неизменяемого снимка на 1 мая." : "Сначала сформируйте снимок на 1 мая в настройках.", hasCompanyContext && hasMaySnapshot)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement2" })}`, "Типовое соглашение № 2", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink(`/api/reports/export?${new URLSearchParams({ ...Object.fromEntries(base), report_type: "agreement3" })}`, "Типовое соглашение № 3", "Автозаполнение реквизитов сторон в DOCX.", hasCompanyContext && hasAgreementContext)}${reportLink("", "Формы АНО АЦ", "Комплект ТОП-ИТ/ТОП-ИИ на шести листах требует серверного шаблона.", false)}</div>
     <div class="card"><h2>Реестр сформированных файлов</h2>${generatedReports.length ? `<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Форма</th><th>Год</th><th>Файл</th><th>SHA-256</th><th>Размер</th><th></th></tr></thead><tbody>${generatedReports.map((item) => `<tr><td>${new Date(item.generated_at).toLocaleString("ru-RU")}</td><td>${escapeHTML(item.report_type)}</td><td>${item.report_year}</td><td>${escapeHTML(item.file_name)}</td><td><code>${escapeHTML(item.content_sha256.slice(0, 16))}…</code></td><td>${Number(item.size_bytes).toLocaleString("ru-RU")} Б</td><td><a class="btn secondary" href="/api/reports/generated/${encodeURIComponent(item.id)}">Скачать</a></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Файлы ещё не формировались.</p>'}</div>
@@ -572,7 +572,7 @@ async function renderSettingsScreen(root) {
   await show(state.settingsTab);
 }
 
-// SEC-10: диспетчер задач — маршрут, причина fallback и история переназначений
+// SEC-10: диспетчер задач - маршрут, причина fallback и история переназначений
 // видны в интерфейсе; попытку переназначения и закрытие выполняет сервер.
 const TASK_ROUTE_LABELS = { specialist: "Профильный специалист", curator: "Куратор", org_admin: "Администратор организации", super_admin: "Системный администратор", unassigned: "Без исполнителя" };
 const TASK_STATUS_LABELS = { open: "Открыта", done: "Выполнена", cancelled: "Отменена" };
@@ -612,7 +612,7 @@ async function renderSettingsTasks(box) {
         const canAct = task.status === "open";
         detail.innerHTML = `<h3>${escapeHTML(task.title)}</h3>
           ${task.fallback_reason ? `<p><b>Причина обхода:</b> ${escapeHTML(task.fallback_reason)}</p>` : ""}
-          <ol class="task-history">${(data.history || []).map((event) => `<li>${escapeHTML(TASK_ACTION_LABELS[event.action] || event.action)} · ${escapeHTML(TASK_ROUTE_LABELS[event.route] || event.route)}${event.system ? " · автоматически" : ""}${event.reason ? ` — ${escapeHTML(event.reason)}` : ""} <span class="muted">${escapeHTML(String(event.occurred_at || "").replace("T", " ").slice(0, 16))}</span></li>`).join("")}</ol>
+          <ol class="task-history">${(data.history || []).map((event) => `<li>${escapeHTML(TASK_ACTION_LABELS[event.action] || event.action)} · ${escapeHTML(TASK_ROUTE_LABELS[event.route] || event.route)}${event.system ? " · автоматически" : ""}${event.reason ? ` - ${escapeHTML(event.reason)}` : ""} <span class="muted">${escapeHTML(String(event.occurred_at || "").replace("T", " ").slice(0, 16))}</span></li>`).join("")}</ol>
           ${canAct ? `<div class="flex"><button type="button" class="btn secondary" id="task-reassign">Переназначить</button><button type="button" class="btn" id="task-complete">Отметить выполненной</button></div>` : ""}`;
         detail.querySelector("#task-reassign")?.addEventListener("click", async () => {
           const reason = prompt("Причина переназначения");
@@ -637,8 +637,8 @@ async function renderSettingsTasks(box) {
 
 // ------------------------------------------------------------- DASHBOARD --
 
-// Срезы заготовки МЦ «Светофор»: семестр или его сезон (нечётные — осенние,
-// чётные — весенние) и цвет светофора по вероятности подтверждения.
+// Срезы заготовки МЦ «Светофор»: семестр или его сезон (нечётные - осенние,
+// чётные - весенние) и цвет светофора по вероятности подтверждения.
 const DASHBOARD_SEMESTER_OPTIONS = [["", "Все семестры"], ["autumn", "Осенние (нечётные)"], ["spring", "Весенние (чётные)"], ...Array.from({ length: 13 }, (_, index) => [String(index + 1), `Семестр ${index + 1}`])];
 const DASHBOARD_LIGHT_OPTIONS = [["", "Любая вероятность"], ["green", "Можем подтвердить сейчас"], ["yellow", "Подтвердим, есть вопросы"], ["red", "Низкая вероятность"]];
 
@@ -665,7 +665,7 @@ async function renderDashboard(root) {
     return;
   }
   state.dashboard = d;
-  // Календарь и задачи — дополнение экрана: их недоступность не должна лишать
+  // Календарь и задачи - дополнение экрана: их недоступность не должна лишать
   // пользователя самого дашборда.
   let milestones = [];
   try { milestones = await api(`/report-calendar?report_year=${encodeURIComponent(state.year)}`); } catch (_) { milestones = []; }
@@ -679,7 +679,7 @@ async function renderDashboard(root) {
     const factMap = counts(fact);
     const codes = [...new Set([...planMap.keys(), ...factMap.keys()])];
     if (!codes.length)
-      return `<div class="chart-empty">Добавьте записи плана или факта — здесь появится сравнение.</div>`;
+      return `<div class="chart-empty">Добавьте записи плана или факта - здесь появится сравнение.</div>`;
     const max = Math.max(
       1,
       ...codes.flatMap((code) => [
@@ -940,7 +940,7 @@ async function renderEntries(root, screen = CyberCalcScreens.activity(state.view
 }
 
 function partnerName(id) {
-  if (!id) return "—";
+  if (!id) return "-";
   const p = state.partners.find((p) => p.id === id);
   return p ? p.name : id;
 }
@@ -1002,7 +1002,7 @@ function fieldInput(f, value, audience) {
                 }[o] || o,
             }));
     return `<select data-key="${escapeHTML(f.key)}" data-kind="select" ${f.required ? "required" : ""}>
-      <option value="">—</option>
+      <option value="">-</option>
       ${opts
         .map(
           (o) =>
@@ -1237,7 +1237,7 @@ async function openStaffMembersDialog(onChange) {
   const drawer = CyberCalcUI.openDrawer({
     id: "staff-members-drawer",
     draftKey: canManage ? `cybercalc:drawer-draft:v1:${state.me?.id || ""}:staff-members` : "",
-    title: "ИТ-специалисты — потенциальные преподаватели",
+    title: "ИТ-специалисты - потенциальные преподаватели",
     mode: canManage ? "edit" : "view",
     wide: true,
     content: `
@@ -1265,7 +1265,7 @@ async function openStaffMembersDialog(onChange) {
   };
   const paint = () => {
     backdrop.querySelector("#staff-list").innerHTML = items.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Должность</th><th>ОКЗ</th><th>Стаж</th><th>Статус</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.fio)}</b><br><small>${escapeHTML(item.company_department || "—")}</small></td><td>${escapeHTML(item.company_position)}</td><td><code>${escapeHTML(item.okz_code)}</code><br><small>${escapeHTML(item.okz_name)}</small></td><td>${item.it_experience_days} дн.</td><td><span class="status-badge ${item.eligible ? "active" : "inactive"}">${item.eligible ? "Подтверждён" : "Не подтверждён"}</span></td><td>${canManage ? `<button class="btn secondary" data-staff-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+      ? `<div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Должность</th><th>ОКЗ</th><th>Стаж</th><th>Статус</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.fio)}</b><br><small>${escapeHTML(item.company_department || "-")}</small></td><td>${escapeHTML(item.company_position)}</td><td><code>${escapeHTML(item.okz_code)}</code><br><small>${escapeHTML(item.okz_name)}</small></td><td>${item.it_experience_days} дн.</td><td><span class="status-badge ${item.eligible ? "active" : "inactive"}">${item.eligible ? "Подтверждён" : "Не подтверждён"}</span></td><td>${canManage ? `<button class="btn secondary" data-staff-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Потенциальные преподаватели ещё не добавлены.</p>';
     backdrop.querySelectorAll("[data-staff-edit]").forEach((button) => button.onclick = () => {
       const item = items.find((value) => value.id === button.dataset.staffEdit);
@@ -1321,7 +1321,7 @@ async function openTeachingPayoutsDialog() {
     wide: true,
     content: `
     ${canManage ? `<form id="payout-form"><input type="hidden" name="id"><div class="grid cols-3">
-      <div class="field"><label>Педагогическая нагрузка *</label><select name="teaching_activity_id" required><option value="">— Выберите —</option>${teachingEntries.map((item) => `<option value="${item.id}">${escapeHTML(item.payload.teacher_full_name || "Преподаватель")} · ${escapeHTML(item.payload.course_name || "Курс")} · ${escapeHTML(item.period_type === "fact" ? "Факт" : "План")}</option>`).join("")}</select></div>
+      <div class="field"><label>Педагогическая нагрузка *</label><select name="teaching_activity_id" required><option value="">- Выберите -</option>${teachingEntries.map((item) => `<option value="${item.id}">${escapeHTML(item.payload.teacher_full_name || "Преподаватель")} · ${escapeHTML(item.payload.course_name || "Курс")} · ${escapeHTML(item.period_type === "fact" ? "Факт" : "План")}</option>`).join("")}</select></div>
       <div class="field"><label>Квартал *</label><select name="target_quarter" required>${[1,2,3,4].map((q) => `<option value="Q${q}">Q${q}</option>`).join("")}</select></div>
       <div class="field"><label>Финансовый год *</label><input name="target_year" type="number" min="2000" max="2100" value="${state.year}" required></div>
       <div class="field"><label>Плановая компенсация, ₽ *</label><input name="planned_compensation_rub" type="number" min="0" step="0.01" required></div>
@@ -1339,7 +1339,7 @@ async function openTeachingPayoutsDialog() {
   const reset = () => { if (form) { form.reset(); form.elements.id.value = ""; form.elements.target_year.value = state.year; } };
   const paint = () => {
     backdrop.querySelector("#payout-list").innerHTML = items.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Преподаватель / курс</th><th>Период</th><th>План</th><th>Статус</th><th>Документ</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.teacher_full_name || "—")}</b><br><small>${escapeHTML(item.course_name || "—")}</small></td><td>${escapeHTML(item.target_quarter)} ${item.target_year}</td><td>${fmtMoney(item.planned_compensation_rub)}</td><td><span class="status-badge ${item.is_fully_paid ? "active" : "inactive"}">${item.is_fully_paid ? "Выплачено" : "Запланировано"}</span>${item.payout_date ? `<br><small>${escapeHTML(item.payout_date)}</small>` : ""}</td><td>${escapeHTML(item.payout_order_num || "—")}</td><td>${canManage ? `<button class="btn secondary" data-payout-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+      ? `<div class="table-wrap"><table><thead><tr><th>Преподаватель / курс</th><th>Период</th><th>План</th><th>Статус</th><th>Документ</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.teacher_full_name || "-")}</b><br><small>${escapeHTML(item.course_name || "-")}</small></td><td>${escapeHTML(item.target_quarter)} ${item.target_year}</td><td>${fmtMoney(item.planned_compensation_rub)}</td><td><span class="status-badge ${item.is_fully_paid ? "active" : "inactive"}">${item.is_fully_paid ? "Выплачено" : "Запланировано"}</span>${item.payout_date ? `<br><small>${escapeHTML(item.payout_date)}</small>` : ""}</td><td>${escapeHTML(item.payout_order_num || "-")}</td><td>${canManage ? `<button class="btn secondary" data-payout-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Выплаты ещё не запланированы.</p>';
     backdrop.querySelectorAll("[data-payout-edit]").forEach((button) => button.onclick = () => {
       const item = items.find((value) => value.id === button.dataset.payoutEdit);
@@ -1485,7 +1485,7 @@ async function openEntryModal(entry, readOnly = false) {
     ? `<div class="card compliance-card"><div class="flex between"><h3>Документальная готовность</h3><span class="risk-label ${escapeHTML(entry.compliance.state)}"><i></i>${entry.compliance.state === "green" ? "Готово" : entry.compliance.state === "yellow" ? "Нужна доработка" : "Заблокировано"}</span></div><ul>${entry.compliance.checks.map((check) => `<li>${check.complete ? "✓" : check.blocking ? "✕" : "!"} ${escapeHTML(check.label)}</li>`).join("")}</ul><small>Набор правил: ${escapeHTML(entry.compliance.ruleset_version)}</small></div>`
     : "";
 
-  const drawerTitle = `${readOnly ? "Просмотр записи" : financialOnly ? "Подтверждение компенсации" : isEdit ? "Редактировать запись" : "Новая запись"} — ${cat.name}`;
+  const drawerTitle = `${readOnly ? "Просмотр записи" : financialOnly ? "Подтверждение компенсации" : isEdit ? "Редактировать запись" : "Новая запись"} - ${cat.name}`;
   const drawer = CyberCalcUI.openDrawer({
     id: "entry-drawer",
     title: drawerTitle,
@@ -1531,7 +1531,7 @@ async function openEntryModal(entry, readOnly = false) {
       const history = backdrop.querySelector("#m-cost-history div");
       history.className = "table-wrap";
       history.innerHTML = items.length
-        ? `<table><thead><tr><th>Редакция</th><th>Было</th><th>Стало</th><th>Основание</th><th>Причина</th><th>Дата</th></tr></thead><tbody>${items.map((item) => `<tr><td>№ ${item.revision_no}</td><td>${item.previous_amount_rub == null ? "—" : fmtMoney(item.previous_amount_rub)}</td><td>${fmtMoney(item.confirmed_amount_rub)}</td><td>${escapeHTML(item.calculation_basis)}</td><td>${escapeHTML(item.correction_reason)}</td><td>${new Date(item.changed_at).toLocaleString("ru-RU")}</td></tr>`).join("")}</tbody></table>`
+        ? `<table><thead><tr><th>Редакция</th><th>Было</th><th>Стало</th><th>Основание</th><th>Причина</th><th>Дата</th></tr></thead><tbody>${items.map((item) => `<tr><td>№ ${item.revision_no}</td><td>${item.previous_amount_rub == null ? "-" : fmtMoney(item.previous_amount_rub)}</td><td>${fmtMoney(item.confirmed_amount_rub)}</td><td>${escapeHTML(item.calculation_basis)}</td><td>${escapeHTML(item.correction_reason)}</td><td>${new Date(item.changed_at).toLocaleString("ru-RU")}</td></tr>`).join("")}</tbody></table>`
         : '<span class="muted">История пока пуста</span>';
     }).catch((error) => {
       const history = backdrop.querySelector("#m-cost-history div");
@@ -1632,7 +1632,7 @@ async function openEntryModal(entry, readOnly = false) {
         addStaff.onclick = () => openStaffMembersDialog(async () => {
           state.staffMembers = await api("/staff-members");
           const keep = select.value;
-          select.innerHTML = '<option value="">—</option>' + state.staffMembers.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(`${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}`)}</option>`).join("");
+          select.innerHTML = '<option value="">-</option>' + state.staffMembers.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(`${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}`)}</option>`).join("");
           select.value = state.staffMembers.some((m) => m.id === keep) ? keep : state.staffMembers[state.staffMembers.length - 1]?.id || "";
           syncStaff();
         });
@@ -1816,7 +1816,7 @@ async function openEntryModal(entry, readOnly = false) {
     const options = (
       Array.isArray(state.partners) ? state.partners : []
     ).filter((partner) => partner.partner_kind === event.target.value);
-    partnerSelect.innerHTML = `<option value="">—</option>${options
+    partnerSelect.innerHTML = `<option value="">-</option>${options
       .map(
         (partner) =>
           `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`,
@@ -1916,7 +1916,7 @@ async function wireAttachSection(root, entryId, readOnly = false, uploadControl 
   refresh();
 }
 
-// ТОП-ИТ/ТОП-ИИ: составляющие программы (TOP-04, TOP-06, TOP-07) — неденежная
+// ТОП-ИТ/ТОП-ИИ: составляющие программы (TOP-04, TOP-06, TOP-07) - неденежная
 // поддержка, стипендиаты и производственные кейсы. Шкала софинансирования
 // (ADR-14) показывается отдельным блоком над списком.
 const TOP_KIND_LABELS = { support: "Неденежная поддержка", scholarship: "Стипендиаты", case: "Производственные кейсы", rid: "РИД (результаты интеллектуальной деятельности)" };
@@ -1946,7 +1946,7 @@ const TOP_FIELDS = {
     { key: "rid_type", label: "Тип РИД", type: "select", options: TOP_RID_TYPE_LABELS },
     { key: "authors", label: "Авторы", type: "text" },
     { key: "university_share_pct", label: "Доля прав вуза, %", type: "number" },
-    { key: "company_share_pct", label: "Доля прав компании, % (вместе со вузом — 100)", type: "number" },
+    { key: "company_share_pct", label: "Доля прав компании, % (вместе со вузом - 100)", type: "number" },
   ],
   case: [
     { key: "implementation_org", label: "Организация внедрения", type: "text" },
@@ -1957,17 +1957,17 @@ const TOP_FIELDS = {
 };
 
 function topItemSummary(item) {
-  const money = (value) => (value == null ? "—" : `${Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`);
+  const money = (value) => (value == null ? "-" : `${Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`);
   if (item.kind === "support")
-    return `${TOP_SUPPORT_KIND_LABELS[item.support_kind] || item.support_kind} · акт ${item.act_reference || "—"} от ${String(item.act_date || "").split("-").reverse().join(".")} · подтверждено ${money(item.confirmed_value_rub)}`;
+    return `${TOP_SUPPORT_KIND_LABELS[item.support_kind] || item.support_kind} · акт ${item.act_reference || "-"} от ${String(item.act_date || "").split("-").reverse().join(".")} · подтверждено ${money(item.confirmed_value_rub)}`;
   if (item.kind === "scholarship")
-    return `${item.student_name}, ${item.group_name}, ${item.course} курс · ${item.period_start} — ${item.period_end} · ${money(item.amount_rub)} · донор ${item.donor_name}`;
+    return `${item.student_name}, ${item.group_name}, ${item.course} курс · ${item.period_start} - ${item.period_end} · ${money(item.amount_rub)} · донор ${item.donor_name}`;
   if (item.kind === "rid")
     return `${TOP_RID_TYPE_LABELS[item.rid_type] || item.rid_type} · авторы: ${item.authors} · права: вуз ${Number(item.university_share_pct).toLocaleString("ru-RU")}% / компания ${Number(item.company_share_pct).toLocaleString("ru-RU")}%`;
   return `${item.implementation_org} · ${TOP_CASE_STATUS_LABELS[item.implementation_status] || item.implementation_status}${item.implemented_on ? " " + item.implemented_on : ""}`;
 }
 
-// ADR-14: шкала софинансирования — списанное вузом к плану X по договору.
+// ADR-14: шкала софинансирования - списанное вузом к плану X по договору.
 // ≥100% зелёный, 70–99,9% жёлтый, ниже 70% красный; норма вуза от гранта
 // показывается отдельно и в шкалу не входит. Пороги считает сервер.
 const TOP_SCALE_LABELS = { green: "План выполнен", yellow: "Есть отставание", red: "Значительное отставание", unknown: "План софинансирования не задан" };
@@ -1977,14 +1977,14 @@ function topScaleMarkup(progress) {
   const money = (value) => `${Number(value || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`;
   const width = scale.known ? Math.min(100, Math.max(0, scale.percent)) : 0;
   const detail = scale.known ? `${scale.percent.toLocaleString("ru-RU")}% (${money(scale.spent_rub)} из ${money(scale.planned_rub)})` : "";
-  const norm = progress.university_norm_rub != null ? `<p class="muted">Норма вуза: ${progress.university_norm_percent}% от гранта — ${money(progress.university_norm_rub)}.</p>` : "";
+  const norm = progress.university_norm_rub != null ? `<p class="muted">Норма вуза: ${progress.university_norm_percent}% от гранта - ${money(progress.university_norm_rub)}.</p>` : "";
   return `<div class="top-scale ${escapeHTML(scale.state)}" role="img" aria-label="${escapeHTML(TOP_SCALE_LABELS[scale.state] || "")} ${escapeHTML(detail)}"><div class="top-scale-bar"><i style="width:${width}%"></i></div><b>${escapeHTML(TOP_SCALE_LABELS[scale.state] || "")}</b> ${escapeHTML(detail)}</div>${norm}`;
 }
 
 function renderTopItemsSection() {
   return `<div class="card" id="top-items-section" style="margin-top:14px;background:transparent;padding:0;border:none">
     <h2>Составляющие программы</h2>
-    <p class="muted">Неденежная поддержка, стипендиаты и производственные кейсы. Суммы здесь — сведения о программе; зачётный объём определяет отчёт о софинансировании.</p>
+    <p class="muted">Неденежная поддержка, стипендиаты и производственные кейсы. Суммы здесь - сведения о программе; зачётный объём определяет отчёт о софинансировании.</p>
     <div id="top-items-list" class="attach-list muted">Загрузка…</div>
     <div id="top-items-form-box"></div>
   </div>`;
@@ -1993,7 +1993,7 @@ function renderTopItemsSection() {
 async function wireTopItems(root, entryId, canEdit) {
   const list = root.querySelector("#top-items-list");
   const formBox = root.querySelector("#top-items-form-box");
-  // REPORT-09: отчёт АНО АЦ по программе — шесть листов по ТЗ.
+  // REPORT-09: отчёт АНО АЦ по программе - шесть листов по ТЗ.
   if (isStaffUser()) list.insertAdjacentHTML("beforebegin", `<p><a class="btn secondary" id="top-ano-report" href="/api/reports/export?report_type=ano_ac&report_year=${encodeURIComponent(state.year)}&entry_id=${encodeURIComponent(entryId)}">Отчёт АНО АЦ (XLSX, 6 листов)</a></p>`);
   const refresh = async () => {
     try {
@@ -2005,7 +2005,7 @@ async function wireTopItems(root, entryId, canEdit) {
         .map((kind) => {
           const rows = items.filter((item) => item.kind === kind);
           return `<h3>${escapeHTML(TOP_KIND_LABELS[kind])} · ${rows.length}</h3>${rows.length
-            ? rows.map((item) => `<div class="top-item-row"><span><b>${escapeHTML(item.title)}</b> — ${escapeHTML(topItemSummary(item))}</span>${canEdit ? `<button type="button" class="btn secondary" data-top-delete="${escapeHTML(item.id)}">Удалить</button>` : ""}</div>`).join("")
+            ? rows.map((item) => `<div class="top-item-row"><span><b>${escapeHTML(item.title)}</b> - ${escapeHTML(topItemSummary(item))}</span>${canEdit ? `<button type="button" class="btn secondary" data-top-delete="${escapeHTML(item.id)}">Удалить</button>` : ""}</div>`).join("")
             : '<p class="muted">Строк пока нет.</p>'}`;
         })
         .join("");
@@ -2095,7 +2095,7 @@ async function wireLegalDispute(root, entryId) {
       const active = items.some((item) => item.active);
       list.className = "";
       list.innerHTML = items.length
-        ? `<ol class="task-history">${items.map((item) => `<li>${item.active ? '<span class="status-badge inactive">действует</span>' : '<span class="status-badge active">снято</span>'} ${escapeHTML(item.reason)}${item.lifted_reason ? ` — снято: ${escapeHTML(item.lifted_reason)}` : ""} <span class="muted">${escapeHTML(String(item.raised_at || "").slice(0, 10).split("-").reverse().join("."))}</span></li>`).join("")}</ol>`
+        ? `<ol class="task-history">${items.map((item) => `<li>${item.active ? '<span class="status-badge inactive">действует</span>' : '<span class="status-badge active">снято</span>'} ${escapeHTML(item.reason)}${item.lifted_reason ? ` - снято: ${escapeHTML(item.lifted_reason)}` : ""} <span class="muted">${escapeHTML(String(item.raised_at || "").slice(0, 10).split("-").reverse().join("."))}</span></li>`).join("")}</ol>`
         : '<p class="muted">Сомнений не заявлено.</p>';
       formBox.innerHTML = canDispute
         ? `<div class="top-item-form" id="legal-dispute-form"><div class="field"><label>Причина *</label><input name="reason" maxlength="2000"></div><button class="btn secondary" type="button" id="legal-dispute-submit">${active ? "Снять сомнение" : "Поставить под сомнение"}</button></div>`
@@ -2341,7 +2341,7 @@ async function renderAdminUsers(box) {
           <tbody>${users
             .map(
               (u) => `<tr>
-            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.entity_type === "edu_institution" ? "Образовательная организация" : state.itCompanies.find((company) => company.id === u.it_company_id)?.name || "ИТ-компания не назначена")}</td><td>${escapeHTML(state.partners.find((partner) => partner.id === u.partner_id)?.name || "—")}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
+            <td>${escapeHTML(u.email)}</td><td>${escapeHTML(u.full_name)}</td><td>${escapeHTML(u.entity_type === "edu_institution" ? "Образовательная организация" : state.itCompanies.find((company) => company.id === u.it_company_id)?.name || "ИТ-компания не назначена")}</td><td>${escapeHTML(state.partners.find((partner) => partner.id === u.partner_id)?.name || "-")}</td><td><span class="role-badge">${escapeHTML(valueLabel(u.role))}</span></td>
             <td><span class="status-badge ${u.is_active ? "active" : "inactive"}">${u.is_active ? "Активен" : "Отключён"}</span></td>
             <td><button class="btn secondary" data-id="${escapeHTML(u.id)}" data-active="${u.is_active}">${u.is_active ? "Отключить" : "Включить"}</button><button class="btn secondary" data-profile="${escapeHTML(u.id)}">Профиль и доступ</button></td>
           </tr>`,
@@ -2547,7 +2547,7 @@ async function renderAdminLogs(box) {
 	const after = log.new || log.new_value || {};
     const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])]
       .filter((key) => JSON.stringify(before[key] ?? "") !== JSON.stringify(after[key] ?? ""))
-      .map((key) => `${fieldLabels[key] || key}: «${before[key] || "—"}» → «${after[key] || "—"}»`);
+      .map((key) => `${fieldLabels[key] || key}: «${before[key] || "-"}» → «${after[key] || "-"}»`);
     const name = after.name || before.name || "";
     const details = changed.length
       ? `<details><summary>${changed.length} изменённых полей</summary><ul>${changed.map((line) => `<li>${escapeHTML(line)}</li>`).join("")}</ul></details>`
@@ -2560,7 +2560,7 @@ async function renderAdminLogs(box) {
       ? `<div class="table-wrap"><table><thead><tr><th>Когда</th><th>Кто</th><th>Объект и действие</th><th>Что изменено</th></tr></thead><tbody>${visible.map((log) => `<tr>
         <td>${new Date(log.created_at).toLocaleString("ru-RU")}</td>
 		<td>${escapeHTML(log.actor?.name || log.user_name || ((log.actor?.id || log.user_id) ? "Пользователь" : "Автоматический скрипт"))}${(log.actor?.email || log.user_email) ? `<br><small>${escapeHTML(log.actor?.email || log.user_email)}</small>` : ""}</td>
-		<td title="ID запроса: ${escapeHTML(log.request_id || "—")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(actionLabel(log.action))}</b></td>
+		<td title="ID запроса: ${escapeHTML(log.request_id || "-")}">${escapeHTML(valueLabel(log.entity?.type || log.entity_type))}${(log.entity?.id || log.entity_id) ? " #" + escapeHTML((log.entity?.id || log.entity_id).slice(0, 8)) : ""}<br><b>${escapeHTML(actionLabel(log.action))}</b></td>
         <td>${summarize(log)}</td>
       </tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Действий по выбранному фильтру пока нет.</p>';

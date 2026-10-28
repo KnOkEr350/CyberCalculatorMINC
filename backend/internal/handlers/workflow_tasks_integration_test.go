@@ -15,7 +15,7 @@ import (
 	"cybercalc/internal/testfixtures"
 )
 
-// SEC-04 и SEC-10 на реальной БД: цепочка fallback по ADR-22 — специалист,
+// SEC-04 и SEC-10 на реальной БД: цепочка fallback по ADR-22 - специалист,
 // закреплённый куратор, ORG_ADMIN, SUPER_ADMIN; идемпотентная постановка,
 // плановый пересчёт, границы арендатора и полномочия при выполнении.
 func TestWorkflowTaskDispatcher(t *testing.T) {
@@ -127,7 +127,7 @@ func TestWorkflowTaskDispatcher(t *testing.T) {
 			t.Fatalf("причина fallback должна называть роль: %q", task.FallbackReason)
 		}
 		fallbackTask = task
-		// Повторная постановка — та же задача, без нового события.
+		// Повторная постановка - та же задача, без нового события.
 		code, again := create(manager, hrBody("e-1-"+company.ID))
 		if code != 200 || again.ID != task.ID || len(events(task.ID)) != 1 {
 			t.Fatalf("постановка идемпотентна: %d %+v событий %d", code, again, len(events(task.ID)))
@@ -157,7 +157,7 @@ func TestWorkflowTaskDispatcher(t *testing.T) {
 		}
 	})
 
-	t.Run("появился специалист — плановый пересчёт возвращает задачу ему", func(t *testing.T) {
+	t.Run("появился специалист - плановый пересчёт возвращает задачу ему", func(t *testing.T) {
 		_, task := create(manager, hrBody("e-3-"+company.ID))
 		if task.Route != tasks.RouteCurator {
 			t.Fatalf("исходно куратор: %+v", task)
@@ -173,7 +173,7 @@ func TestWorkflowTaskDispatcher(t *testing.T) {
 		}
 		last := events(task.ID)
 		if e := last[len(last)-1]; e.Action != "reassigned" || !e.System || e.ActorID != "" {
-			t.Fatalf("плановое переназначение — действие системы: %+v", e)
+			t.Fatalf("плановое переназначение - действие системы: %+v", e)
 		}
 		var systemAudit int
 		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM audit_log WHERE entity_type='workflow_task' AND entity_id=$1 AND action='reassign' AND actor_type='system'`, task.ID).Scan(&systemAudit); err != nil || systemAudit != 1 {
@@ -188,8 +188,8 @@ func TestWorkflowTaskDispatcher(t *testing.T) {
 		}
 	})
 
-	t.Run("куратор перестал быть закреплённым — задача эскалируется", func(t *testing.T) {
-		// Кадровой службы в арендаторе больше нет, кроме появившейся выше — отключаем её.
+	t.Run("куратор перестал быть закреплённым - задача эскалируется", func(t *testing.T) {
+		// Кадровой службы в арендаторе больше нет, кроме появившейся выше - отключаем её.
 		if _, err := db.ExecContext(ctx, `UPDATE users SET is_active=FALSE WHERE it_company_id::text=$1 AND role='hr_specialist'`, company.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +241,7 @@ func TestWorkflowTaskDispatcher(t *testing.T) {
 			return rec.Code
 		}
 		if get(manager) != 200 || get(foreignManager) != 404 || get(curatorUser) != 404 {
-			t.Fatal("задачу видят управляющий арендатора и исполнитель, посторонние — нет")
+			t.Fatal("задачу видят управляющий арендатора и исполнитель, посторонние - нет")
 		}
 		listCount := func(u middleware.AuthUser, query string) int {
 			rec := httptest.NewRecorder()

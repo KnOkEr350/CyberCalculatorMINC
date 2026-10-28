@@ -18,14 +18,14 @@ scripts/sync-embedded-frontend.sh
 
 ## Организации и специальности
 
-- `GET /api/organizations` — единый read-каталог ИТ-компаний, ВО, СПО, школ и
+- `GET /api/organizations` - единый read-каталог ИТ-компаний, ВО, СПО, школ и
   РОИВ с ИНН/КПП/ОГРН, адресом, аккредитацией и ролью.
-- `GET /api/specialties` — активная версия нормализованного справочника.
-- `POST /api/specialty-catalogs/import` — атомарный импорт UTF-8 CSV или XLSX.
+- `GET /api/specialties` - активная версия нормализованного справочника.
+- `POST /api/specialty-catalogs/import` - атомарный импорт UTF-8 CSV или XLSX.
 
 Импорт справочника требует multipart-поля `version_code`, `title`,
 `effective_from`, `normative_source_id`, `file`. Обязательные столбцы файла:
-`code`, `education_system`, `title`; необязательный — `qualification_level`.
+`code`, `education_system`, `title`; необязательный - `qualification_level`.
 `education_system` принимает `higher` или `secondary_vocational`.
 
 ## Тарифы

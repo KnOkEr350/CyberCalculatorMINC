@@ -13,7 +13,7 @@ import (
 	"cybercalc/internal/tasks"
 )
 
-// WorkflowTaskHandlers — задачи workflow и диспетчер эскалаций (SEC-10).
+// WorkflowTaskHandlers - задачи workflow и диспетчер эскалаций (SEC-10).
 type WorkflowTaskHandlers struct{ DB *sql.DB }
 
 type createTaskRequest struct {
@@ -50,7 +50,7 @@ func writeTaskError(w http.ResponseWriter, err error) {
 	}
 }
 
-// visible — управляющий видит задачи своего арендатора, остальные — только свои.
+// visible - управляющий видит задачи своего арендатора, остальные - только свои.
 func visibleTask(u middleware.AuthUser, t tasks.Task) bool {
 	if t.AssigneeID == u.ID {
 		return true
@@ -61,7 +61,7 @@ func visibleTask(u middleware.AuthUser, t tasks.Task) bool {
 	return assignmentTenant(u) == "" || assignmentTenant(u) == t.ITCompanyID
 }
 
-// List — свои задачи; управляющему — задачи арендатора, в том числе
+// List - свои задачи; управляющему - задачи арендатора, в том числе
 // эскалированные и без исполнителя.
 func (h *WorkflowTaskHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	filter := tasks.Filter{Status: strings.TrimSpace(r.URL.Query().Get("status")),
@@ -84,7 +84,7 @@ func (h *WorkflowTaskHandlers) List(w http.ResponseWriter, r *http.Request, u mi
 	middleware.WriteJSON(w, http.StatusOK, list)
 }
 
-// Get — задача с историей маршрута, причин fallback и попыток переназначения.
+// Get - задача с историей маршрута, причин fallback и попыток переназначения.
 func (h *WorkflowTaskHandlers) Get(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, id string) {
 	task, err := tasks.Get(r.Context(), h.DB, id)
 	if err != nil || !visibleTask(u, task) {
@@ -151,7 +151,7 @@ func (h *WorkflowTaskHandlers) Create(w http.ResponseWriter, r *http.Request, u 
 	middleware.WriteJSON(w, status, task)
 }
 
-// Reassign — ручная попытка переназначения: цепочка проходится заново.
+// Reassign - ручная попытка переназначения: цепочка проходится заново.
 func (h *WorkflowTaskHandlers) Reassign(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, id string) {
 	if !canDispatchTasks(u) {
 		middleware.WriteError(w, http.StatusForbidden, "переназначать задачи может администрация")

@@ -47,7 +47,7 @@ func documentText(t *testing.T, body []byte) string {
 	return ""
 }
 
-// REPORT-08: Приложения № 2 и № 3 к Порядку — это примерная форма
+// REPORT-08: Приложения № 2 и № 3 к Порядку - это примерная форма
 // соглашения («в лице …, действующего на основании …»), а не таблица
 // реквизитов, и она должна нести реквизиты обеих сторон.
 func TestAgreementTemplateContainsBothParties(t *testing.T) {
@@ -68,7 +68,7 @@ func TestAgreementTemplateContainsBothParties(t *testing.T) {
 			t.Fatalf("в тексте соглашения нет фрагмента %q", fragment)
 		}
 	}
-	// Организация названа «ООО «ИТ-Холдинг»» — кавычки должны быть
+	// Организация названа «ООО «ИТ-Холдинг»» - кавычки должны быть
 	// экранированы как XML, иначе документ не откроется.
 	if strings.Contains(text, "ООО «ИТ-Холдинг»") && !strings.Contains(text, "&") {
 		t.Log("кавычки не требуют экранирования, XML корректен")

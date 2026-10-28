@@ -1,7 +1,7 @@
-// Package topit — составляющие программы ТОП-ИТ/ТОП-ИИ (Вид 4): неденежная
+// Package topit - составляющие программы ТОП-ИТ/ТОП-ИИ (Вид 4): неденежная
 // поддержка (TOP-04), стипендиаты (TOP-06) и производственные кейсы (TOP-07).
 //
-// Пакет проверяет строки и хранит их; суммы здесь — сведения о программе, а не
+// Пакет проверяет строки и хранит их; суммы здесь - сведения о программе, а не
 // зачётная сумма: официальный объём Вида 4 определяется отчётом о
 // софинансировании (ADR-19), а пороги и знаменатель прогресса ждут ADR-14 и
 // здесь не вычисляются.
@@ -37,7 +37,7 @@ var (
 	ErrForeignFiles = errors.New("документ не относится к этой записи")
 )
 
-// Input — строка так, как её присылает клиент. Поля чужого вида должны быть
+// Input - строка так, как её присылает клиент. Поля чужого вида должны быть
 // пустыми.
 type Input struct {
 	Kind  string `json:"kind"`
@@ -68,7 +68,7 @@ type Input struct {
 	Authors            string   `json:"authors,omitempty"`
 	UniversitySharePct *float64 `json:"university_share_pct,omitempty"`
 	CompanySharePct    *float64 `json:"company_share_pct,omitempty"`
-	// DocumentIDs — вложения записи, подтверждающие строку.
+	// DocumentIDs - вложения записи, подтверждающие строку.
 	DocumentIDs []string `json:"document_ids,omitempty"`
 }
 
@@ -100,7 +100,7 @@ func day(value, label string, today time.Time, allowFuture bool) (string, error)
 }
 
 // Normalize проверяет строку по её виду и приводит к каноническому виду.
-// today — московская дата проверки: акт и внедрение из будущего невозможны.
+// today - московская дата проверки: акт и внедрение из будущего невозможны.
 func Normalize(in Input, today time.Time) (Input, error) {
 	title, err := text(in.Title, "название", 2, 300)
 	if err != nil {
@@ -108,7 +108,7 @@ func Normalize(in Input, today time.Time) (Input, error) {
 	}
 	in.Title = title
 	kind := Kind(in.Kind)
-	// Поле чужого вида — ошибка, а не молчаливое отбрасывание: клиент должен
+	// Поле чужого вида - ошибка, а не молчаливое отбрасывание: клиент должен
 	// узнать, что его данные не сохранены.
 	foreign := func(name string, present bool) error {
 		if present {
@@ -255,7 +255,7 @@ func Normalize(in Input, today time.Time) (Input, error) {
 	return in, nil
 }
 
-// Item — сохранённая строка.
+// Item - сохранённая строка.
 type Item struct {
 	ID        string `json:"id"`
 	EntryID   string `json:"entry_id"`
@@ -312,7 +312,7 @@ func classify(err error) error {
 	return err
 }
 
-// checkDocuments — документы принадлежат записи и не просрочены.
+// checkDocuments - документы принадлежат записи и не просрочены.
 func checkDocuments(ctx context.Context, db queryer, entryID string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -473,7 +473,7 @@ func List(ctx context.Context, db queryer, entryID string) ([]Item, error) {
 	return out, rows.Err()
 }
 
-// Summary — сведения по строкам записи. Это не зачётная сумма.
+// Summary - сведения по строкам записи. Это не зачётная сумма.
 type Summary struct {
 	Supports             int          `json:"supports"`
 	ConfirmedSupportRub  money.Amount `json:"confirmed_support_rub"`

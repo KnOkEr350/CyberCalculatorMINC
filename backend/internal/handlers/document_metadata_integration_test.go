@@ -137,7 +137,7 @@ func TestDocumentMetadataAndLegalDispute(t *testing.T) {
 		if rec := dispute(legal, `{"action":"raise","reason":"ещё раз"}`); rec.Code != 409 {
 			t.Fatalf("второе действующее сомнение недопустимо: %d", rec.Code)
 		}
-		// Граница зачёта одна для дашбордов, отчётов и выгрузок — её определение
+		// Граница зачёта одна для дашбордов, отчётов и выгрузок - её определение
 		// обязано учитывать действующее сомнение.
 		var definition string
 		if err := db.QueryRowContext(ctx, `SELECT pg_get_viewdef('entry_eligibility'::regclass)`).Scan(&definition); err != nil ||

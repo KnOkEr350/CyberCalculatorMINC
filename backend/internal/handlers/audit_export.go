@@ -12,7 +12,7 @@ import (
 	"cybercalc/internal/middleware"
 )
 
-// auditExportRecord — одна строка выгрузки. Звенья цепи входят в выгрузку,
+// auditExportRecord - одна строка выгрузки. Звенья цепи входят в выгрузку,
 // поэтому получатель может перепроверить целостность сам, не доверяя ответу
 // сервера на слово.
 type auditExportRecord struct {

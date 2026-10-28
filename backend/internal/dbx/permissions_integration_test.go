@@ -57,7 +57,7 @@ func TestRuntimeRoleCannotRewriteAuditLog(t *testing.T) {
 		return granted
 	}
 
-	// Журналы: дополнять можно, переписывать и удалять — нет.
+	// Журналы: дополнять можно, переписывать и удалять - нет.
 	for _, table := range []string{"audit_log", "audit_log_archive", "organization_budget_target_history"} {
 		if !privilege(table, "SELECT") || !privilege(table, "INSERT") {
 			t.Errorf("%s: приложение должно читать и дополнять журнал", table)
@@ -79,7 +79,7 @@ func TestRuntimeRoleCannotRewriteAuditLog(t *testing.T) {
 		}
 	}
 
-	// Справочники, которые наполняет миграционный контейнер, — только чтение.
+	// Справочники, которые наполняет миграционный контейнер, - только чтение.
 	for _, table := range []string{"schema_migrations", "activity_categories"} {
 		if !privilege(table, "SELECT") {
 			t.Errorf("%s: приложение должно читать справочник", table)
@@ -155,7 +155,7 @@ func TestProvisionRuntimeIsIdempotentAndRevokesStalePrivileges(t *testing.T) {
 		db.ExecContext(ctx, `DROP ROLE IF EXISTS `+role)
 	})
 
-	// Выдаём лишнее право вручную — так выглядит наследие прошлых версий.
+	// Выдаём лишнее право вручную - так выглядит наследие прошлых версий.
 	if _, err := db.ExecContext(ctx, `GRANT UPDATE ON audit_log TO `+role); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestProvisionRuntimeRejectsPrivilegedRole(t *testing.T) {
 	}
 }
 
-// Первая запись в пустой журнал — отдельный путь: триггер цепочки ищет конец
+// Первая запись в пустой журнал - отдельный путь: триггер цепочки ищет конец
 // цепи в архиве, и без права на чтение архива свежая установка падала на самой
 // первой операции, оставляя стек неработоспособным.
 func TestRuntimeRoleCanWriteFirstAuditRecord(t *testing.T) {

@@ -237,7 +237,7 @@
       const key = String(row[rowKey] ?? "");
       const selected = key !== "" && key === String(options.selectedKey ?? "");
       const cells = columns.map((column) => {
-        const value = column.render ? column.render(row) : escapeHTML(row[column.key] ?? "—");
+        const value = column.render ? column.render(row) : escapeHTML(row[column.key] ?? "-");
         return `<td>${value}</td>`;
       }).join("");
       return `<tr data-row-key="${escapeHTML(key)}"${selected ? ' class="selected" aria-selected="true"' : ""}>${cells}</tr>`;
@@ -274,7 +274,7 @@
 
   // Черновик шторки: введённое сохраняется в браузере при каждом изменении и
   // возвращается при повторном открытии. Закрытие кликом мимо, Esc и крестиком
-  // черновик сохраняет; программное close() (после сохранения или «Отмена») —
+  // черновик сохраняет; программное close() (после сохранения или «Отмена») -
   // удаляет. Пароли, файлы и скрытые поля не сохраняются.
   const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 

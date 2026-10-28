@@ -39,18 +39,18 @@ func pack(body string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// Block — абзац текстового документа. Heading выделяет заголовок раздела,
-// Text — обычный абзац. Пустой Text даёт пустую строку-разделитель.
+// Block - абзац текстового документа. Heading выделяет заголовок раздела,
+// Text - обычный абзац. Пустой Text даёт пустую строку-разделитель.
 type Block struct {
 	Heading bool
 	Text    string
 }
 
-// Heading и Paragraph — короткие конструкторы блоков.
+// Heading и Paragraph - короткие конструкторы блоков.
 func Heading(text string) Block   { return Block{Heading: true, Text: text} }
 func Paragraph(text string) Block { return Block{Text: text} }
 
-// Document собирает текстовый .docx (книжная ориентация) — форма соглашения
+// Document собирает текстовый .docx (книжная ориентация) - форма соглашения
 // и подобные документы, состоящие из абзацев, а не из таблицы.
 func Document(title string, blocks []Block) ([]byte, error) {
 	var doc strings.Builder

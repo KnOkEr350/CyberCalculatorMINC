@@ -17,7 +17,7 @@ func readConfig(t *testing.T, name string) string {
 }
 
 // OPS-03: укрепление периметра держится конфигурацией, а не памятью о том,
-// что когда-то было настроено. Снятая директива — тихая регрессия, которую
+// что когда-то было настроено. Снятая директива - тихая регрессия, которую
 // в рабочем контуре замечают уже по последствиям.
 func TestNginxKeepsHardeningDirectives(t *testing.T) {
 	config := readConfig(t, "nginx.conf")
@@ -136,7 +136,7 @@ func TestNginxProtectsLoginSeparately(t *testing.T) {
 	}
 }
 
-// Пример TLS-конфигурации — часть поставки: по нему разворачивают рабочий
+// Пример TLS-конфигурации - часть поставки: по нему разворачивают рабочий
 // контур, и слабые настройки разошлись бы вместе с ним.
 func TestTLSExampleIsSafeToCopy(t *testing.T) {
 	config := readConfig(t, "tls-host.conf.example")

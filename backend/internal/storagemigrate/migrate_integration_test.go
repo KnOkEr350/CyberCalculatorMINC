@@ -153,7 +153,7 @@ func TestLegacyUploadsMigrateIntoContentAddressedStorage(t *testing.T) {
 		}
 		return path
 	}
-	// Одинаковые байты сошлись в один blob, разные — в разные.
+	// Одинаковые байты сошлись в один blob, разные - в разные.
 	if pathOf(firstID) != pathOf(secondID) {
 		t.Fatal("одинаковое содержимое должно указывать на один blob")
 	}

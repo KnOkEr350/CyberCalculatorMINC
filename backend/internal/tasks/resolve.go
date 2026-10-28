@@ -1,8 +1,8 @@
-// Package tasks — диспетчер задач workflow и эскалаций (SEC-04, SEC-10, ADR-22).
+// Package tasks - диспетчер задач workflow и эскалаций (SEC-04, SEC-10, ADR-22).
 //
 // Цепочка назначения: профильный специалист → закреплённый куратор → ORG_ADMIN
-// → SUPER_ADMIN. Выбор исполнителя — чистая функция над списком кандидатов
-// (resolve.go), чтение кандидатов и запись — в store.go. Fallback меняет
+// → SUPER_ADMIN. Выбор исполнителя - чистая функция над списком кандидатов
+// (resolve.go), чтение кандидатов и запись - в store.go. Fallback меняет
 // исполнителя, но не его полномочия: куратор получает задачу только если её
 // полномочие в модели разрешений делегируется куратору.
 package tasks
@@ -12,7 +12,7 @@ import (
 	"cybercalc/internal/rbac"
 )
 
-// Route — шаг цепочки, на котором нашёлся исполнитель.
+// Route - шаг цепочки, на котором нашёлся исполнитель.
 type Route string
 
 const (
@@ -23,17 +23,17 @@ const (
 	RouteUnassigned Route = "unassigned"
 )
 
-// Requirement — что требуется от исполнителя.
+// Requirement - что требуется от исполнителя.
 type Requirement struct {
 	Role       models.Role
 	Permission rbac.Permission
-	// HasPartner — задача привязана к партнёру: куратора можно выбрать только
+	// HasPartner - задача привязана к партнёру: куратора можно выбрать только
 	// по закреплению за этим партнёром.
 	HasPartner bool
 }
 
-// Candidates — активные пользователи, найденные на каждом шаге цепочки, в
-// порядке предпочтения (первый — самый подходящий).
+// Candidates - активные пользователи, найденные на каждом шаге цепочки, в
+// порядке предпочтения (первый - самый подходящий).
 type Candidates struct {
 	Specialists []string
 	Curators    []string
@@ -41,13 +41,13 @@ type Candidates struct {
 	SuperAdmins []string
 }
 
-// Decision — результат выбора.
+// Decision - результат выбора.
 type Decision struct {
 	Assignee string
 	Route    Route
-	// Escalated — задача ушла выше профильной роли и куратора.
+	// Escalated - задача ушла выше профильной роли и куратора.
 	Escalated bool
-	// Reason — почему не назначен профильный специалист; пусто у маршрута specialist.
+	// Reason - почему не назначен профильный специалист; пусто у маршрута specialist.
 	Reason string
 }
 
@@ -60,7 +60,7 @@ func Resolve(req Requirement, c Candidates) Decision {
 		return Decision{Assignee: c.Specialists[0], Route: RouteSpecialist}
 	}
 	reason := "нет активного пользователя роли " + string(req.Role)
-	// Сама роль задачи — куратор или администратор: специалиста «выше» нет, шаги
+	// Сама роль задачи - куратор или администратор: специалиста «выше» нет, шаги
 	// ниже по цепочке применяются как обычно.
 	switch {
 	case !req.HasPartner:
@@ -83,8 +83,8 @@ func Resolve(req Requirement, c Candidates) Decision {
 	return Decision{Route: RouteUnassigned, Escalated: true, Reason: reason + "; исполнителя нет ни на одном шаге цепочки"}
 }
 
-// CanExecute — вправе ли пользователь выполнить задачу. Исполнитель выполняет
-// её в пределах полномочий своей роли; по маршруту куратора — только в пределах
+// CanExecute - вправе ли пользователь выполнить задачу. Исполнитель выполняет
+// её в пределах полномочий своей роли; по маршруту куратора - только в пределах
 // делегированных. Не исполнитель задачу не закрывает.
 func CanExecute(user models.Role, isAssignee bool, route Route, permission rbac.Permission) bool {
 	if !isAssignee {

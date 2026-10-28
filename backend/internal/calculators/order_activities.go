@@ -86,7 +86,7 @@ func (topITCalc) Fields() []FieldSpec {
 	}
 }
 
-// schoolProgramsCalc — дополнительные общеобразовательные программы для
+// schoolProgramsCalc - дополнительные общеобразовательные программы для
 // учащихся 5–11 классов. Сумма состоит из часов привлечённых сотрудников и
 // полной стоимости разработки программ.
 type schoolProgramsCalc struct{}
@@ -190,7 +190,7 @@ func validateSchoolClassRange(payload map[string]interface{}) error {
 	return nil
 }
 
-// teacherTrainingCalc — программы повышения квалификации учителей
+// teacherTrainingCalc - программы повышения квалификации учителей
 // информатики: разработка программы плюс обучение учителей по часовой ставке.
 type teacherTrainingCalc struct{}
 
@@ -263,7 +263,7 @@ func (educationalContentCalc) Fields() []FieldSpec {
 		{Key: "teacher_platform_months", Label: "Суммарные месяцы доступа всех учителей", Type: "number", Required: true, Integer: true},
 		{Key: "digital_trace_reference", Label: "Описание/ссылка на подтверждение цифрового следа", Type: "text", Required: true},
 		// SCH-05: выгрузка логов ФГИС «Моя школа» подтверждается периодом,
-		// числом участников и контрольной суммой файла — по одной ссылке
+		// числом участников и контрольной суммой файла - по одной ссылке
 		// нельзя проверить, что именно выгружено.
 		{Key: "digital_trace_period_start", Label: "Цифровой след: начало периода выгрузки", Type: "date", Required: true},
 		{Key: "digital_trace_period_end", Label: "Цифровой след: конец периода выгрузки", Type: "date", Required: true},
@@ -281,7 +281,7 @@ func (educationalContentCalc) Validate(payload map[string]interface{}) error {
 	return validateDigitalTrace(payload)
 }
 
-// sha256Hex — контрольная сумма файла выгрузки: 64 шестнадцатеричных знака.
+// sha256Hex - контрольная сумма файла выгрузки: 64 шестнадцатеричных знака.
 var sha256Hex = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 
 // validateDigitalTrace проверяет реквизиты выгрузки логов ФГИС «Моя школа»

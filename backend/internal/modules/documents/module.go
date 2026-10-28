@@ -12,7 +12,7 @@ import (
 type Options struct {
 	UploadDir      string
 	ScannerAddress string
-	// STORE-05: поведение при недоступном антивирусе — reject или quarantine.
+	// STORE-05: поведение при недоступном антивирусе - reject или quarantine.
 	ScannerPolicy string
 	QuotaBytes    int64
 }

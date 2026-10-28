@@ -35,7 +35,7 @@ func TestAggregatesCacheMatchesTransactionalTables(t *testing.T) {
 		add(own, "teachers", "plan", "vuz", 100000+i)
 		add(own, "teachers", "fact", "vuz", 90000+i)
 		add(own, "internship", "fact", "vuz", 30340)
-		add(own, "ood_rpd", "plan", "kolledj", 55000) // без полного состава — учитывается как неполная
+		add(own, "ood_rpd", "plan", "kolledj", 55000) // без полного состава - учитывается как неполная
 	}
 	add(other, "teachers", "fact", "vuz", 777000)
 

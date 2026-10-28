@@ -9,9 +9,9 @@ import "cybercalc/internal/models"
 type Permission string
 
 const (
-	// Подготовка плана и отчётности — обязанность ИТ-организации (Приказ № 270).
+	// Подготовка плана и отчётности - обязанность ИТ-организации (Приказ № 270).
 	PrepareReports Permission = "reports.prepare"
-	// Утверждение отчёта — отдельное полномочие: готовит один, утверждает другой.
+	// Утверждение отчёта - отдельное полномочие: готовит один, утверждает другой.
 	ApproveReports Permission = "reports.approve"
 	// Правка и создание мероприятий любого вида.
 	EditAnyEntry   Permission = "entries.edit_any"
@@ -23,11 +23,11 @@ const (
 	ProposeEducationDirectory Permission = "directory.propose"
 	ApproveEducationDirectory Permission = "directory.approve"
 	ManagePartnerStructure    Permission = "partner.manage_structure"
-	// Закрепление кураторов за партнёрами (DATA-09): кто закрепляет — тот не
+	// Закрепление кураторов за партнёрами (DATA-09): кто закрепляет - тот не
 	// куратор, иначе куратор расширял бы собственную область видимости.
 	ManageCuratorAssignments Permission = "curators.manage_assignments"
 	// Постановка и переназначение задач workflow (SEC-10). Исполнять задачу
-	// может её исполнитель; назначать и перенаправлять — только администрация.
+	// может её исполнитель; назначать и перенаправлять - только администрация.
 	DispatchTasks Permission = "tasks.dispatch"
 	// Справочник аккредитованных ИТ-компаний.
 	ManageITCompanies Permission = "it_companies.manage"
@@ -38,18 +38,18 @@ const (
 	ReadTenantData Permission = "tenant.read"
 )
 
-// Scope — граница видимости роли. Она не выводится из полномочий: куратор и
+// Scope - граница видимости роли. Она не выводится из полномочий: куратор и
 // администратор могут иметь одно и то же полномочие при разной области.
 type Scope string
 
 const (
-	// ScopeTenant — все данные своей ИТ-организации.
+	// ScopeTenant - все данные своей ИТ-организации.
 	ScopeTenant Scope = "tenant"
-	// ScopePartner — только закреплённая образовательная организация.
+	// ScopePartner - только закреплённая образовательная организация.
 	ScopePartner Scope = "partner"
 )
 
-// Definition — строка модели разрешений. Delegated описывает полномочия,
+// Definition - строка модели разрешений. Delegated описывает полномочия,
 // которые роль получает как исполнитель бесхозной профильной задачи: они
 // ограничены тем же предметом и не расширяют область видимости.
 type Definition struct {
@@ -59,7 +59,7 @@ type Definition struct {
 	Delegated   []Permission
 }
 
-// Roles — единственное описание модели разрешений. Порядок ролей повторяет ТЗ.
+// Roles - единственное описание модели разрешений. Порядок ролей повторяет ТЗ.
 var Roles = map[models.Role]Definition{
 	models.RoleSuperAdmin: {
 		Title: "Системный администратор", Scope: ScopeTenant,

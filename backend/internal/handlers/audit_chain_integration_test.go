@@ -43,7 +43,7 @@ func chainProblem(t *testing.T, ctx context.Context, db *sql.DB) (int64, string)
 }
 
 // AUDIT-02 на реальной БД: каждая запись закрывает предыдущую. Запрет из 0901
-// не видит пропажу записи целиком — например, при восстановлении таблицы из
+// не видит пропажу записи целиком - например, при восстановлении таблицы из
 // подменённой копии; цепочка это обнаруживает.
 func TestAuditChainDetectsMissingAndAlteredRecords(t *testing.T) {
 	db, _ := integrationDB(t)
@@ -56,7 +56,7 @@ func TestAuditChainDetectsMissingAndAlteredRecords(t *testing.T) {
 		t.Fatalf("свежая цепочка должна быть целой: %s", problem)
 	}
 
-	// Звенья связаны: prev_hash каждой записи — это row_hash предыдущей.
+	// Звенья связаны: prev_hash каждой записи - это row_hash предыдущей.
 	// Цепь идёт сквозь архив, поэтому обе части читаются одной последовательностью.
 	rows, err := db.QueryContext(ctx, `SELECT chain_seq,prev_hash,row_hash FROM audit_log_archive
 		UNION ALL SELECT chain_seq,prev_hash,row_hash FROM audit_log ORDER BY 1`)
@@ -87,7 +87,7 @@ func TestAuditChainDetectsMissingAndAlteredRecords(t *testing.T) {
 
 	// Пропажа записи в обход триггеров: так выглядит восстановление из
 	// подменённой резервной копии. Ломаем цепь внутри транзакции и
-	// откатываем её — иначе испорченный журнал достался бы соседним тестам.
+	// откатываем её - иначе испорченный журнал достался бы соседним тестам.
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestAuditChainDetectsMissingAndAlteredRecords(t *testing.T) {
 }
 
 // AUDIT-03 на реальной БД: очистка по сроку хранения переносит записи в архив,
-// и цепочка остаётся сплошной — архив не разрушает неизменяемость, а активная
+// и цепочка остаётся сплошной - архив не разрушает неизменяемость, а активная
 // часть журнала не теряет связь с прошлым.
 func TestAuditArchiveKeepsChainIntact(t *testing.T) {
 	db, _ := integrationDB(t)

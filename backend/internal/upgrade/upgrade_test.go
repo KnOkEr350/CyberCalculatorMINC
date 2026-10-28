@@ -42,7 +42,7 @@ func TestPlanUpgradeFindsPendingAndEveryKindOfProblem(t *testing.T) {
 			t.Errorf("%s: должна быть проблема", name)
 		}
 	}
-	// Новая миграция раньше применённой — порядок нарушен.
+	// Новая миграция раньше применённой - порядок нарушен.
 	if plan := PlanUpgrade(migs("0001.sql", "a", "0005.sql", "e", "0003.sql", "c"), migs("0001.sql", "a", "0005.sql", "e")); len(plan.Problems) == 0 {
 		t.Fatalf("нарушение порядка: %+v", plan)
 	}
@@ -198,7 +198,7 @@ func TestPreflightOnARealDatabase(t *testing.T) {
 		opts := base()
 		opts.Release.Migrations = opts.Release.Migrations[:len(opts.Release.Migrations)-2]
 		if Preflight(ctx, db, opts).OK() {
-			t.Fatal("база новее пакета — откат схемы невозможен")
+			t.Fatal("база новее пакета - откат схемы невозможен")
 		}
 		opts = base()
 		opts.MinFreeBytes = 1 << 60
@@ -220,7 +220,7 @@ func TestOfflineBundleTreeMustMatchTheSignedList(t *testing.T) {
 	write("images/backend.tar", "образ backend")
 	write("images/nginx.tar", "образ nginx")
 	write("docker-compose.yml", "services: {}")
-	write("release.signed", "подписанный файл — в перечень не входит")
+	write("release.signed", "подписанный файл - в перечень не входит")
 	files, err := BuildFiles(root, "release.signed")
 	if err != nil || len(files) != 3 {
 		t.Fatalf("перечень: %+v %v", files, err)

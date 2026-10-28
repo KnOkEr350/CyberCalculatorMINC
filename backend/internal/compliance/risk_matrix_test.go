@@ -16,7 +16,7 @@ import "testing"
 //	🟡 студент трудоустроен и наставник есть, но нет приказа о наставнике ИЛИ справок;
 //	🟢 все документы: договор с ОО, срочный ТД, приказ о наставнике, обе справки.
 
-// teacherPayload — полный комплект данных преподавателя из зелёной зоны ТЗ.
+// teacherPayload - полный комплект данных преподавателя из зелёной зоны ТЗ.
 func teacherPayload() map[string]interface{} {
 	return map[string]interface{}{
 		"course_name":        "Архитектура информационных систем",
@@ -47,20 +47,20 @@ func TestRiskMatrixTeachers(t *testing.T) {
 		documents []string
 		want      string
 	}{
-		{"полный пакет — зелёная зона", nil, teacherDocuments(), "green"},
-		{"дисциплина не определена — красная зона",
+		{"полный пакет - зелёная зона", nil, teacherDocuments(), "green"},
+		{"дисциплина не определена - красная зона",
 			func(p map[string]interface{}) { delete(p, "course_name") }, teacherDocuments(), "red"},
-		{"педагог не трудоустроен: нет договора — красная зона",
+		{"педагог не трудоустроен: нет договора - красная зона",
 			nil, without(teacherDocuments(), "employment_contract"), "red"},
-		{"ИТ-стаж меньше года — красная зона",
+		{"ИТ-стаж меньше года - красная зона",
 			func(p map[string]interface{}) { p["it_experience_days"] = 364 }, teacherDocuments(), "red"},
-		{"не подтверждён код ОКЗ — красная зона",
+		{"не подтверждён код ОКЗ - красная зона",
 			func(p map[string]interface{}) { delete(p, "okz_code") }, teacherDocuments(), "red"},
-		{"нет приказа о допуске — жёлтая зона",
+		{"нет приказа о допуске - жёлтая зона",
 			nil, without(teacherDocuments(), "appointment_order"), "yellow"},
-		{"нет индивидуального плана — жёлтая зона",
+		{"нет индивидуального плана - жёлтая зона",
 			nil, without(teacherDocuments(), "individual_plan"), "yellow"},
-		{"нет расписания — жёлтая зона",
+		{"нет расписания - жёлтая зона",
 			func(p map[string]interface{}) { delete(p, "class_schedule") }, teacherDocuments(), "yellow"},
 	}
 	for _, tc := range cases {
@@ -98,16 +98,16 @@ func TestRiskMatrixInternship(t *testing.T) {
 		documents []string
 		want      string
 	}{
-		{"все документы загружены — зелёная зона", nil, internshipDocuments(), "green"},
-		{"наставник не назначен — красная зона",
+		{"все документы загружены - зелёная зона", nil, internshipDocuments(), "green"},
+		{"наставник не назначен - красная зона",
 			func(p map[string]interface{}) { delete(p, "mentor_id") }, internshipDocuments(), "red"},
-		{"нет основания стажировки — красная зона",
+		{"нет основания стажировки - красная зона",
 			nil, without(internshipDocuments(), "internship_agreement"), "red"},
-		{"нет приказа о наставнике — жёлтая зона",
+		{"нет приказа о наставнике - жёлтая зона",
 			nil, without(internshipDocuments(), "mentor_order"), "yellow"},
-		{"нет входящей справки — жёлтая зона",
+		{"нет входящей справки - жёлтая зона",
 			nil, without(internshipDocuments(), "incoming_certificate"), "yellow"},
-		{"нет итоговой справки — жёлтая зона",
+		{"нет итоговой справки - жёлтая зона",
 			nil, without(internshipDocuments(), "outgoing_certificate"), "yellow"},
 	}
 	for _, tc := range cases {
@@ -142,22 +142,22 @@ func TestRiskMatrixEmploymentPractice(t *testing.T) {
 		documents []string
 		want      string
 	}{
-		{"все документы загружены — зелёная зона", nil, practiceDocuments(), "green"},
-		{"срочный ТД не заключён — красная зона",
+		{"все документы загружены - зелёная зона", nil, practiceDocuments(), "green"},
+		{"срочный ТД не заключён - красная зона",
 			func(p map[string]interface{}) { p["labor_contract_type"] = "other" }, practiceDocuments(), "red"},
-		{"нет скана трудового договора — красная зона",
+		{"нет скана трудового договора - красная зона",
 			nil, without(practiceDocuments(), "labor_contract"), "red"},
-		{"нет договора о практической подготовке — красная зона",
+		{"нет договора о практической подготовке - красная зона",
 			nil, without(practiceDocuments(), "practice_agreement"), "red"},
-		{"нет номера договора о практической подготовке — красная зона",
+		{"нет номера договора о практической подготовке - красная зона",
 			func(p map[string]interface{}) { delete(p, "practice_agreement_number") }, practiceDocuments(), "red"},
-		{"нет даты договора о практической подготовке — красная зона",
+		{"нет даты договора о практической подготовке - красная зона",
 			func(p map[string]interface{}) { delete(p, "practice_agreement_date") }, practiceDocuments(), "red"},
-		{"наставник не назначен — красная зона",
+		{"наставник не назначен - красная зона",
 			func(p map[string]interface{}) { delete(p, "mentor_id") }, practiceDocuments(), "red"},
-		{"нет приказа о наставнике — жёлтая зона",
+		{"нет приказа о наставнике - жёлтая зона",
 			nil, without(practiceDocuments(), "mentor_order"), "yellow"},
-		{"нет итоговых документов — жёлтая зона",
+		{"нет итоговых документов - жёлтая зона",
 			nil, without(practiceDocuments(), "outgoing_certificate"), "yellow"},
 	}
 	for _, tc := range cases {

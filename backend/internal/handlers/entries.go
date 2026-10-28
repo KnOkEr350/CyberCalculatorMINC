@@ -82,7 +82,7 @@ func appendEntryDetailFilters(q url.Values, conds *[]string, arg func(interface{
 }
 
 // Categories возвращает справочник категорий вместе с полями формы и
-// формулой (через calculators.Fields) — фронтенд строит форму динамически.
+// формулой (через calculators.Fields) - фронтенд строит форму динамически.
 func (h *EntryHandlers) Categories(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT code, name, obligation, audience_scope FROM activity_categories ORDER BY code`)
 	if err != nil {
@@ -124,7 +124,7 @@ type createEntryRequest struct {
 	Payload         map[string]interface{} `json:"payload"`
 	CostMethod      string                 `json:"cost_method"`
 	ActualAmountRub *money.Amount          `json:"actual_amount_rub,omitempty"`
-	// copiedFrom — запись плана, из которой создаётся факт. Не читается из JSON.
+	// copiedFrom - запись плана, из которой создаётся факт. Не читается из JSON.
 	copiedFrom string
 }
 
@@ -164,7 +164,7 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 	middleware.WriteJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "amount_rub": amount})
 }
 
-// createEntry — общая часть создания записи: одиночный POST /api/entries и
+// createEntry - общая часть создания записи: одиночный POST /api/entries и
 // массовое создание факта из плана проходят одни и те же проверки и расчёт.
 // При отказе ответ уже записан в w, а ok=false.
 func (h *EntryHandlers) createEntry(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, req createEntryRequest) (string, money.Amount, bool) {
@@ -277,7 +277,7 @@ func (h *EntryHandlers) createEntry(w http.ResponseWriter, r *http.Request, u mi
 		pq.Array(tariffCard.VersionIDs(req.CategoryCode)), req.copiedFrom,
 	).Scan(&id)
 	if err != nil {
-		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
+		// TCH-01: атомарный ключ педнагрузки. Повтор - это не сбой сервера, а
 		// попытка внести уже учтённую нагрузку, и сказать об этом надо прямо.
 		if isDuplicateTeachingLoad(err) {
 			middleware.WriteError(w, http.StatusConflict,

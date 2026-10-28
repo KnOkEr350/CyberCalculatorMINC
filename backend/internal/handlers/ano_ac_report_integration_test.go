@@ -17,7 +17,7 @@ import (
 	"cybercalc/internal/xlsx"
 )
 
-// REPORT-09: отчёт АНО АЦ — шесть листов по ТЗ, данные программы и её
+// REPORT-09: отчёт АНО АЦ - шесть листов по ТЗ, данные программы и её
 // составляющих, шкала, изоляция арендаторов и запись в реестр файлов.
 func TestAnoAcReportHasSixSheetsAndIsTenantScoped(t *testing.T) {
 	db, year := integrationDB(t)
@@ -84,6 +84,6 @@ func TestAnoAcReportHasSixSheetsAndIsTenantScoped(t *testing.T) {
 		t.Fatalf("чужая программа не выгружается: %d", bad.Code)
 	}
 	if bad := export(own, ""); bad.Code != 400 {
-		t.Fatalf("без entry_id — 400: %d", bad.Code)
+		t.Fatalf("без entry_id - 400: %d", bad.Code)
 	}
 }

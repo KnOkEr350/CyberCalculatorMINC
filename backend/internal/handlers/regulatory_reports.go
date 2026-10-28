@@ -107,7 +107,7 @@ func filterRegulatoryRowsByRisk(rows []regulatoryRow, state string) []regulatory
 // writeGenerated регистрирует сформированный файл в неизменяемом реестре
 // generated_reports (REPORT-11): автор, полный набор применённых
 // параметров (partner_id/agreement_id уходят в отдельные FK-колонки для
-// выборки, остальные — в JSONB filters), hash и время. Повторное скачивание
+// выборки, остальные - в JSONB filters), hash и время. Повторное скачивание
 // того же файла отдаёт зафиксированные байты через DownloadGenerated.
 func (h *ReportHandlers) writeGenerated(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, kind, format, filename, company string, filters map[string]string, year int, body []byte) {
 	digest := sha256.Sum256(body)
@@ -263,7 +263,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		}
 		filename = fmt.Sprintf("приложение_1_%d.xlsx", year)
 	case "annex2":
-		// Режим «Отчёт по наставникам» — тот же набор данных в разрезе
+		// Режим «Отчёт по наставникам» - тот же набор данных в разрезе
 		// наставников (ТЗ, п. 9.2).
 		if strings.TrimSpace(r.URL.Query().Get("mode")) == "mentors" {
 			wb.AddSheet("Отчёт по наставникам", regulatoryHeaders["annex2_mentors"], buildMentorRows(data))
@@ -275,7 +275,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	case "annex5":
 		var target sql.NullString
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT target_amount_rub::text FROM organization_budget_targets WHERE it_company_id::text=$1 AND report_year=$2`, company, year).Scan(&target)
-		targetAmount, _ := money.Parse(target.String) // пустая/некорректная база 3% -> 0, процент по норме покажет "—"
+		targetAmount, _ := money.Parse(target.String) // пустая/некорректная база 3% -> 0, процент по норме покажет "-"
 		out, planTotal, factTotal := buildAnnex5Rows(data, targetAmount)
 		wb.AddSheet("Приложение № 5", regulatoryHeaders["annex5"], out)
 		wb.AddSheet("Норматив 3%", []string{"Год", "Норматив, руб.", "План, руб.", "Факт, руб."}, [][]interface{}{{year, target.String, planTotal, factTotal}})
@@ -502,7 +502,7 @@ func (h *ReportHandlers) exportAgreementTemplate(w http.ResponseWriter, r *http.
 	h.writeGenerated(w, r, u, kind, "docx", fmt.Sprintf("типовое_соглашение_%s_%d.docx", strings.TrimPrefix(kind, "agreement"), year), company, reportFilters("partner_id", partner, "agreement_id", agreement), year, body)
 }
 
-// agreementParty — реквизиты сторон для примерной формы соглашения
+// agreementParty - реквизиты сторон для примерной формы соглашения
 // (Приложения № 2 и № 3 к Порядку, утверждённому Приказом № 270).
 type agreementParty struct {
 	Kind, Number, SignedOn               string
@@ -524,7 +524,7 @@ func agreementTemplateTitle(kind string) string {
 }
 
 // agreementTemplateBlocks заполняет примерную форму соглашения: стороны, их
-// реквизиты и подписанты. Форма Приказа — это связный текст «в лице …,
+// реквизиты и подписанты. Форма Приказа - это связный текст «в лице …,
 // действующего на основании …», а не таблица реквизитов.
 func agreementTemplateBlocks(party agreementParty) []docx.Block {
 	counterparty := "Образовательная организация"
@@ -575,19 +575,19 @@ func formatRuDate(iso string) string {
 }
 
 // formatAbsenceStatement строит формулировку Приложения № 3 к Отчёту:
-// «Соглашение с <ОО> от <дата> № <номер>» — вместо сырых идентификаторов
+// «Соглашение с <ОО> от <дата> № <номер>» - вместо сырых идентификаторов
 // партнёра и соглашения.
 func formatAbsenceStatement(partnerName, signedOn, number string) string {
 	return fmt.Sprintf("Соглашение с %s от %s № %s", partnerName, formatRuDate(signedOn), number)
 }
 
 // buildAnnex5Rows сводит Таблицу 1 Приложения № 5 к Приказу № 270: по
-// каждому контрагенту — реквизиты его соглашений и фактически
+// каждому контрагенту - реквизиты его соглашений и фактически
 // подтверждённые затраты (тыс. руб.), а процент считается от ЕДИНОГО для
 // всей компании норматива 3% сэкономленных льгот (target), а не от
-// собственного плана контрагента — официальная форма плана вообще не
+// собственного плана контрагента - официальная форма плана вообще не
 // содержит. Контрагенты без фактических затрат (пустые строки) программно
-// удаляются независимо от настроек фильтрации в UI. planTotal/factTotal —
+// удаляются независимо от настроек фильтрации в UI. planTotal/factTotal -
 // сводка для информационного листа «Норматив 3%», не часть самой формы.
 func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interface{}, planTotal, factTotal money.Amount) {
 	type agg struct {
@@ -627,7 +627,7 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 		if a.fact == 0 {
 			continue
 		}
-		var percent interface{} = "—"
+		var percent interface{} = "-"
 		if target > 0 {
 			// Округление до сотых процента: без него в ячейку формы
 			// попадает хвост двоичной дроби вида 33.333333333333336.
@@ -644,7 +644,7 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 		})
 	}
 	if len(out) > 0 {
-		var totalPercent interface{} = "—"
+		var totalPercent interface{} = "-"
 		if target > 0 {
 			totalPercent = math.Round(float64(factTotal)/float64(target)*100*100) / 100
 		}
@@ -654,7 +654,7 @@ func buildAnnex5Rows(data []regulatoryRow, target money.Amount) (out [][]interfa
 	return out, planTotal, factTotal
 }
 
-// thousandRub переводит сумму в тыс. руб. — единицу, в которой напечатаны
+// thousandRub переводит сумму в тыс. руб. - единицу, в которой напечатаны
 // формы Приказа № 270.
 func thousandRub(amount money.Amount) float64 {
 	return math.Round(float64(amount)/1000) / 100
@@ -715,14 +715,14 @@ func appendSignatureBlock(rows [][]interface{}, width int) [][]interface{} {
 	)
 }
 
-// annex1Sheet — один лист Приложения № 1: форма заполняется отдельно по
+// annex1Sheet - один лист Приложения № 1: форма заполняется отдельно по
 // каждой ОО или РОИВ, поэтому лист называется именем контрагента.
 type annex1Sheet struct {
 	Name string
 	Rows [][]interface{}
 }
 
-// annex1Indicator — подпись показателя объёма для каждого вида мероприятия.
+// annex1Indicator - подпись показателя объёма для каждого вида мероприятия.
 // Сама метрика (единица измерения) берётся из activityMetrics, чтобы графы
 // «Метрика» и «Наименование показателя» не дублировали друг друга.
 var annex1Indicator = map[string]string{
@@ -737,7 +737,7 @@ var annex1Indicator = map[string]string{
 	"minc_decision":       "Объём по решению Минцифры",
 }
 
-// activityTitle — графа «Мероприятие»: конкретное наименование из реквизитов
+// activityTitle - графа «Мероприятие»: конкретное наименование из реквизитов
 // записи, а не общий вид мероприятия.
 func activityTitle(row regulatoryRow, payload map[string]interface{}) string {
 	for _, key := range []string{"program_name", "course_name", "activity_description", "student_full_name"} {
@@ -749,7 +749,7 @@ func activityTitle(row regulatoryRow, payload map[string]interface{}) string {
 }
 
 // buildAnnex1Sheets строит Приложение № 1 к Отчёту: по листу на каждую ОО или
-// РОИВ, строка на мероприятие и итоговая строка. Суммы — в тыс. руб., как в
+// РОИВ, строка на мероприятие и итоговая строка. Суммы - в тыс. руб., как в
 // форме; пустые строки не выгружаются.
 func buildAnnex1Sheets(data []regulatoryRow) []annex1Sheet {
 	order := []string{}
@@ -778,7 +778,7 @@ func buildAnnex1Sheets(data []regulatoryRow) []annex1Sheet {
 			volume, _, unit := activityMetrics(row.Category, numericPayload(row.Payload))
 			// Стоимость единицы восстанавливается из суммы и объёма: тариф
 			// хранится в расчётах, а не в записи мероприятия.
-			var unitCost interface{} = "—"
+			var unitCost interface{} = "-"
 			if volume > 0 {
 				unitCost = math.Round(float64(row.Amount)/volume/1000) / 100
 			}
@@ -799,7 +799,7 @@ func buildAnnex1Sheets(data []regulatoryRow) []annex1Sheet {
 // payloadValue возвращает текстовое значение поля payload мероприятия или
 // пустую строку, если поле отсутствует. Голый fmt.Sprint(p[key]) на
 // отсутствующем ключе печатает буквальное "<nil>" в ячейку регламентной
-// формы — это и есть источник дефекта, а не отсутствие данных мероприятия.
+// формы - это и есть источник дефекта, а не отсутствие данных мероприятия.
 func payloadValue(p map[string]interface{}, key string) string {
 	v, ok := p[key]
 	if !ok || v == nil {
@@ -808,9 +808,9 @@ func payloadValue(p map[string]interface{}, key string) string {
 	return fmt.Sprint(v)
 }
 
-// internshipProgramName — графа «Наименование программы стажировок»: форма
+// internshipProgramName - графа «Наименование программы стажировок»: форма
 // сводит стажёров в программу, поэтому именем служат реквизиты договора о
-// стажировке или практической подготовке, а при их отсутствии —
+// стажировке или практической подготовке, а при их отсутствии -
 // специальность по Приказу № 27.
 func internshipProgramName(row regulatoryRow, payload map[string]interface{}) string {
 	if row.Category == "employment_practice" {
@@ -867,7 +867,7 @@ func buildAnnex2Rows(data []regulatoryRow) [][]interface{} {
 	var total money.Amount
 	for index, key := range order {
 		item := programs[key]
-		var unitCost interface{} = "—"
+		var unitCost interface{} = "-"
 		if item.hours > 0 {
 			unitCost = math.Round(float64(item.amount)/item.hours/1000) / 100
 		}
@@ -972,7 +972,7 @@ func buildPlanFactRows(data []regulatoryRow) [][]interface{} {
 			continue
 		}
 		delta := float64(a.fact-a.plan) / 100
-		var percent interface{} = "—"
+		var percent interface{} = "-"
 		if a.plan > 0 {
 			percent = math.Round(float64(a.fact-a.plan)/float64(a.plan)*100*100) / 100
 		}
@@ -988,7 +988,7 @@ func buildPlanFactProjectionRows(groups []activityprojection.Aggregate, partnerN
 			continue
 		}
 		delta := float64(group.FactAmount-group.PlanAmount) / 100
-		var percent interface{} = "—"
+		var percent interface{} = "-"
 		if group.PlanAmount > 0 {
 			percent = math.Round(float64(group.FactAmount-group.PlanAmount)/float64(group.PlanAmount)*100*100) / 100
 		}

@@ -7,7 +7,7 @@ import (
 )
 
 // QA-07: одновременная загрузка одного имени не должна давать двум запросам
-// один и тот же файл — иначе они затрут работу друг друга.
+// один и тот же файл - иначе они затрут работу друг друга.
 func TestConcurrentCreateGivesOnlyOneWinner(t *testing.T) {
 	root := t.TempDir()
 	const attempts = 16

@@ -19,7 +19,7 @@
    и версии mapping.
 4. Неоднозначные значения не угадываются. Они записываются в очередь ручного
    разбора с кодом причины, tenant, legacy ID и безопасным снимком полей.
-5. Деньги сравниваются как `NUMERIC`/копейки, даты — как календарные даты,
+5. Деньги сравниваются как `NUMERIC`/копейки, даты - как календарные даты,
    идентификаторы, автор и `created_at` сохраняются без округления и подмены.
 6. Документы и связи не копируются по пути хранения: типизированная запись
    ссылается на тот же blob/attachment ID, а сверка проверяет hash и размер.
@@ -87,10 +87,10 @@ Worker выбирает строки по tenant и стабильному ID н
 
 Для каждой строки возможен ровно один результат:
 
-- `migrated` — typed-проекция сохранена;
-- `already_current` — совпадает stable ID, mapping version и canonical hash;
-- `needs_review` — указан детерминированный reason code;
-- `failed` — техническая ошибка, пакет откатан и может быть повторён.
+- `migrated` - typed-проекция сохранена;
+- `already_current` - совпадает stable ID, mapping version и canonical hash;
+- `needs_review` - указан детерминированный reason code;
+- `failed` - техническая ошибка, пакет откатан и может быть повторён.
 
 Обязательные reason codes: `missing_required`, `invalid_reference`,
 `ambiguous_mapping`, `tenant_mismatch`, `invalid_money`, `invalid_date` и

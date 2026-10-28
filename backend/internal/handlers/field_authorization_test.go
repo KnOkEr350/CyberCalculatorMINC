@@ -32,12 +32,12 @@ func TestSpecialistRolesOwnOnlyTheirFields(t *testing.T) {
 		{models.RoleHRSpecialist, "internship", "incoming_certificate", true, true},
 		{models.RoleHRSpecialist, "internship", "mentor_order", true, true},
 		{models.RoleHRSpecialist, "employment_practice", "labor_contract", true, true},
-		// Исходящая справка — зона куратора, а не кадров.
+		// Исходящая справка - зона куратора, а не кадров.
 		{models.RoleHRSpecialist, "internship", "outgoing_certificate", false, true},
 		{models.RoleCurator, "internship", "outgoing_certificate", true, true},
 		// Кадры не касаются Вида 1.
 		{models.RoleHRSpecialist, "teachers", "payment_order", false, false},
-		// Финансист — только компенсация преподавателям.
+		// Финансист - только компенсация преподавателям.
 		{models.RoleFinancialSpecialist, "teachers", "payment_order", true, true},
 		{models.RoleFinancialSpecialist, "internship", "labor_contract", false, false},
 		// Юрист: доступ на чтение, без загрузки и правки.
@@ -70,7 +70,7 @@ func TestSpecialistRolesOwnOnlyTheirFields(t *testing.T) {
 }
 
 // Финансист двигает только поля выплаты. Смена аудитории, соглашения, метода
-// расчёта, фактической суммы или содержательной части мероприятия — не его
+// расчёта, фактической суммы или содержательной части мероприятия - не его
 // полномочия, даже внутри «своего» Вида 1.
 func TestFinancialSpecialistTouchesOnlyPaymentFields(t *testing.T) {
 	base := map[string]interface{}{
@@ -134,7 +134,7 @@ func TestFinancialSpecialistTouchesOnlyPaymentFields(t *testing.T) {
 			"compensation_quarter": "Q2", "planned_compensation_rub": 50000.0,
 		})}
 		if !financialUpdateAllowed(oldPayload, allowed, "vuz", "a1", "average", &actual) {
-			t.Fatal("квартал и плановая компенсация — поля финансиста")
+			t.Fatal("квартал и плановая компенсация - поля финансиста")
 		}
 	})
 }

@@ -23,7 +23,7 @@ type AttachmentHandlers struct {
 	DB             *sql.DB
 	UploadDir      string
 	ScannerAddress string
-	// ScannerPolicy — что делать, если антивирус не ответил: "reject" (по
+	// ScannerPolicy - что делать, если антивирус не ответил: "reject" (по
 	// умолчанию) не принимает файл, "quarantine" принимает и держит его
 	// недоступным до повторной проверки.
 	ScannerPolicy string
@@ -88,9 +88,9 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 	type stagedFile struct {
 		name, path, contentSHA256 string
 		size                      int64
-		// shared — байты уже лежали в хранилище до этой загрузки.
+		// shared - байты уже лежали в хранилище до этой загрузки.
 		shared bool
-		// scanStatus — исход антивирусной проверки этого файла.
+		// scanStatus - исход антивирусной проверки этого файла.
 		scanStatus, scanSignature string
 	}
 	staged := make([]stagedFile, 0, len(headers))
@@ -146,7 +146,7 @@ func (h *AttachmentHandlers) Upload(w http.ResponseWriter, r *http.Request, u mi
 			middleware.WriteError(w, 400, err.Error())
 			return
 		}
-		// STORE-05: угроза и недоступный сканер — разные исходы. Заражённый
+		// STORE-05: угроза и недоступный сканер - разные исходы. Заражённый
 		// файл не сохраняется никогда; непроверенный принимается только если
 		// это разрешено политикой, и тогда лежит в карантине.
 		scan, scanErr := filestore.Inspect(r.Context(), h.ScannerAddress, path, h.UploadDir)
@@ -301,7 +301,7 @@ func (h *AttachmentHandlers) ListForEntry(w http.ResponseWriter, r *http.Request
 type attachmentReviewRequest struct {
 	Status  string `json:"status"`
 	Comment string `json:"comment"`
-	// SignatureVerified — проверяющий подтверждает, что подпись и сертификат,
+	// SignatureVerified - проверяющий подтверждает, что подпись и сертификат,
 	// описанные в реквизитах, подлинны. Возможно только для описанной подписи.
 	SignatureVerified *bool `json:"signature_verified,omitempty"`
 }

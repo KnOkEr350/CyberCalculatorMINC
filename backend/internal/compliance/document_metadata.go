@@ -8,7 +8,7 @@ import (
 	"unicode"
 )
 
-// DocumentMetadata — реквизиты типизированного документа (DATA-12): номер,
+// DocumentMetadata - реквизиты типизированного документа (DATA-12): номер,
 // дата и сведения о подписи и сертификате подписанта. Все поля необязательны,
 // но сведения о подписи задаются только целиком.
 type DocumentMetadata struct {
@@ -28,9 +28,9 @@ func (m DocumentMetadata) Signed() bool {
 var certificateSerialPattern = regexp.MustCompile(`^[0-9A-F]{6,64}$`)
 
 // NormalizeDocumentMetadata приводит реквизиты к каноническому виду и проверяет
-// их. today — московская дата проверки: документ из будущего невозможен.
+// их. today - московская дата проверки: документ из будущего невозможен.
 //
-// Главная связь — подпись и дата: документ подписан сертификатом, который на
+// Главная связь - подпись и дата: документ подписан сертификатом, который на
 // дату документа должен был действовать. Подпись просроченным или ещё не
 // выданным сертификатом не подтверждает ничего, даже если сам сертификат
 // подлинный.
@@ -75,7 +75,7 @@ func NormalizeDocumentMetadata(in DocumentMetadata, today time.Time) (DocumentMe
 		return out, fmt.Errorf("имя подписанта от 2 до 300 символов")
 	}
 	if !certificateSerialPattern.MatchString(out.CertificateSerial) {
-		return out, fmt.Errorf("серийный номер сертификата — от 6 до 64 шестнадцатеричных цифр")
+		return out, fmt.Errorf("серийный номер сертификата - от 6 до 64 шестнадцатеричных цифр")
 	}
 	from, err := optionalDate(out.CertificateValidFrom, "начало действия сертификата")
 	if err != nil {
@@ -89,7 +89,7 @@ func NormalizeDocumentMetadata(in DocumentMetadata, today time.Time) (DocumentMe
 		return out, fmt.Errorf("сертификат не может закончиться раньше, чем начаться")
 	}
 	if !docDate.IsZero() && (docDate.Before(from) || docDate.After(until)) {
-		return out, fmt.Errorf("на дату документа %s сертификат подписанта не действовал (срок %s — %s)",
+		return out, fmt.Errorf("на дату документа %s сертификат подписанта не действовал (срок %s - %s)",
 			out.Date, out.CertificateValidFrom, out.CertificateValidUntil)
 	}
 	return out, nil

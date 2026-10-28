@@ -9,7 +9,7 @@ import (
 	"cybercalc/internal/money"
 )
 
-// budgetTargetRevision — одна редакция норматива 3% со своим основанием.
+// budgetTargetRevision - одна редакция норматива 3% со своим основанием.
 // Норматив без основания непроверяем, поэтому база, её год, дата доведения и
 // подтверждение ФНС хранятся и отдаются вместе с суммой.
 type budgetTargetRevision struct {
@@ -27,7 +27,7 @@ type budgetTargetRevision struct {
 	ChangedAt       string        `json:"changed_at"`
 }
 
-// DATA-11: история изменений норматива. Пересчёт задним числом без следа —
+// DATA-11: история изменений норматива. Пересчёт задним числом без следа -
 // это спор, который нечем закрыть, поэтому каждая редакция сохраняется и
 // доступна для чтения.
 func (h *DashboardHandlers) BudgetTargetHistory(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {

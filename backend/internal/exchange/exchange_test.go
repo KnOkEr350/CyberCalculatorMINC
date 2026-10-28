@@ -12,7 +12,7 @@ import (
 	"cybercalc/internal/cryptoengine"
 )
 
-// CRYPTO-04 + CRYPTO-05: экспорт и импорт — полный круг. Получатель видит те
+// CRYPTO-04 + CRYPTO-05: экспорт и импорт - полный круг. Получатель видит те
 // же записи, манифест описывает пакет, а подписант установлен по сертификату.
 func TestExportThenImportRoundTrip(t *testing.T) {
 	f := newFixture(t)
@@ -85,7 +85,7 @@ func TestExportIsOrderIndependentAndMultiRecipient(t *testing.T) {
 }
 
 // «Plaintext не пишется на диск»: экспорт работает целиком в памяти, а на
-// шифрование уходит уже сжатое содержимое; на подпись — только манифест.
+// шифрование уходит уже сжатое содержимое; на подпись - только манифест.
 func TestExportKeepsPlaintextOutOfEverythingButEncryption(t *testing.T) {
 	f := newFixture(t)
 	data := f.export(t, sampleRecords())
@@ -200,7 +200,7 @@ func TestContainerParsingIsStrict(t *testing.T) {
 }
 
 // Манифест хранится в канонической форме: подпись покрывает именно эти байты, а
-// эквивалентный по смыслу JSON с другим порядком ключей — другой документ.
+// эквивалентный по смыслу JSON с другим порядком ключей - другой документ.
 func TestManifestMustBeCanonical(t *testing.T) {
 	f := newFixture(t)
 	parsed, err := parseContainer(f.export(t, sampleRecords()))
@@ -245,7 +245,7 @@ func TestOnlyTheAddresseeOpensThePackage(t *testing.T) {
 }
 
 // QA-06: подписант. Просроченный, ещё не действующий, отозванный, с чужим
-// корнем и без права проверки — ни один не проходит, и до расшифровки дело не
+// корнем и без права проверки - ни один не проходит, и до расшифровки дело не
 // доходит.
 func TestSignerCertificateIsValidatedBeforeDecryption(t *testing.T) {
 	data := func(f *fixture) []byte { return f.export(t, sampleRecords()) }
@@ -373,7 +373,7 @@ func TestTamperingIsDetectedBeforeDecryption(t *testing.T) {
 }
 
 // QA-06: отправитель. Организация в манифесте должна быть владельцем
-// сертификата подписи, а подпись — принадлежать заявленному подписанту.
+// сертификата подписи, а подпись - принадлежать заявленному подписанту.
 func TestSenderIdentityIsBoundToTheCertificate(t *testing.T) {
 	f := newFixture(t)
 
@@ -399,7 +399,7 @@ func TestSenderIdentityIsBoundToTheCertificate(t *testing.T) {
 	}
 }
 
-// QA-06: понижение. Другой алгоритм, схема, версия, период или год — отказ, даже
+// QA-06: понижение. Другой алгоритм, схема, версия, период или год - отказ, даже
 // если пакет подписан настоящим ключом отправителя.
 func TestDowngradeAndScopeChangesAreRejected(t *testing.T) {
 	f := newFixture(t)

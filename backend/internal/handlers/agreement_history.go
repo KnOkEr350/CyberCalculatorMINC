@@ -9,7 +9,7 @@ import (
 	"cybercalc/internal/middleware"
 )
 
-// AgreementHistoryHandlers — история изменений соглашения и его куратор (DATA-02).
+// AgreementHistoryHandlers - история изменений соглашения и его куратор (DATA-02).
 type AgreementHistoryHandlers struct{ DB *sql.DB }
 
 type setAgreementCuratorRequest struct {

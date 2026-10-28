@@ -14,7 +14,7 @@ import (
 	"cybercalc/internal/testfixtures"
 )
 
-// DATA-09 на реальной БД: закрепление куратора за партнёром — период, один
+// DATA-09 на реальной БД: закрепление куратора за партнёром - период, один
 // партнёр в день, граница арендатора, отзыв с причиной и неизменяемая история.
 func TestCuratorAssignments(t *testing.T) {
 	db, _ := integrationDB(t)
@@ -118,7 +118,7 @@ func TestCuratorAssignments(t *testing.T) {
 		if _, err := curators.End(ctx, db, list[0].ID, day(-30), now); err != curators.ErrInvalidPeriod {
 			t.Fatalf("окончание раньше начала: %v", err)
 		}
-		// Следующий партнёр — встык, без пересечения.
+		// Следующий партнёр - встык, без пересечения.
 		if _, err := assign(curator, partnerB, day(3), nil); err != nil {
 			t.Fatalf("закрепление встык должно приниматься: %v", err)
 		}
@@ -297,7 +297,7 @@ func TestCuratorAssignments(t *testing.T) {
 		if rec := revoke(manager, "ошибка"); rec.Code != 200 {
 			t.Fatalf("отзыв: %d %s", rec.Code, rec.Body.String())
 		}
-		// Куратор видит только свои закрепления, посторонние роли — ничего.
+		// Куратор видит только свои закрепления, посторонние роли - ничего.
 		listAs := func(u middleware.AuthUser) *httptest.ResponseRecorder {
 			rec := httptest.NewRecorder()
 			handlers.List(rec, httptest.NewRequest("GET", "/api/curator-assignments", nil), u)

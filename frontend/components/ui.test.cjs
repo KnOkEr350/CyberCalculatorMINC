@@ -120,7 +120,7 @@ test("drawer contract keeps right panel overlay, focus trap and guarded close", 
   const source = readFileSync(join(__dirname, "ui.js"), "utf8");
   const theme = readFileSync(join(__dirname, "..", "theme.css"), "utf8");
   assert.match(source, /function trapFocus\(event, root\)/);
-  assert.match(source, /if \(event\.key === "Escape"\) close\(\);/);
+  assert.match(source, /if \(event\.key === "Escape"\) dismiss\(\);/);
   assert.match(source, /if \(options\.canClose && options\.canClose\(\) === false\) return;/);
   assert.match(source, /const previous = doc\.activeElement/);
   assert.match(source, /previous\?\.focus/);

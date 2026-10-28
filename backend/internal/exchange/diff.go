@@ -7,31 +7,31 @@ import (
 	"strings"
 )
 
-// Status — исход сопоставления одной записи.
+// Status - исход сопоставления одной записи.
 type Status string
 
 const (
-	// StatusIdentical — запись есть с обеих сторон и совпадает.
+	// StatusIdentical - запись есть с обеих сторон и совпадает.
 	StatusIdentical Status = "identical"
-	// StatusCollision — запись есть с обеих сторон, но значения различаются.
+	// StatusCollision - запись есть с обеих сторон, но значения различаются.
 	StatusCollision Status = "collision"
-	// StatusMissingLocal — запись пришла в пакете, а у нас её нет.
+	// StatusMissingLocal - запись пришла в пакете, а у нас её нет.
 	StatusMissingLocal Status = "missing_local"
-	// StatusMissingIncoming — запись есть у нас, а в пакете её нет.
+	// StatusMissingIncoming - запись есть у нас, а в пакете её нет.
 	StatusMissingIncoming Status = "missing_incoming"
-	// StatusAmbiguous — ключ повторяется внутри одной стороны: сравнить
+	// StatusAmbiguous - ключ повторяется внутри одной стороны: сравнить
 	// «ту самую» запись нельзя, выбор за человеком.
 	StatusAmbiguous Status = "ambiguous"
 )
 
-// FieldDiff — одно расхождение с локальным и входящим значением.
+// FieldDiff - одно расхождение с локальным и входящим значением.
 type FieldDiff struct {
 	Field    string      `json:"field"`
 	Local    interface{} `json:"local"`
 	Incoming interface{} `json:"incoming"`
 }
 
-// Item — результат по одному ключу.
+// Item - результат по одному ключу.
 type Item struct {
 	Key         Key         `json:"key"`
 	Status      Status      `json:"status"`
@@ -42,14 +42,14 @@ type Item struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// Result — полное сравнение: элементы упорядочены по ключу, счётчики
+// Result - полное сравнение: элементы упорядочены по ключу, счётчики
 // сходятся с числом элементов.
 type Result struct {
 	Items  []Item
 	Counts map[Status]int
 }
 
-// localOnly — поля, значения которых принадлежат экземпляру и у другого
+// localOnly - поля, значения которых принадлежат экземпляру и у другого
 // экземпляра заведомо иные: идентификаторы и «org_name» (в нём лежит
 // идентификатор партнёра). Сравнивать их значит получать расхождение в каждой
 // записи.
@@ -133,7 +133,7 @@ type indexed struct {
 }
 
 // indexAllowingDuplicates строит индекс, а повторяющиеся ключи возвращает
-// отдельно: для сравнения дубликат — данные, а не ошибка.
+// отдельно: для сравнения дубликат - данные, а не ошибка.
 func indexAllowingDuplicates(records []Record) (map[string]indexed, []Key, error) {
 	index := make(map[string]indexed, len(records))
 	counts := map[string]int{}
@@ -198,7 +198,7 @@ func compare(local, incoming Record) []FieldDiff {
 	return diffs
 }
 
-// isEmpty: отсутствующее поле, null и пустая строка — одно и то же «не
+// isEmpty: отсутствующее поле, null и пустая строка - одно и то же «не
 // заполнено». Иначе расхождением считалось бы разное представление пустоты.
 func isEmpty(value interface{}) bool {
 	switch v := value.(type) {
@@ -210,8 +210,8 @@ func isEmpty(value interface{}) bool {
 	return false
 }
 
-// sameValue сравнивает значения по смыслу: 64, 64.0 и json.Number("64.0") —
-// одно число; число и строка с тем же текстом — разные значения.
+// sameValue сравнивает значения по смыслу: 64, 64.0 и json.Number("64.0") -
+// одно число; число и строка с тем же текстом - разные значения.
 func sameValue(a, b interface{}) bool {
 	if left, ok := number(a); ok {
 		if right, ok := number(b); ok {

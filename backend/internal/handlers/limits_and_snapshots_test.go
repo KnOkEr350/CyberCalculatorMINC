@@ -13,16 +13,16 @@ import (
 	"cybercalc/internal/models"
 )
 
-// STORE-04: лимит одного вложения — 20 МБ, и backend с nginx должны
+// STORE-04: лимит одного вложения - 20 МБ, и backend с nginx должны
 // отклонять превышение согласованно, иначе файл успевает дойти до диска.
 func TestAttachmentSizeLimitAgreesWithNginx(t *testing.T) {
 	const want = 20 << 20
 	if maxAttachmentSize != want {
 		t.Fatalf("лимит вложения %d байт, ожидалось %d (20 МБ)", maxAttachmentSize, want)
 	}
-	// Backend принимает тело на 1 МБ больше лимита файла — это запас на
+	// Backend принимает тело на 1 МБ больше лимита файла - это запас на
 	// служебные поля multipart. Прокси обязан пропускать ровно столько же:
-	// меньше — и файл под лимитом оборвётся на прокси, больше — и лишние
+	// меньше - и файл под лимитом оборвётся на прокси, больше - и лишние
 	// мегабайты дойдут до диска прежде, чем их отклонит backend.
 	wantProxyMB := int((maxAttachmentSize + (1 << 20)) >> 20)
 	body, err := os.ReadFile(filepath.Join("..", "..", "..", "nginx", "nginx.conf"))
@@ -31,7 +31,7 @@ func TestAttachmentSizeLimitAgreesWithNginx(t *testing.T) {
 	}
 	uploadLimit := regexp.MustCompile(`client_max_body_size\s+(\d+)m`).FindStringSubmatch(string(body))
 	if uploadLimit == nil {
-		t.Fatal("в конфигурации nginx нет client_max_body_size — лимит держится только на backend")
+		t.Fatal("в конфигурации nginx нет client_max_body_size - лимит держится только на backend")
 	}
 	got, err := strconv.Atoi(uploadLimit[1])
 	if err != nil {
@@ -47,7 +47,7 @@ func TestAttachmentSizeLimitAgreesWithNginx(t *testing.T) {
 }
 
 // WF-07: снимок на 1 мая формируют только администраторы, а скачивать
-// полный снимок организации может ещё и аудитор — но не куратор и не
+// полный снимок организации может ещё и аудитор - но не куратор и не
 // профильные специалисты.
 func TestSnapshotRolesAreRestricted(t *testing.T) {
 	handlers := SnapshotHandlers{} // роль проверяется до обращения к БД
@@ -84,7 +84,7 @@ func TestSnapshotRolesAreRestricted(t *testing.T) {
 	}
 }
 
-// REPORT-03: Приложение № 4 — ровно 13 граф формы, где план на 31 декабря и
+// REPORT-03: Приложение № 4 - ровно 13 граф формы, где план на 31 декабря и
 // факт на 1 мая стоят отдельными колонками.
 func TestAnnex4HasThirteenColumns(t *testing.T) {
 	if len(annex4Headers) != 13 {

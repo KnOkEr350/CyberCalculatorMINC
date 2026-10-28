@@ -18,11 +18,11 @@ var anoRoleLabels = map[string]string{"anchor": "Якорный", "partner": "И
 // поддержка, стипендиаты, кейсы, РИД. Структура взята из описания ТЗ:
 // официальная форма АНО АЦ в реестре BASE-13 не зарегистрирована, поэтому на
 // листе паспорта это отмечено. Числа не пересчитываются заново: шкала
-// софинансирования — та же, что в карточке программы (ADR-14).
+// софинансирования - та же, что в карточке программы (ADR-14).
 func (h *ReportHandlers) exportAnoAc(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, year int, company string) {
 	entryID := strings.TrimSpace(r.URL.Query().Get("entry_id"))
 	if entryID == "" {
-		middleware.WriteError(w, 400, "укажите entry_id — запись программы ТОП-ИТ/ТОП-ИИ")
+		middleware.WriteError(w, 400, "укажите entry_id - запись программы ТОП-ИТ/ТОП-ИИ")
 		return
 	}
 	var partnerName, project, program, wave, role, grant, planned string

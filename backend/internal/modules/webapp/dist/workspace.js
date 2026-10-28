@@ -58,9 +58,9 @@ function agreementIsUsable(agreement, year = state.year) {
 }
 
 function agreementLabel(agreement) {
-  if (!agreement) return "—";
+  if (!agreement) return "-";
   const authority = agreement.roiv_name ? ` · ${agreement.roiv_name}` : "";
-  return `№ ${agreement.number}${authority} · ${AGREEMENT_STATUS_LABELS[agreement.status] || agreement.status} · ${agreement.valid_from}—${agreement.valid_until}`;
+  return `№ ${agreement.number}${authority} · ${AGREEMENT_STATUS_LABELS[agreement.status] || agreement.status} · ${agreement.valid_from}-${agreement.valid_until}`;
 }
 
 function peopleToText(agreement, party) {
@@ -84,7 +84,7 @@ function agreementFieldsMarkup(prefix, agreement = {}, withPartners = false) {
     <div class="field"><label>Дата соглашения *</label><input type="date" id="${prefix}-signed-on" required value="${escapeHTML(agreement.signed_on || today)}"></div>
     <div class="field"><label>Действует с *</label><input type="date" id="${prefix}-valid-from" required value="${escapeHTML(agreement.valid_from || today)}"></div>
     <div class="field"><label>Действует до *</label><input type="date" id="${prefix}-valid-until" required value="${escapeHTML(agreement.valid_until || yearEnd)}"></div>
-    <div class="field" id="${prefix}-roiv-box"><label>Региональный орган управления образованием *</label><select id="${prefix}-roiv-authority"><option value="">— Выберите РОИВ —</option>${state.regionalAuthorities.map((authority) => `<option value="${authority.id}" ${authority.id === agreement.regional_authority_id ? "selected" : ""} ${authority.status === "active" ? "" : "disabled"}>${escapeHTML(authority.region)} — ${escapeHTML(authority.name)}</option>`).join("")}</select><div class="field-hint">РОИВ ведётся отдельно и связывает соглашение со школами и их мероприятиями.</div></div>
+    <div class="field" id="${prefix}-roiv-box"><label>Региональный орган управления образованием *</label><select id="${prefix}-roiv-authority"><option value="">- Выберите РОИВ -</option>${state.regionalAuthorities.map((authority) => `<option value="${authority.id}" ${authority.id === agreement.regional_authority_id ? "selected" : ""} ${authority.status === "active" ? "" : "disabled"}>${escapeHTML(authority.region)} - ${escapeHTML(authority.name)}</option>`).join("")}</select><div class="field-hint">РОИВ ведётся отдельно и связывает соглашение со школами и их мероприятиями.</div></div>
     <div class="field"><label>Группа юридических лиц</label><select id="${prefix}-group-id"><option value="">Без договора о взаимодействии</option>${(state.legalEntityGroups || []).map((group) => `<option value="${group.id}" ${group.id === agreement.legal_entity_group_id ? "selected" : ""}>${escapeHTML(group.name)} · договор № ${escapeHTML(group.interaction_agreement_number)}</option>`).join("")}</select>${agreement.legal_entity_group && !agreement.legal_entity_group_id ? `<div class="field-hint">Legacy-значение: ${escapeHTML(agreement.legal_entity_group)}</div>` : ""}</div>
     <div class="field"><label>Способ подписания *</label><select id="${prefix}-signature"><option value="unsigned">Не подписано</option><option value="paper">Бумажный документ</option><option value="qualified_electronic">УКЭП</option><option value="goskey">Госключ</option></select></div>
     <div class="field"><label>Подписант ИТ-компании</label><input id="${prefix}-signed-by" maxlength="300" value="${escapeHTML(agreement.signed_by || "")}"></div>
@@ -343,9 +343,9 @@ function entryFiltersMarkup(category) {
 }
 
 function ministryDecisionTable(entries, writable, canCreate) {
-  const date = (value) => value ? escapeHTML(String(value).split("-").reverse().join(".")) : "—";
+  const date = (value) => value ? escapeHTML(String(value).split("-").reverse().join(".")) : "-";
   const volume = (value, unit) => value === undefined || value === null || value === ""
-    ? "—"
+    ? "-"
     : `${Number(value).toLocaleString("ru-RU")} ${escapeHTML(unit || "ед.")}`;
   const rows = entries.map((entry) => {
     const payload = entry.payload || {};
@@ -354,13 +354,13 @@ function ministryDecisionTable(entries, writable, canCreate) {
     const completeDocuments = documentChecks.filter((check) => check.complete).length;
     const decision = payload.decision_number
       ? `№ ${escapeHTML(payload.decision_number)}<br><small>от ${date(payload.decision_date)}</small>`
-      : escapeHTML(payload.decision_reference || "—");
+      : escapeHTML(payload.decision_reference || "-");
     return `<tr>
       <td>${CyberCalcUI.riskBadge({ state: entry.compliance?.state || "red", label: entry.compliance?.state === "green" ? "Готово" : entry.compliance?.state === "yellow" ? "Доработать" : "Риск", reasons: [...(entry.compliance?.blocking_reasons || []), ...(entry.compliance?.warnings || [])] })}</td>
-      <td><b>${decision}</b><br><small>${escapeHTML(valueLabel(payload.instruction_authority || "—"))} · ${escapeHTML(payload.instruction_reference || "реквизиты не указаны")}</small></td>
-      <td><b>${escapeHTML(payload.activity_description || "—")}</b><br><small>${escapeHTML(payload.implementation_conditions || "Условия не указаны")}</small></td>
-      <td>${date(payload.implementation_start)} — ${date(payload.implementation_deadline)}</td>
-      <td><b>${escapeHTML(payload.metric_description || "—")}</b><br><small>${escapeHTML(payload.metric_unit || "Единица не указана")}</small></td>
+      <td><b>${decision}</b><br><small>${escapeHTML(valueLabel(payload.instruction_authority || "-"))} · ${escapeHTML(payload.instruction_reference || "реквизиты не указаны")}</small></td>
+      <td><b>${escapeHTML(payload.activity_description || "-")}</b><br><small>${escapeHTML(payload.implementation_conditions || "Условия не указаны")}</small></td>
+      <td>${date(payload.implementation_start)} - ${date(payload.implementation_deadline)}</td>
+      <td><b>${escapeHTML(payload.metric_description || "-")}</b><br><small>${escapeHTML(payload.metric_unit || "Единица не указана")}</small></td>
       <td>${volume(payload.planned_volume, payload.metric_unit)}</td>
       <td>${volume(payload.actual_volume, payload.metric_unit)}</td>
       <td>${escapeHTML(payload.calculation_basis || "Основание не указано")}</td>
@@ -393,14 +393,14 @@ function teachingWorkloadTable(entries, payouts, writable, canCreate) {
     const compensation = !entryPayouts.length
       ? '<span class="status-badge inactive">Не запланирована</span>'
       : `<span class="status-badge ${paid === entryPayouts.length ? "active" : "pending"}">${paid === entryPayouts.length ? "Выплачено" : "По графику"} ${paid}/${entryPayouts.length}</span><br><small>${entryPayouts.map((payout) => `${escapeHTML(payout.target_quarter)} ${payout.target_year}`).join(" · ")}</small>`;
-    const unit = [payload.institute, payload.faculty, payload.department].filter(Boolean).map(escapeHTML).join(" / ") || "—";
-    const education = `${escapeHTML(valueLabel(payload.education_level || "—"))}<br><small>семестр ${escapeHTML(payload.semester ?? "—")} · ${escapeHTML(payload.academic_group || "группа не указана")}</small>`;
+    const unit = [payload.institute, payload.faculty, payload.department].filter(Boolean).map(escapeHTML).join(" / ") || "-";
+    const education = `${escapeHTML(valueLabel(payload.education_level || "-"))}<br><small>семестр ${escapeHTML(payload.semester ?? "-")} · ${escapeHTML(payload.academic_group || "группа не указана")}</small>`;
     const checks = entry.compliance?.checks || [];
     const complete = checks.filter((check) => check.complete).length;
     return `<tr>
       <td>${entryRisk(entry)}</td>
-      <td><b>${escapeHTML(payload.teacher_full_name || "—")}</b><br><small>${escapeHTML(payload.employee_position || "должность не указана")} · ОКЗ ${escapeHTML(payload.okz_code || "—")}</small></td>
-      <td><b>${escapeHTML(payload.course_name || "—")}</b><br><small>${escapeHTML(payload.training_direction || payload.specialty_code || "направление не указано")}</small></td>
+      <td><b>${escapeHTML(payload.teacher_full_name || "-")}</b><br><small>${escapeHTML(payload.employee_position || "должность не указана")} · ОКЗ ${escapeHTML(payload.okz_code || "-")}</small></td>
+      <td><b>${escapeHTML(payload.course_name || "-")}</b><br><small>${escapeHTML(payload.training_direction || payload.specialty_code || "направление не указано")}</small></td>
       <td>${unit}</td><td>${education}</td>
       <td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td>
       <td><b>${Number(payload.academic_hours || 0).toLocaleString("ru-RU")}</b></td>
@@ -433,7 +433,7 @@ function oopRegistryTable(entries, writable, canCreate) {
     const payload = entry.payload || {};
     const checks = entry.compliance?.checks || [];
     const complete = checks.filter((check) => check.complete).length;
-    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "—").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "—"))}</small></td><td><b>${escapeHTML(payload.program_name || "—")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "—"))}</td><td>${escapeHTML(payload.expert_full_name || "—")}<br><small>${escapeHTML(valueLabel(payload.work_status || ""))}</small></td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
+    return `<tr><td>${entryRisk(entry)}</td><td><span class="status-badge active">${escapeHTML(String(payload.doc_type || "-").toUpperCase())}</span><br><small>${escapeHTML(valueLabel(payload.activity_type || "-"))}</small></td><td><b>${escapeHTML(payload.program_name || "-")}</b><br><small>${escapeHTML(payload.specialty_code || "код специальности не указан")}</small></td><td>${escapeHTML(valueLabel(payload.level || "-"))}</td><td>${escapeHTML(payload.expert_full_name || "-")}<br><small>${escapeHTML(valueLabel(payload.work_status || ""))}</small></td><td>${Number(payload.students_reach || 0).toLocaleString("ru-RU")}</td><td><span class="status-badge ${complete === checks.length && checks.length ? "active" : "pending"}">${complete}/${checks.length}</span><br><small>проверок закрыто</small></td><td><button class="btn secondary" data-edit="${entry.id}">${writable ? "Карточка" : "Просмотреть"}</button></td></tr>`;
   }).join("");
   return `${workStatusSummary(entries)}<p>На странице: ${entries.length}.</p><div class="table-wrap"><table class="oop-registry-grid"><thead><tr><th>Риск</th><th>Документ / действие</th><th>Программа или дисциплина</th><th>Уровень</th><th>Эксперт и статус</th><th>Охват</th><th>Документы</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${!entries.length ? `<p class="muted">${canCreate ? "Документы ещё не добавлены." : "ИТ-организация ещё не добавила ООП/РПД."}</p>` : ""}`;
 }
@@ -460,11 +460,11 @@ function registryTable(className, headers, rows, count, emptyText) {
   return `<p>На странице: ${count}.</p><div class="table-wrap"><table class="${className}"><thead><tr><th scope="col">Риск</th>${headers.map((header) => `<th scope="col">${header}</th>`).join("")}<th scope="col">Документы</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead><tbody>${rows}</tbody></table></div>${!count ? `<p class="muted">${emptyText}</p>` : ""}`;
 }
 
-const ruDate = (value) => (value ? escapeHTML(String(value).split("-").reverse().join(".")) : "—");
-const dash = (value) => (value === undefined || value === null || value === "" ? "—" : escapeHTML(String(value)));
+const ruDate = (value) => (value ? escapeHTML(String(value).split("-").reverse().join(".")) : "-");
+const dash = (value) => (value === undefined || value === null || value === "" ? "-" : escapeHTML(String(value)));
 
 // PRA-04: ограничения ст. 63 и 92 ТК РФ. Отказ приходит из проверок записи;
-// правило здесь не дублируется — интерфейс показывает только вывод сервера.
+// правило здесь не дублируется - интерфейс показывает только вывод сервера.
 function laborLawCell(entry) {
   const reasons = [...(entry.compliance?.blocking_reasons || []), ...(entry.compliance?.warnings || [])].filter((reason) => /ТК РФ|стать[яьёи]\s+(63|92)/.test(reason));
   if (reasons.length) return reasons.map((reason) => `<span class="error">${escapeHTML(reason)}</span>`).join("<br>");
@@ -472,13 +472,13 @@ function laborLawCell(entry) {
   return p.student_age && p.weekly_hours !== undefined && p.weekly_hours !== "" ? '<span class="status-badge active">ст. 63, 92 соблюдены</span>' : '<span class="status-badge pending">возраст и часы не заданы</span>';
 }
 
-// UI-06: практика — трудоустройство, практический договор и ограничения ТК РФ.
+// UI-06: практика - трудоустройство, практический договор и ограничения ТК РФ.
 function practiceTable(entries, writable, canCreate) {
   const rows = entries.map((entry) => {
     const p = entry.payload || {};
     return registryRow(entry, writable, [
       `<b>${dash(p.student_full_name)}</b><br><small>${dash(p.course)} курс · ${dash(p.specialty_code)}</small>`,
-      `${ruDate(p.period_start)} — ${ruDate(p.period_end)}`,
+      `${ruDate(p.period_start)} - ${ruDate(p.period_end)}`,
       `${dash(p.labor_contract_number)} от ${ruDate(p.labor_contract_date)}<br><small>${p.labor_contract_type === "fixed_term" ? "срочный" : dash(p.labor_contract_type)}</small>`,
       `${dash(p.practice_agreement_number)} от ${ruDate(p.practice_agreement_date)}`,
       `${dash(p.student_age)} лет · ${dash(p.weekly_hours)} ч/нед`,
@@ -489,7 +489,7 @@ function practiceTable(entries, writable, canCreate) {
   return workStatusSummary(entries) + registryTable("practice-registry-grid", ["Практикант", "Период", "Трудовой договор", "Договор о практической подготовке", "Возраст и нагрузка", "Ограничения ТК РФ", "Статус"], rows, entries.length, canCreate ? "Практики ещё не добавлены." : "ИТ-организация ещё не добавила практику.");
 }
 
-// UI-05: стажировки — наставник, договор и справки.
+// UI-05: стажировки - наставник, договор и справки.
 function internshipTable(entries, writable, canCreate) {
   const rows = entries.map((entry) => {
     const p = entry.payload || {};
@@ -497,7 +497,7 @@ function internshipTable(entries, writable, canCreate) {
     return registryRow(entry, writable, [
       `<b>${dash(p.student_full_name)}</b><br><small>${dash(p.course)} курс</small>`,
       `${dash(p.mentor_full_name)}<br><small>приказ ${dash(p.mentor_order_number)} от ${ruDate(p.mentor_order_date)}</small>`,
-      `${ruDate(p.period_start)} — ${ruDate(p.period_end)}<br><small>${dash(p.duration_months)} мес.</small>`,
+      `${ruDate(p.period_start)} - ${ruDate(p.period_end)}<br><small>${dash(p.duration_months)} мес.</small>`,
       dash(p.internship_agreement_reference),
       `${certificates}/2`,
       dash(valueLabel(p.work_status || "")),
@@ -506,7 +506,7 @@ function internshipTable(entries, writable, canCreate) {
   return workStatusSummary(entries) + registryTable("internship-registry-grid", ["Студент", "Наставник", "Период", "Договор о стажировке", "Справки", "Статус"], rows, entries.length, canCreate ? "Стажировки ещё не добавлены." : "ИТ-организация ещё не добавила стажировки.");
 }
 
-// UI-08: школы — виды 6/7/8, источник средств, акт и цифровой след.
+// UI-08: школы - виды 6/7/8, источник средств, акт и цифровой след.
 const SCHOOL_KIND_LABELS = { it_clubs: "ИТ-кружки", teacher_training: "Подготовка учителей", edu_content: "Образовательный контент" };
 function schoolTable(entries, writable, canCreate) {
   const funding = { absent: "нет", full_or_partial: "есть" };
@@ -611,7 +611,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   root.innerHTML = `<section class="page-heading screen-heading"><div>${screen ? `<span class="eyebrow">Экран ${screen.number} · ${escapeHTML(screen.kind)}</span>` : ""}<h1>${escapeHTML(headingTitle)}</h1></div><div class="activity-heading-actions"><div class="tabs activity-period-tabs" role="tablist" aria-label="План или факт"><button type="button" role="tab" data-p="plan" aria-selected="${state.period === "plan"}" class="${state.period === "plan" ? "active" : ""}">План</button><button type="button" role="tab" data-p="fact" aria-selected="${state.period === "fact"}" class="${state.period === "fact" ? "active" : ""}">Факт</button></div><span class="year-badge">${state.year}</span></div></section>
   <div class="card"><div class="grid cols-3">
     ${educationSelector}
-    <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">— Выберите —</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
+    <div class="field"><label for="workspace-agreement">3. Соглашение</label><select id="workspace-agreement"><option value="">- Выберите -</option>${state.agreements.map((agreement) => `<option value="${agreement.id}" ${agreement.id === state.agreementID ? "selected" : ""}>${escapeHTML(agreementLabel(agreement))}</option>`).join("")}</select></div>
   </div><div class="flex workspace-actions">${canManageWorkflow && canReviewEducationDirectory() ? '<button class="btn secondary" id="open-directory">Справочник и соглашения</button>' : ""}</div><p class="context-status">${selectedAgreement ? `${escapeHTML(AGREEMENT_KIND_LABELS[selectedAgreement.agreement_kind] || selectedAgreement.agreement_kind)} · ${canPrepare ? (writable ? "Доступно редактирование" : "Только просмотр: проверьте статус и срок соглашения") : "Режим рассмотрения образовательной организацией"}` : "Выберите соглашение"}</p></div>
   <div class="card"><div class="grid cols-3"><div class="field"><label>Год</label><input type="number" id="year" min="2000" max="2100" step="1" value="${state.year}"></div>
     ${screen?.id === "schools" && available.length > 1 ? `<div class="tab-strip" role="tablist" aria-label="Виды школьного трека" style="grid-column:1/-1">${available.map((c) => `<button type="button" role="tab" class="btn ${c.code === state.categoryCode ? "" : "secondary"}" aria-selected="${c.code === state.categoryCode}" data-school-tab="${c.code}">${escapeHTML(SCHOOL_KIND_LABELS[c.code] || c.name)}</button>`).join("")}</div>` : ""}
@@ -628,7 +628,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
         .value.trim()
         .toLocaleLowerCase("ru");
       partnerSelect.innerHTML =
-        '<option value="">— Выберите —</option>' +
+        '<option value="">- Выберите -</option>' +
         state.partners
           .filter(
             (p) =>
@@ -796,7 +796,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ${workflow.review_due_date ? `<p class="${workflow.review_overdue ? "error" : "notice"}">${workflow.review_overdue ? "Просрочено рассмотрение" : "Срок рассмотрения"}: по ${escapeHTML(workflow.review_due_date.split("-").reverse().join("."))} включительно · ${Number(workflow.review_calendar_days)} календарных дней по приказу № 270.</p>` : ""}
     <h3>Автоматические проверки</h3><ul>${workflow.automatic_checks.map((check) => `<li>${check.complete ? "✓" : "✕"} ${escapeHTML(check.label)}</li>`).join("")}</ul>
     <h3>Виды мероприятий соглашения</h3><div class="grid cols-2">${workflow.activities.map((activity) => `<button class="btn secondary" data-required="${activity.code}">${activity.complete ? "✓" : "＋"} ${escapeHTML(activity.name)}</button>`).join("")}</div>
-    ${workflow.top_it_exception ? `<p class="notice">Применено исключение ТОП ИТ/ИИ (п. 22 Порядка): обязательные Виды 1 и 3 реализованы в другой образовательной организации с утверждённым отчётом.${workflow.top_it_exception_basis ? ` Основание: ${escapeHTML(workflow.top_it_exception_basis.partner_name)}, соглашение ${escapeHTML(workflow.top_it_exception_basis.agreement_number)} — ${workflow.top_it_exception_basis.records.map((record) => `${escapeHTML(record.category_name)}: ${Number(record.entry_count)} записей`).join("; ")}.` : ""}</p>` : ""}
+    ${workflow.top_it_exception ? `<p class="notice">Применено исключение ТОП ИТ/ИИ (п. 22 Порядка): обязательные Виды 1 и 3 реализованы в другой образовательной организации с утверждённым отчётом.${workflow.top_it_exception_basis ? ` Основание: ${escapeHTML(workflow.top_it_exception_basis.partner_name)}, соглашение ${escapeHTML(workflow.top_it_exception_basis.agreement_number)} - ${workflow.top_it_exception_basis.records.map((record) => `${escapeHTML(record.category_name)}: ${Number(record.entry_count)} записей`).join("; ")}.` : ""}</p>` : ""}
     <h3>Юридические подтверждения ИТ-организации</h3><label class="check-row"><input id="wf-scope" type="checkbox" ${workflow.scope_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Конкретный перечень, объём, сроки и условия соответствуют соглашению</label>
     <label class="check-row"><input id="wf-conditions" type="checkbox" ${workflow.conditions_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Выполнены условия реализации каждого вида из приложения № 1 приказа</label>
     <label class="check-row"><input id="wf-evidence" type="checkbox" ${workflow.evidence_confirmed ? "checked" : ""} ${confirmationsDisabled ? "disabled" : ""}> Подтверждающие документы имеются и позволяют установить факт мероприятия (загрузка в систему необязательна)</label>
@@ -805,7 +805,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ${reviewHint}
     ${workflowControls}
     ${workflow.missing.length ? `<p class="error">Не выполнено: ${workflow.missing.map(escapeHTML).join("; ")}</p>` : ""}
-    ${workflow.history.length ? `<details><summary>История согласования (${workflow.history.length})</summary><ul>${workflow.history.map((item) => `<li>${new Date(item.changed_at).toLocaleString("ru-RU")} · ${escapeHTML(item.changed_by)}: ${escapeHTML(workflowLabels[item.from_status] || item.from_status)} → ${escapeHTML(workflowLabels[item.to_status] || item.to_status)} — ${escapeHTML(item.comment)}</li>`).join("")}</ul></details>` : ""}<p class="muted">Любое изменение соглашения, перечня или записи автоматически возвращает этот отчёт в черновик. На этапе MVP выгрузка доступна в любом статусе; статус согласования указывается в файле.</p></div>`;
+    ${workflow.history.length ? `<details><summary>История согласования (${workflow.history.length})</summary><ul>${workflow.history.map((item) => `<li>${new Date(item.changed_at).toLocaleString("ru-RU")} · ${escapeHTML(item.changed_by)}: ${escapeHTML(workflowLabels[item.from_status] || item.from_status)} → ${escapeHTML(workflowLabels[item.to_status] || item.to_status)} - ${escapeHTML(item.comment)}</li>`).join("")}</ul></details>` : ""}<p class="muted">Любое изменение соглашения, перечня или записи автоматически возвращает этот отчёт в черновик. На этапе MVP выгрузка доступна в любом статусе; статус согласования указывается в файле.</p></div>`;
   obligation.querySelectorAll("[data-required]").forEach((button) => button.onclick = () => { state.categoryCode = button.dataset.required; renderEntries(root); });
   const transition = async (nextStatus) => {
     const button = obligation.querySelector(`#wf-${nextStatus === "ready" ? "ready" : nextStatus === "verified" ? "verify" : nextStatus === "approved" ? "approve" : "draft"}`);
@@ -857,7 +857,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
                 ? topItTable(list, writable, canCreate)
                 : SCHOOL_KIND_LABELS[state.categoryCode]
                 ? schoolTable(list, writable, canCreate)
-                : `<p>На странице: ${list.length}.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "—") : e.payload[f.key] ?? "—")}</td>`).join("")}<td>${entryRisk(e)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
+                : `<p>На странице: ${list.length}.</p><div class="table-wrap"><table><thead><tr>${fields.map((f) => `<th>${escapeHTML(f.label)}</th>`).join("")}<th>Готовность</th><th></th></tr></thead><tbody>${list.map((e) => `<tr>${fields.map((f) => `<td>${escapeHTML(f.type === "select" ? valueLabel(e.payload[f.key] ?? "-") : e.payload[f.key] ?? "-")}</td>`).join("")}<td>${entryRisk(e)}</td><td><button class="btn secondary" data-edit="${e.id}">${writable ? "Открыть" : "Просмотреть"}</button></td></tr>`).join("")}</tbody></table></div>${!list.length ? `<p class="muted">${canCreate ? "Записей нет. Добавьте запись вручную." : "ИТ-организация ещё не добавила записи в этот раздел."}</p>` : ""}`;
     root
       .querySelectorAll("[data-edit]")
       .forEach(
@@ -1238,10 +1238,10 @@ async function openDirectoryReview(item, onSaved = async () => {}) {
 
 // DATA-10: доля участия, лимиты по участникам и сверка с целевой суммой года.
 function groupLimitsMarkup(data) {
-  const money = (value) => (value == null ? "—" : `${Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`);
-  const members = (data.members || []).map((member) => `<tr><td>${escapeHTML(member.name)}</td><td>${escapeHTML(member.inn)}</td><td>${member.share_percent == null ? "—" : `${Number(member.share_percent).toLocaleString("ru-RU")} %`}</td><td>${money(member.limit_rub)}</td></tr>`).join("");
+  const money = (value) => (value == null ? "-" : `${Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`);
+  const members = (data.members || []).map((member) => `<tr><td>${escapeHTML(member.name)}</td><td>${escapeHTML(member.inn)}</td><td>${member.share_percent == null ? "-" : `${Number(member.share_percent).toLocaleString("ru-RU")} %`}</td><td>${money(member.limit_rub)}</td></tr>`).join("");
   const verdict = data.target_amount_rub == null
-    ? '<p class="muted">Целевая сумма на год не задана — сверить лимиты не с чем.</p>'
+    ? '<p class="muted">Целевая сумма на год не задана - сверить лимиты не с чем.</p>'
     : data.over_allocated
       ? `<p class="error">Лимиты превышают целевую сумму на ${money(data.over_allocated_rub)}.</p>`
       : `<p class="notice">Распределено ${money(data.allocated_rub)} из ${money(data.target_amount_rub)}; не распределено ${money(data.remaining_rub)}.</p>`;
@@ -1314,7 +1314,7 @@ async function openDirectoryCreate(onSaved = async () => {}) {
   const today = new Date().toISOString().slice(0, 10);
   const modal = el(`<div class="modal-backdrop"><form class="modal modal-wide" role="dialog" aria-modal="true">
     <div class="flex between"><div><span class="eyebrow">${admin ? "Новая запись" : "Предложение модератора"}</span><h2>Добавить учебное заведение</h2></div><button class="btn secondary" type="button" data-close>Закрыть</button></div>
-    <p class="notice">Основание — официальный перечень образовательных организаций Минцифры. Для подтверждения администратором дополнительно нужны актуальные реквизиты и действующая лицензия.</p>
+    <p class="notice">Основание - официальный перечень образовательных организаций Минцифры. Для подтверждения администратором дополнительно нужны актуальные реквизиты и действующая лицензия.</p>
     <div class="grid cols-2">
       <div class="field"><label>Полное наименование *</label><input name="name" required minlength="2" maxlength="1000"></div>
       <div class="field"><label>Тип организации *</label><select name="partner_kind"><option value="vuz">Вуз</option><option value="kolledj">Колледж / СПО</option><option value="school">Школа</option></select></div>
@@ -1349,7 +1349,7 @@ async function openDirectoryCreate(onSaved = async () => {}) {
       await api("/directory", { method: "POST", body: JSON.stringify(payload) });
       modal.remove();
       await onSaved();
-      showToast(admin ? (payload.confirm ? "Учебное заведение добавлено и подтверждено" : "Учебное заведение добавлено для проверки — найдите его в «Требуют решения»") : "Предложение отправлено администратору", "success");
+      showToast(admin ? (payload.confirm ? "Учебное заведение добавлено и подтверждено" : "Учебное заведение добавлено для проверки - найдите его в «Требуют решения»") : "Предложение отправлено администратору", "success");
     } catch (error) {
       form.querySelector(".error").textContent = error.message;
       buttons.forEach((button) => (button.disabled = false));
@@ -1452,7 +1452,7 @@ async function renderPartnerDirectory(root, embedded = false) {
       "",
     )}</select></div><div class="field"><label>Поиск</label><input id="d-search"></div><button id="d-find">Найти</button></div><div id="d-results"></div>${canApprove ? '<button id="d-import">Импорт</button>' : ""}</div><button id="roiv-add"></button><div id="roiv-list"></div></div>${isStaffUser() ? '<div id="partner-create" hidden></div>' : ""}`;
   let generation = 0;
-  const reviewFilter = el('<label class="muted"><input type="checkbox" id="d-review-all"> Показать также вузы без подтверждённого направления — для проверки</label>');
+  const reviewFilter = el('<label class="muted"><input type="checkbox" id="d-review-all"> Показать также вузы без подтверждённого направления - для проверки</label>');
   root.querySelector("#d-results").before(reviewFilter);
   const search = async () => {
     const version = ++generation;
@@ -1475,7 +1475,7 @@ async function renderPartnerDirectory(root, embedded = false) {
           const verifier = !pending && (p.verifier_name || p.verifier_email)
             ? `<br><small>${escapeHTML(p.verifier_name || p.verifier_email)}${p.verified_at ? ` · ${new Date(p.verified_at).toLocaleString("ru-RU")}` : ""}</small>`
             : "";
-          return `<tr><td>${escapeHTML(p.name)}${p.listed_in_mincifry_order_27 ? ' <span class="status-badge active">Перечень № 27</span>' : ""}<br><small>${escapeHTML(p.region)}</small>${p.partner_kind === "vuz" ? `<br><small>${p.matches_order ? `Подходящие направления: ${escapeHTML((p.matching_program_codes || []).join(", "))}` : (p.program_codes || []).length ? "Подходящих направлений по приказу нет" : "Направления ещё не получены"}</small>${p.programs_source_url ? `<br><a href="${escapeHTML(p.programs_source_url)}" target="_blank" rel="noopener noreferrer">Образовательные программы</a>` : ""}` : ""}</td><td>ИНН ${escapeHTML(p.inn || "—")}<br>ОГРН ${escapeHTML(p.ogrn || "—")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td>${canApprove ? `<button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>` : ""}${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
+          return `<tr><td>${escapeHTML(p.name)}${p.listed_in_mincifry_order_27 ? ' <span class="status-badge active">Перечень № 27</span>' : ""}<br><small>${escapeHTML(p.region)}</small>${p.partner_kind === "vuz" ? `<br><small>${p.matches_order ? `Подходящие направления: ${escapeHTML((p.matching_program_codes || []).join(", "))}` : (p.program_codes || []).length ? "Подходящих направлений по приказу нет" : "Направления ещё не получены"}</small>${p.programs_source_url ? `<br><a href="${escapeHTML(p.programs_source_url)}" target="_blank" rel="noopener noreferrer">Образовательные программы</a>` : ""}` : ""}</td><td>ИНН ${escapeHTML(p.inn || "-")}<br>ОГРН ${escapeHTML(p.ogrn || "-")}</td><td><span class="status-badge ${pending ? "pending" : "active"}">${verificationLabel}</span>${verifier}<br>${escapeHTML(p.license_number || "Лицензия не указана")} · ${escapeHTML(directoryStatusLabel(p.license_status))}<br><small>${escapeHTML(p.registry_updated_at || p.source)}</small></td><td>${canApprove ? `<button class="btn secondary" data-review-directory="${p.id}">Редактировать / подтвердить</button>` : ""}${isStaffUser() ? `<button class="btn secondary" data-directory="${p.id}" ${p.selectable ? "" : "disabled"}>${p.selectable ? "Выбрать" : "Недоступно для соглашения"}</button>` : ""}${p.source_url ? `<br><a href="${escapeHTML(p.source_url)}" target="_blank" rel="noopener noreferrer">Источник</a>` : ""}</td></tr>`;
         }).join("")}</tbody></table></div>`
         : `<p>${root.querySelector("#d-kind").value === "vuz" ? "Вузы с найденными подходящими направлениями не найдены. Для проверки записи включите «Показать также вузы без подтверждённого направления» или измените запрос." : "Совпадений нет. Измените запрос или загрузите сведения в справочник."}</p>`;
 	  box.querySelectorAll("[data-review-directory]").forEach((button) => {
@@ -1617,11 +1617,11 @@ async function renderPartnerDirectory(root, embedded = false) {
     const confirmed = confirmedDirectory.length ? confirmedDirectory : state.partners.filter((partner) => partner.verification_status === "verified");
     root.querySelector("#confirmed-partner-count").textContent = String(confirmed.length);
     root.querySelector("#confirmed-partner-list").innerHTML = confirmed.length
-      ? `<div class="confirmed-partner-list">${confirmed.map((partner) => { const added = state.partners.some((item) => item.inn && item.inn === partner.inn); return `<div class="confirmed-partner"><b>${escapeHTML(partner.name)}</b><span>${escapeHTML(AUDIENCE_LABELS[partner.partner_kind] || partner.partner_kind)} · ИНН ${escapeHTML(partner.inn || "—")}</span>${isStaffUser() ? `<button class="btn secondary" data-confirmed-partner="${partner.id}" ${added ? "disabled" : ""}>${added ? "Уже в наших партнёрах" : "Добавить в наши партнёры"}</button>` : ""}</div>`; }).join("")}</div>`
+      ? `<div class="confirmed-partner-list">${confirmed.map((partner) => { const added = state.partners.some((item) => item.inn && item.inn === partner.inn); return `<div class="confirmed-partner"><b>${escapeHTML(partner.name)}</b><span>${escapeHTML(AUDIENCE_LABELS[partner.partner_kind] || partner.partner_kind)} · ИНН ${escapeHTML(partner.inn || "-")}</span>${isStaffUser() ? `<button class="btn secondary" data-confirmed-partner="${partner.id}" ${added ? "disabled" : ""}>${added ? "Уже в наших партнёрах" : "Добавить в наши партнёры"}</button>` : ""}</div>`; }).join("")}</div>`
       : '<p class="muted">Подтверждённых партнёров пока нет.</p>';
     root.querySelector("#partner-count").textContent = `Показано: ${partners.length} из ${state.partners.length}`;
     root.querySelector("#partner-list").innerHTML = partners.length
-      ? `<div class="table-wrap"><table class="partner-list-table"><thead><tr><th>Раскрыть</th><th>Партнёр</th><th>Тип</th><th>Рабочий раздел</th></tr></thead><tbody>${partners.map((p) => `<tr><td><label class="partner-expand-control"><input type="checkbox" data-partner-expand="${p.id}" aria-label="Раскрыть сведения: ${escapeHTML(p.name)}"><span>⌄</span></label></td><td><b>${escapeHTML(p.name)}</b><br><small>ИНН ${escapeHTML(p.inn || "—")}</small></td><td>${escapeHTML(AUDIENCE_LABELS[p.partner_kind] || p.partner_kind)}</td><td><button class="btn secondary" data-partner="${p.id}">Открыть мероприятия</button></td></tr><tr class="partner-detail-row" data-partner-detail-row="${p.id}" hidden><td colspan="4"><div data-partner-detail="${p.id}"></div></td></tr>`).join("")}</tbody></table></div>`
+      ? `<div class="table-wrap"><table class="partner-list-table"><thead><tr><th>Раскрыть</th><th>Партнёр</th><th>Тип</th><th>Рабочий раздел</th></tr></thead><tbody>${partners.map((p) => `<tr><td><label class="partner-expand-control"><input type="checkbox" data-partner-expand="${p.id}" aria-label="Раскрыть сведения: ${escapeHTML(p.name)}"><span>⌄</span></label></td><td><b>${escapeHTML(p.name)}</b><br><small>ИНН ${escapeHTML(p.inn || "-")}</small></td><td>${escapeHTML(AUDIENCE_LABELS[p.partner_kind] || p.partner_kind)}</td><td><button class="btn secondary" data-partner="${p.id}">Открыть мероприятия</button></td></tr><tr class="partner-detail-row" data-partner-detail-row="${p.id}" hidden><td colspan="4"><div data-partner-detail="${p.id}"></div></td></tr>`).join("")}</tbody></table></div>`
       : '<p class="muted">Партнёры по выбранным условиям не найдены.</p>';
     root.querySelectorAll("[data-confirmed-partner]").forEach((button) => button.onclick = () => {
       const item = confirmedDirectory.find((candidate) => candidate.id === button.dataset.confirmedPartner);
@@ -1629,7 +1629,7 @@ async function renderPartnerDirectory(root, embedded = false) {
       if (!item || !box) return;
       box.hidden = false;
       box.dataset.directoryId = item.id;
-      box.querySelector("#p-selected").innerHTML = `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ОГРН ${escapeHTML(item.ogrn)} · лицензия ${escapeHTML(item.license_number || "—")}`;
+      box.querySelector("#p-selected").innerHTML = `<b>${escapeHTML(item.name)}</b><br>ИНН ${escapeHTML(item.inn)} · ОГРН ${escapeHTML(item.ogrn)} · лицензия ${escapeHTML(item.license_number || "-")}`;
       box.querySelector("[type=submit]").disabled = false;
       const agreementKind = box.querySelector("#p-a-kind");
       agreementKind.value = item.partner_kind === "school" ? "roiv" : "education_organization";
@@ -1698,9 +1698,9 @@ const ORG_UNIT_LABELS = {
 };
 
 const EDUCATION_LEVEL_LABELS = {
-  vo_bachelor: "ВО — бакалавриат",
-  vo_master: "ВО — магистратура",
-  vo_specialist: "ВО — специалитет",
+  vo_bachelor: "ВО - бакалавриат",
+  vo_master: "ВО - магистратура",
+  vo_specialist: "ВО - специалитет",
   spo: "СПО",
 };
 
@@ -1725,11 +1725,11 @@ async function openPartnerStructure(partnerID, onSaved = async () => {}) {
   let editingUnitID = "";
   let editingGroupID = "";
 
-  const unitFields = (item = {}) => `<div class="grid cols-3"><div class="field"><label>Родительское подразделение</label><select name="parent_unit_id"><option value="">— Корневой уровень —</option>${units.map((unit) => `<option value="${unit.id}" ${unit.id === item.parent_unit_id ? "selected" : ""} ${unit.id === item.id ? "disabled" : ""}>${"— ".repeat(Math.max(0, unit.depth - 1))}${escapeHTML(unit.unit_name)}</option>`).join("")}</select></div><div class="field"><label>Тип *</label><select name="unit_level_type" required>${Object.entries(ORG_UNIT_LABELS).map(([code, label]) => `<option value="${code}" ${code === item.unit_level_type ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Наименование *</label><input name="unit_name" required minlength="2" maxlength="300" value="${escapeHTML(item.unit_name || "")}"></div><div class="field"><label>Руководитель</label><input name="head_fio" maxlength="200" value="${escapeHTML(item.head_fio || "")}"></div><div class="field"><label>Должность руководителя</label><input name="head_position" maxlength="200" value="${escapeHTML(item.head_position || "")}"></div><div class="field"><label>Контакты руководителя</label><input name="head_contacts" maxlength="500" value="${escapeHTML(item.head_contacts || "")}"></div><div class="field"><label>Заведующий кафедрой</label><input name="chair_fio" maxlength="200" value="${escapeHTML(item.chair_fio || "")}"></div><div class="field"><label>Контакты заведующего</label><input name="chair_contacts" maxlength="500" value="${escapeHTML(item.chair_contacts || "")}"></div><div class="field"><label>Куратор от ОО</label><input name="curator_fio" maxlength="200" value="${escapeHTML(item.curator_fio || "")}"></div><div class="field"><label>Контакты куратора</label><input name="curator_contacts" maxlength="500" value="${escapeHTML(item.curator_contacts || "")}"></div></div>`;
+  const unitFields = (item = {}) => `<div class="grid cols-3"><div class="field"><label>Родительское подразделение</label><select name="parent_unit_id"><option value="">- Корневой уровень -</option>${units.map((unit) => `<option value="${unit.id}" ${unit.id === item.parent_unit_id ? "selected" : ""} ${unit.id === item.id ? "disabled" : ""}>${"- ".repeat(Math.max(0, unit.depth - 1))}${escapeHTML(unit.unit_name)}</option>`).join("")}</select></div><div class="field"><label>Тип *</label><select name="unit_level_type" required>${Object.entries(ORG_UNIT_LABELS).map(([code, label]) => `<option value="${code}" ${code === item.unit_level_type ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Наименование *</label><input name="unit_name" required minlength="2" maxlength="300" value="${escapeHTML(item.unit_name || "")}"></div><div class="field"><label>Руководитель</label><input name="head_fio" maxlength="200" value="${escapeHTML(item.head_fio || "")}"></div><div class="field"><label>Должность руководителя</label><input name="head_position" maxlength="200" value="${escapeHTML(item.head_position || "")}"></div><div class="field"><label>Контакты руководителя</label><input name="head_contacts" maxlength="500" value="${escapeHTML(item.head_contacts || "")}"></div><div class="field"><label>Заведующий кафедрой</label><input name="chair_fio" maxlength="200" value="${escapeHTML(item.chair_fio || "")}"></div><div class="field"><label>Контакты заведующего</label><input name="chair_contacts" maxlength="500" value="${escapeHTML(item.chair_contacts || "")}"></div><div class="field"><label>Куратор от ОО</label><input name="curator_fio" maxlength="200" value="${escapeHTML(item.curator_fio || "")}"></div><div class="field"><label>Контакты куратора</label><input name="curator_contacts" maxlength="500" value="${escapeHTML(item.curator_contacts || "")}"></div></div>`;
 
   const groupFields = (item = {}) => {
     const levels = partner.partner_kind === "kolledj" ? [["spo", "СПО"]] : Object.entries(EDUCATION_LEVEL_LABELS).filter(([code]) => code !== "spo");
-    return `<div class="grid cols-3"><div class="field"><label>Подразделение *</label><select name="unit_id" required><option value="">— Выберите —</option>${units.map((unit) => `<option value="${unit.id}" ${unit.id === item.unit_id ? "selected" : ""}>${"— ".repeat(Math.max(0, unit.depth - 1))}${escapeHTML(unit.unit_name)}</option>`).join("")}</select></div><div class="field"><label>Шифр группы *</label><input name="group_name" required maxlength="100" value="${escapeHTML(item.group_name || "")}" placeholder="БПИ-231"></div><div class="field"><label>Уровень образования *</label><select name="education_level" required>${levels.map(([code, label]) => `<option value="${code}" ${code === item.education_level ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Курс *</label><input name="course_num" type="number" min="1" max="7" required value="${Number(item.course_num || 1)}"></div><div class="field"><label>Сквозной семестр *</label><input name="current_semester" type="number" min="1" max="13" required value="${Number(item.current_semester || 1)}"></div><div class="field"><label>Период *</label><select name="semester_period"><option value="autumn" ${item.semester_period !== "spring" ? "selected" : ""}>Осень</option><option value="spring" ${item.semester_period === "spring" ? "selected" : ""}>Весна</option></select></div><div class="field"><label>Код специальности по Приказу № 27 *</label><input name="specialty_code" required pattern="[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}" maxlength="8" value="${escapeHTML(item.specialty_code || "")}" list="partner-specialty-codes" placeholder="09.03.01"><datalist id="partner-specialty-codes">${specialtyCodes.map((code) => `<option value="${escapeHTML(code)}"></option>`).join("")}</datalist></div><div class="field"><label>Численность студентов *</label><input name="students_count" type="number" min="0" max="10000" required value="${Number(item.students_count || 0)}"></div></div>`;
+    return `<div class="grid cols-3"><div class="field"><label>Подразделение *</label><select name="unit_id" required><option value="">- Выберите -</option>${units.map((unit) => `<option value="${unit.id}" ${unit.id === item.unit_id ? "selected" : ""}>${"- ".repeat(Math.max(0, unit.depth - 1))}${escapeHTML(unit.unit_name)}</option>`).join("")}</select></div><div class="field"><label>Шифр группы *</label><input name="group_name" required maxlength="100" value="${escapeHTML(item.group_name || "")}" placeholder="БПИ-231"></div><div class="field"><label>Уровень образования *</label><select name="education_level" required>${levels.map(([code, label]) => `<option value="${code}" ${code === item.education_level ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Курс *</label><input name="course_num" type="number" min="1" max="7" required value="${Number(item.course_num || 1)}"></div><div class="field"><label>Сквозной семестр *</label><input name="current_semester" type="number" min="1" max="13" required value="${Number(item.current_semester || 1)}"></div><div class="field"><label>Период *</label><select name="semester_period"><option value="autumn" ${item.semester_period !== "spring" ? "selected" : ""}>Осень</option><option value="spring" ${item.semester_period === "spring" ? "selected" : ""}>Весна</option></select></div><div class="field"><label>Код специальности по Приказу № 27 *</label><input name="specialty_code" required pattern="[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}" maxlength="8" value="${escapeHTML(item.specialty_code || "")}" list="partner-specialty-codes" placeholder="09.03.01"><datalist id="partner-specialty-codes">${specialtyCodes.map((code) => `<option value="${escapeHTML(code)}"></option>`).join("")}</datalist></div><div class="field"><label>Численность студентов *</label><input name="students_count" type="number" min="0" max="10000" required value="${Number(item.students_count || 0)}"></div></div>`;
   };
 
   const collectUnit = (form) => Object.fromEntries(["parent_unit_id", "unit_level_type", "unit_name", "head_fio", "head_position", "head_contacts", "chair_fio", "chair_contacts", "curator_fio", "curator_contacts"].map((name) => [name, form.elements[name].value.trim()]));
@@ -1746,7 +1746,7 @@ async function openPartnerStructure(partnerID, onSaved = async () => {}) {
 
   const renderUnits = () => {
     const section = modal.querySelector("#structure-units");
-    section.innerHTML = `<div class="card"><div class="flex between"><div><h2>Иерархия подразделений</h2></div><span class="count-badge">${units.length}</span></div>${units.length ? `<div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Тип</th><th>Руководитель</th><th>Куратор ОО</th>${editable ? "<th></th>" : ""}</tr></thead><tbody>${units.map((unit) => `<tr><td style="padding-left:${10 + Math.max(0, unit.depth - 1) * 18}px"><b>${escapeHTML(unit.unit_name)}</b>${unit.parent_unit_name ? `<br><small>В составе: ${escapeHTML(unit.parent_unit_name)}</small>` : ""}</td><td>${escapeHTML(ORG_UNIT_LABELS[unit.unit_level_type] || unit.unit_level_type)}</td><td>${escapeHTML(unit.head_fio || unit.chair_fio || "—")}<br><small>${escapeHTML(unit.head_contacts || unit.chair_contacts || "")}</small></td><td>${escapeHTML(unit.curator_fio || "—")}<br><small>${escapeHTML(unit.curator_contacts || "")}</small></td>${editable ? `<td><button class="btn secondary" data-edit-unit="${unit.id}">Изменить</button><button class="btn secondary" data-delete-unit="${unit.id}">Удалить</button></td>` : ""}</tr>`).join("")}</tbody></table></div>` : '<p class="muted">Подразделения ещё не внесены.</p>'}</div>${editable ? `<form class="card" id="unit-form"><h2>${editingUnitID ? "Изменить подразделение" : "Добавить подразделение"}</h2>${unitFields(units.find((unit) => unit.id === editingUnitID) || {})}<p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Сохранить</button>${editingUnitID ? '<button class="btn secondary" type="button" data-unit-reset>Отмена</button>' : ""}</div></form>` : ""}`;
+    section.innerHTML = `<div class="card"><div class="flex between"><div><h2>Иерархия подразделений</h2></div><span class="count-badge">${units.length}</span></div>${units.length ? `<div class="table-wrap"><table><thead><tr><th>Подразделение</th><th>Тип</th><th>Руководитель</th><th>Куратор ОО</th>${editable ? "<th></th>" : ""}</tr></thead><tbody>${units.map((unit) => `<tr><td style="padding-left:${10 + Math.max(0, unit.depth - 1) * 18}px"><b>${escapeHTML(unit.unit_name)}</b>${unit.parent_unit_name ? `<br><small>В составе: ${escapeHTML(unit.parent_unit_name)}</small>` : ""}</td><td>${escapeHTML(ORG_UNIT_LABELS[unit.unit_level_type] || unit.unit_level_type)}</td><td>${escapeHTML(unit.head_fio || unit.chair_fio || "-")}<br><small>${escapeHTML(unit.head_contacts || unit.chair_contacts || "")}</small></td><td>${escapeHTML(unit.curator_fio || "-")}<br><small>${escapeHTML(unit.curator_contacts || "")}</small></td>${editable ? `<td><button class="btn secondary" data-edit-unit="${unit.id}">Изменить</button><button class="btn secondary" data-delete-unit="${unit.id}">Удалить</button></td>` : ""}</tr>`).join("")}</tbody></table></div>` : '<p class="muted">Подразделения ещё не внесены.</p>'}</div>${editable ? `<form class="card" id="unit-form"><h2>${editingUnitID ? "Изменить подразделение" : "Добавить подразделение"}</h2>${unitFields(units.find((unit) => unit.id === editingUnitID) || {})}<p class="error" role="alert"></p><div class="flex"><button class="btn" type="submit">Сохранить</button>${editingUnitID ? '<button class="btn secondary" type="button" data-unit-reset>Отмена</button>' : ""}</div></form>` : ""}`;
     section.querySelectorAll("[data-edit-unit]").forEach((button) => { button.onclick = () => { editingUnitID = button.dataset.editUnit; renderUnits(); }; });
     section.querySelectorAll("[data-delete-unit]").forEach((button) => { button.onclick = async () => {
       if (!confirm("Удалить подразделение? Подразделение с дочерними элементами или группами удалить нельзя.")) return;
@@ -1797,7 +1797,7 @@ async function openPartnerStructure(partnerID, onSaved = async () => {}) {
   try { await load(); } catch (error) { modal.querySelector("#structure-units").innerHTML = `<div class="card error">${escapeHTML(error.message)}</div>`; }
 }
 
-// DATA-02: история редакций соглашения — что изменилось между соседними редакциями.
+// DATA-02: история редакций соглашения - что изменилось между соседними редакциями.
 const AGREEMENT_HISTORY_FIELDS = { number: "Номер", valid_from: "Действует с", valid_until: "Действует по", status: "Статус", curator_id: "Куратор", signature_method: "Способ подписания", signed_by: "Подписант", signed_on: "Дата подписания", document_reference: "Реквизиты документа", roiv_name: "РОИВ", partner_ids: "Организации", activity_codes: "Виды мероприятий" };
 function agreementHistoryMarkup(revisions) {
   if (!Array.isArray(revisions) || !revisions.length) return '<p class="muted">Редакций пока нет.</p>';
@@ -1806,9 +1806,9 @@ function agreementHistoryMarkup(revisions) {
     const after = revisionSnapshot(revision);
     const changes = Object.entries(AGREEMENT_HISTORY_FIELDS)
       .filter(([key]) => index && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null))
-      .map(([key, label]) => `${escapeHTML(label)}: ${escapeHTML(String(before[key] ?? "—"))} → ${escapeHTML(String(after[key] ?? "—"))}`);
+      .map(([key, label]) => `${escapeHTML(label)}: ${escapeHTML(String(before[key] ?? "-"))} → ${escapeHTML(String(after[key] ?? "-"))}`);
     const when = escapeHTML(String(revision.changed_at || "").replace("T", " ").slice(0, 16));
-    return `<li>Редакция ${Number(revision.revision)} <span class="muted">${when}</span>${index ? (changes.length ? `<br>${changes.join("<br>")}` : "<br><small>реквизиты без изменений</small>") : " — первоначальная"}</li>`;
+    return `<li>Редакция ${Number(revision.revision)} <span class="muted">${when}</span>${index ? (changes.length ? `<br>${changes.join("<br>")}` : "<br><small>реквизиты без изменений</small>") : " - первоначальная"}</li>`;
   }).join("")}</ol>`;
 }
 function revisionSnapshot(revision) {
@@ -1893,7 +1893,7 @@ async function openMentors(partnerID) {
   const refresh = async () => {
     const list = await api(`/mentors?partner_id=${partnerID}`);
     modal.querySelector("#mentor-list").innerHTML = list.length
-      ? `<p>Отчёты по наставнику за ${state.year} год:</p><ul>${list.map((m) => `<li>${escapeHTML(m.full_name)} — <a href="/api/reports/export?partner_id=${partnerID}&mentor_id=${m.id}&report_year=${state.year}&period_type=plan">План Excel</a> / <a href="/api/reports/export?partner_id=${partnerID}&mentor_id=${m.id}&report_year=${state.year}&period_type=fact">Факт Excel</a></li>`).join("")}</ul>`
+      ? `<p>Отчёты по наставнику за ${state.year} год:</p><ul>${list.map((m) => `<li>${escapeHTML(m.full_name)} - <a href="/api/reports/export?partner_id=${partnerID}&mentor_id=${m.id}&report_year=${state.year}&period_type=plan">План Excel</a> / <a href="/api/reports/export?partner_id=${partnerID}&mentor_id=${m.id}&report_year=${state.year}&period_type=fact">Факт Excel</a></li>`).join("")}</ul>`
       : "<p>Наставников пока нет</p>";
   };
   modal.querySelector("#mentor-close").onclick = () => modal.remove();

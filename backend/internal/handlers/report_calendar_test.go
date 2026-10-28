@@ -21,7 +21,7 @@ func TestRegulatoryMilestonesDates(t *testing.T) {
 		"preliminary_sent":   "2026-11-10",
 		"preliminary_report": "2026-12-10",
 		"final_cutoff":       "2026-12-31",
-		"final_sent":         "2027-03-01", // итоговый перечень — до 1 марта следующего года
+		"final_sent":         "2027-03-01", // итоговый перечень - до 1 марта следующего года
 	}
 	if len(byCode) != len(want) {
 		t.Fatalf("контрольных дат %d, ожидалось %d", len(byCode), len(want))
@@ -38,7 +38,7 @@ func TestRegulatoryMilestonesDates(t *testing.T) {
 			t.Fatalf("%s: пустая подпись или основание: %+v", code, milestone)
 		}
 	}
-	// 22 сентября 2026: 31 июля прошло, до 1 ноября — 40 дней.
+	// 22 сентября 2026: 31 июля прошло, до 1 ноября - 40 дней.
 	if m := byCode["budget_notified"]; !m.Overdue || m.DaysLeft >= 0 {
 		t.Fatalf("прошедшая дата должна быть просрочена: %+v", m)
 	}
@@ -48,7 +48,7 @@ func TestRegulatoryMilestonesDates(t *testing.T) {
 }
 
 func TestRegulatoryMilestonesCountDaysByMoscowDate(t *testing.T) {
-	// 31 октября 23:30 по Москве — это 20:30 UTC. Срок 1 ноября наступает
+	// 31 октября 23:30 по Москве - это 20:30 UTC. Срок 1 ноября наступает
 	// завтра, а не сегодня, независимо от часового пояса вызывающего.
 	moscowEvening := time.Date(2026, 10, 31, 23, 30, 0, 0, businessLocation)
 	find := func(now time.Time) regulatoryMilestone {
@@ -66,7 +66,7 @@ func TestRegulatoryMilestonesCountDaysByMoscowDate(t *testing.T) {
 	if m := find(moscowEvening.UTC()); m.DaysLeft != 1 {
 		t.Fatalf("тот же момент в UTC должен дать тот же остаток: %+v", m)
 	}
-	// Наступил 1 ноября по Москве — срок сегодня, не просрочен.
+	// Наступил 1 ноября по Москве - срок сегодня, не просрочен.
 	if m := find(moscowEvening.Add(31 * time.Minute)); m.DaysLeft != 0 || m.Overdue {
 		t.Fatalf("1 ноября срок наступает сегодня и не просрочен: %+v", m)
 	}

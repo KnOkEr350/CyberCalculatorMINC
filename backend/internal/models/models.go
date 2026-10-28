@@ -36,12 +36,12 @@ func ValidRole(role Role) bool {
 	}
 }
 
-// EntityType — тот самый выбор в админке "кто он": организация или вуз.
+// EntityType - тот самый выбор в админке "кто он": организация или вуз.
 type EntityType string
 
 const (
 	EntityOrganization EntityType = "organization"    // ИТ-организация (обязанная сторона соглашения)
-	EntityEduInst      EntityType = "edu_institution" // вуз/СПО — партнёр
+	EntityEduInst      EntityType = "edu_institution" // вуз/СПО - партнёр
 )
 
 type Audience string
@@ -239,7 +239,7 @@ type LegalEntityGroupMember struct {
 	OGRN             string        `json:"ogrn"`
 	IsITOrganization bool          `json:"is_it_organization"`
 	TargetAmountRub  *money.Amount `json:"target_amount_rub,omitempty"`
-	// SharePercent — доля участия группы в организации, более 25% (п. 25⁵).
+	// SharePercent - доля участия группы в организации, более 25% (п. 25⁵).
 	SharePercent *float64 `json:"share_percent,omitempty"`
 }
 

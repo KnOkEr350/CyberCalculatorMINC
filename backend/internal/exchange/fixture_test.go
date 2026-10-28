@@ -126,7 +126,7 @@ func (f *fixture) open(data []byte) (Imported, error) {
 
 // resign переписывает манифест уже собранного пакета и подписывает его заново
 // настоящим ключом отправителя. Так проверяются отказы по политике: пакет
-// формально безупречен, и единственная причина отказа — то, что изменено.
+// формально безупречен, и единственная причина отказа - то, что изменено.
 func (f *fixture) resign(t *testing.T, data []byte, mutate func(*Manifest)) []byte {
 	t.Helper()
 	parsed, err := parseContainer(data)
