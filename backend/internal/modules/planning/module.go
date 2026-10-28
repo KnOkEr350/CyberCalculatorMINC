@@ -51,6 +51,7 @@ func (m *Module) registerActivityRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/entries", middleware.RequireAuth(m.db, m.entries.List))
 	mux.HandleFunc("GET /api/entries/summary", middleware.RequireAuth(m.db, m.entries.Summary))
 	mux.HandleFunc("POST /api/entries", middleware.RequireAuth(m.db, m.entries.Create))
+	mux.HandleFunc("POST /api/entries/copy-plan-to-fact", middleware.RequireAuth(m.db, m.entries.CopyPlanToFact))
 	mux.HandleFunc("GET /api/entries/{id}/top-items", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.topItems.List(w, r, u, r.PathValue("id"))
 	}))

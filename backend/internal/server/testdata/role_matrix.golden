@@ -84,6 +84,7 @@ POST /api/dashboard/target | super_admin=pass holding_admin=pass org_admin=pass 
 POST /api/directory | super_admin=pass holding_admin=403 org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/directory/{id}/decision | super_admin=pass holding_admin=403 org_admin=403 curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/entries | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
+POST /api/entries/copy-plan-to-fact | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/entries/import | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=403 financial_specialist=403 legal_specialist=403 auditor_viewer=403 edu_curator=403
 POST /api/entries/{id}/attachments | super_admin=pass holding_admin=pass org_admin=pass curator=pass hr_specialist=pass financial_specialist=pass legal_specialist=403 auditor_viewer=403 edu_curator=pass
 POST /api/entries/{id}/legal-disputes | super_admin=pass holding_admin=pass org_admin=pass curator=403 hr_specialist=403 financial_specialist=403 legal_specialist=pass auditor_viewer=403 edu_curator=403

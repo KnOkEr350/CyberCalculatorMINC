@@ -124,6 +124,8 @@ type createEntryRequest struct {
 	Payload         map[string]interface{} `json:"payload"`
 	CostMethod      string                 `json:"cost_method"`
 	ActualAmountRub *money.Amount          `json:"actual_amount_rub,omitempty"`
+	// copiedFrom — запись плана, из которой создаётся факт. Не читается из JSON.
+	copiedFrom string
 }
 
 func resolveEntryAmount(method string, actual *money.Amount, formula money.Amount) (string, money.Amount, error) {
@@ -155,95 +157,106 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, http.StatusBadRequest, "некорректный запрос")
 		return
 	}
+	id, amount, ok := h.createEntry(w, r, u, req)
+	if !ok {
+		return
+	}
+	middleware.WriteJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "amount_rub": amount})
+}
+
+// createEntry — общая часть создания записи: одиночный POST /api/entries и
+// массовое создание факта из плана проходят одни и те же проверки и расчёт.
+// При отказе ответ уже записан в w, а ok=false.
+func (h *EntryHandlers) createEntry(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, req createEntryRequest) (string, money.Amount, bool) {
 	if !canCreateEntryCategory(u, req.CategoryCode) {
 		middleware.WriteError(w, http.StatusForbidden, "роль не может создавать выбранный вид мероприятия")
-		return
+		return "", 0, false
 	}
 	if !canEditEntryCategory(u, req.CategoryCode) {
 		middleware.WriteError(w, http.StatusForbidden, "роль не может изменять выбранный вид мероприятия")
-		return
+		return "", 0, false
 	}
 	if req.PeriodType != string(models.PeriodPlan) && req.PeriodType != string(models.PeriodFact) {
 		middleware.WriteError(w, http.StatusBadRequest, "period_type должен быть plan или fact")
-		return
+		return "", 0, false
 	}
 	if req.ReportYear < 2000 || req.ReportYear > 2100 {
 		middleware.WriteError(w, http.StatusBadRequest, "report_year должен быть в диапазоне 2000–2100")
-		return
+		return "", 0, false
 	}
 
 	calc, err := calculators.Get(req.CategoryCode)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		return "", 0, false
 	}
 	partnerID, err := partnerIDFromPayload(req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		return "", 0, false
 	}
 	if req.PartnerID != nil && strings.TrimSpace(*req.PartnerID) != partnerID {
 		middleware.WriteError(w, http.StatusBadRequest, "partner_id не совпадает с выбранной образовательной организацией")
-		return
+		return "", 0, false
 	}
 	if err := h.validateEntryContext(r, req.CategoryCode, req.Audience, partnerID); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		return "", 0, false
 	}
 	if !requirePartnerTenant(w, r, h.DB, u, partnerID) {
-		return
+		return "", 0, false
 	}
 	if err := h.validateAgreementContext(r, req.AgreementID, partnerID, req.CategoryCode, req.ReportYear); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		return "", 0, false
 	}
 	companyID, ok := requireITCompanyForWrite(w, u)
 	if !ok {
-		return
+		return "", 0, false
 	}
 	staffMemberID, err := h.resolveTeachingStaff(r, req.CategoryCode, companyID, req.Payload, false)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		return "", 0, false
 	}
 	if err := h.validateMentor(r, req.CategoryCode, req.PeriodType, partnerID, "", req.Payload); err != nil {
 		middleware.WriteError(w, 400, err.Error())
-		return
+		return "", 0, false
 	}
 	if err := calculators.ValidatePayload(calc, req.Payload); err != nil {
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
-		return
+		return "", 0, false
 	}
 	// DATA-07: ставки берутся из версий, действующих на отчётный год записи.
 	tariffCard, err := tariffs.Load(r.Context(), h.DB, req.ReportYear)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "не удалось определить тариф: "+err.Error())
-		return
+		return "", 0, false
 	}
 	formulaAmount, err := calculators.CalculateAmountWith(tariffCard, req.CategoryCode, models.Audience(req.Audience), req.Payload)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
-		return
+		return "", 0, false
 	}
 	if err := calculators.ValidateAmount(formulaAmount.Rubles()); err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
-		return
+		return "", 0, false
 	}
 	costMethod, amount, err := resolveEntryAmount(req.CostMethod, req.ActualAmountRub, formulaAmount)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, "ошибка расчёта: "+err.Error())
-		return
+		return "", 0, false
 	}
 	req.CostMethod = costMethod
 	if req.PeriodType != string(models.PeriodFact) && req.CostMethod == "actual" {
 		middleware.WriteError(w, http.StatusBadRequest, "фактические затраты указываются только в отчёте «Факт»")
-		return
+		return "", 0, false
 	}
 	payloadJSON, _ := json.Marshal(req.Payload)
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка начала транзакции")
-		return
+		return "", 0, false
 	}
 	defer tx.Rollback()
 
@@ -254,14 +267,14 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		`INSERT INTO entries (category_code, partner_id, agreement_id, period_type, report_year, audience, payload, amount_rub,formula_amount_rub,actual_amount_rub,cost_method,it_company_id,staff_member_id,created_by,
 		 mentor_id,mentor_assignment_start,mentor_assignment_end,mentor_order_number,mentor_order_date,assigned_student_name,
 		 ministry_instruction_type,ministry_instruction_authority,ministry_instruction_reference,ministry_decision_number,ministry_decision_date,
-		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status,formula_tariff_ids)
+		 ministry_implementation_start,ministry_implementation_deadline,ministry_implementation_conditions,ministry_activity_description,ministry_card_backfill_status,formula_tariff_ids,copied_from_entry_id)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,$14,NULLIF($15,'')::uuid,NULLIF($16,'')::date,NULLIF($17,'')::date,NULLIF($18,''),NULLIF($19,'')::date,NULLIF(lower($20),''),
-		 NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,''),$31) RETURNING id`,
+		 NULLIF($21,''),NULLIF($22,''),NULLIF($23,''),NULLIF($24,''),NULLIF($25,'')::date,NULLIF($26,'')::date,NULLIF($27,'')::date,NULLIF($28,''),NULLIF($29,''),NULLIF($30,''),$31,NULLIF($32,'')::uuid) RETURNING id`,
 		req.CategoryCode, partnerID, req.AgreementID, req.PeriodType, req.ReportYear, req.Audience, payloadJSON, amount, formulaAmount, req.ActualAmountRub, req.CostMethod, companyID, staffMemberID, u.ID,
 		mentor.ID, mentor.Start, mentor.End, mentor.OrderNumber, mentor.OrderDate, mentor.Student,
 		ministry.InstructionType, ministry.Authority, ministry.InstructionReference, ministry.DecisionNumber, ministry.DecisionDate,
 		ministry.Start, ministry.Deadline, ministry.Conditions, ministry.Description, ministry.Status,
-		pq.Array(tariffCard.VersionIDs(req.CategoryCode)),
+		pq.Array(tariffCard.VersionIDs(req.CategoryCode)), req.copiedFrom,
 	).Scan(&id)
 	if err != nil {
 		// TCH-01: атомарный ключ педнагрузки. Повтор — это не сбой сервера, а
@@ -269,28 +282,28 @@ func (h *EntryHandlers) Create(w http.ResponseWriter, r *http.Request, u middlew
 		if isDuplicateTeachingLoad(err) {
 			middleware.WriteError(w, http.StatusConflict,
 				"такая нагрузка уже внесена: сотрудник, учебное заведение, дисциплина, семестр и период совпадают")
-			return
+			return "", 0, false
 		}
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
-		return
+		return "", 0, false
 	}
 
 	if err := logAudit(r.Context(), tx, "entry", id, "create", u.ID, "", nil, req); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка записи журнала аудита")
-		return
+		return "", 0, false
 	}
 	if req.CategoryCode == "minc_decision" {
 		if _, err := tx.ExecContext(r.Context(), `INSERT INTO ministry_cost_revisions(entry_id,revision_no,confirmed_amount_rub,calculation_basis,correction_reason,changed_by)
 			VALUES($1,1,$2,$3,'Начальная редакция подтверждённой стоимости',$4)`, id, amount, strings.TrimSpace(fmt.Sprint(req.Payload["calculation_basis"])), u.ID); err != nil {
 			middleware.WriteError(w, 500, "ошибка сохранения истории подтверждённой стоимости")
-			return
+			return "", 0, false
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "ошибка завершения транзакции")
-		return
+		return "", 0, false
 	}
-	middleware.WriteJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "amount_rub": amount})
+	return id, amount, true
 }
 
 func (h *EntryHandlers) List(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {

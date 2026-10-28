@@ -2759,6 +2759,25 @@
           }
         }
       }
+    },
+    "/api/entries/copy-plan-to-fact": {
+      "post": {
+        "tags": [
+          "planning"
+        ],
+        "summary": "Создать записи факта из записей плана соглашения и года",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CopyPlanToFactRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4124,6 +4143,20 @@
           "reason": true
         },
         "additionalProperties": false
+      },
+      "CopyPlanToFactRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/entries_copy_plan.go",
+          "name": "copyPlanRequest"
+        },
+        "type": "object",
+        "properties": {
+          "agreement_id": true,
+          "report_year": true,
+          "category_code": true,
+          "partner_id": true
+        },
+        "additionalProperties": false
       }
     },
     "requestBodies": {
@@ -4674,6 +4707,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/SetAgreementCuratorRequest"
+            }
+          }
+        }
+      },
+      "CopyPlanToFactRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CopyPlanToFactRequest"
             }
           }
         }

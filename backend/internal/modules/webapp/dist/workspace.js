@@ -617,7 +617,7 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
     ${screen?.id === "schools" && available.length > 1 ? `<div class="tab-strip" role="tablist" aria-label="Виды школьного трека" style="grid-column:1/-1">${available.map((c) => `<button type="button" role="tab" class="btn ${c.code === state.categoryCode ? "" : "secondary"}" aria-selected="${c.code === state.categoryCode}" data-school-tab="${c.code}">${escapeHTML(SCHOOL_KIND_LABELS[c.code] || c.name)}</button>`).join("")}</div>` : ""}
     <div class="field"><label>${screen?.id === "schools" ? "Направление школьного трека" : "Категория активности"}</label><select id="category" ${available.length <= 1 ? "disabled" : ""}>${available.map((c) => `<option value="${c.code}" ${c.code === state.categoryCode ? "selected" : ""}>${escapeHTML(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Режим</label>${canCreate ? `<button class="btn" id="add-entry" ${writable ? "" : "disabled"}>+ Добавить запись</button>` : `<input value="${canPrepare ? "Редактирование по роли" : "Просмотр и согласование"}" readonly>`}</div></div>
-    <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Потенциальные преподаватели</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
+    <div class="flex">${screen?.id === "teachers" ? '<button class="btn secondary" id="staff-members">Потенциальные преподаватели</button><button class="btn secondary" id="teaching-payouts">График компенсаций</button>' : ""}${canManageWorkflow ? `<button class="btn secondary" id="import-entries" ${writable ? "" : "disabled"}>Импорт из Excel</button>` : ""}${canManageWorkflow && state.period === "fact" ? `<button class="btn secondary" id="copy-plan-to-fact" ${writable && partner ? "" : "disabled"} title="Создаёт записи факта по записям плана выбранного учебного заведения; значения затем можно изменить">Создать факт из плана</button>` : ""}<a class="btn secondary" id="export-link">Excel: категория</a><a class="btn secondary" id="export-all-link">Excel: все активности учебного заведения</a><a class="btn secondary" id="export-word">Word: таблица</a></div>
   </div><div id="obligation-box"></div>
   <div class="card"><h2>Фильтры раздела</h2>${entryFiltersMarkup(state.categoryCode)}<div id="entries-summary"></div><div id="entries-table">${partner ? "Загрузка…" : "Выберите учебное заведение выше"}</div></div>`;
   const partnerSelect = root.querySelector("#workspace-partner");
@@ -703,6 +703,21 @@ async function renderPartnerEntries(root, screen = CyberCalcScreens.activity(sta
   root.querySelector("#entry-filter-reset").onclick = () => { state.entryFilters = {}; state.entryPageOffset = 0; renderEntries(root); };
   const addEntry = root.querySelector("#add-entry");
   if (addEntry) addEntry.onclick = () => openEntryModal(null);
+  const copyPlan = root.querySelector("#copy-plan-to-fact");
+  if (copyPlan) copyPlan.onclick = async () => {
+    if (!window.confirm(`Создать записи факта за ${state.year} год из записей плана по всем видам мероприятий выбранного учебного заведения?\n\nЗначения скопируются, суммы пересчитаются по методике, документы не переносятся. Уже скопированные записи пропускаются.`)) return;
+    copyPlan.disabled = true;
+    try {
+      const result = await api("/entries/copy-plan-to-fact", { method: "POST", body: JSON.stringify({ agreement_id: state.agreementID, report_year: state.year, partner_id: state.partnerID }) });
+      const failed = result.failed_count ? `, не удалось: ${result.failed_count}` : "";
+      showToast(`Факт из плана: создано ${result.created_count}, пропущено ${result.skipped_count}${failed}`, result.failed_count ? "error" : "success");
+      if (result.failed_count) showToast(result.failed.slice(0, 3).map((item) => item.reason).join("; "));
+      renderEntries(root);
+    } catch (error) {
+      showToast(error.message);
+      copyPlan.disabled = false;
+    }
+  };
   const importEntries = root.querySelector("#import-entries");
   if (importEntries) importEntries.onclick = () => openImportDialog(false);
   const staffMembers = root.querySelector("#staff-members");
