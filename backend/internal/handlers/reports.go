@@ -15,6 +15,7 @@ import (
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/platform/activityprojection"
+	"cybercalc/internal/tariffs"
 	"cybercalc/internal/xlsx"
 )
 
@@ -215,7 +216,11 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	if preliminary {
 		totalLabel, totalStatus = "ИТОГО (включая предварительные данные)", "Предварительная выгрузка"
 	}
-	consolidated = append(consolidated, []interface{}{totalLabel, "", "", "", "", "", "", "", "", "", total, "", totalStatus})
+	var totalCell interface{} = total
+	if len(data) > 0 {
+		totalCell = xlsx.Formula{Expr: xlsx.SumFormula(10, 2, len(data)+1), Value: total}
+	}
+	consolidated = append(consolidated, []interface{}{totalLabel, "", "", "", "", "", "", "", "", "", totalCell, "", totalStatus})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	groupIDs := map[string]bool{}
 	for _, row := range data {
@@ -299,6 +304,16 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 				}
 			}
 			cols = append(cols, "Сумма, руб.")
+			hoursCol, rateCol := -1, -1
+			if categoryFilter == "teachers" {
+				for i, f := range fields {
+					if f.Key == "academic_hours" {
+						hoursCol = 3 + i
+					}
+				}
+				rateCol = len(cols) - 1
+				cols = append(cols[:rateCol], "Ставка, руб./ак.ч.", "Сумма, руб.")
+			}
 			details := [][]interface{}{}
 			for _, d := range data {
 				var payload map[string]interface{}
@@ -314,7 +329,22 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 					}
 					row = append(row, v)
 				}
-				row = append(row, d.AmountRub)
+				if rateCol >= 0 {
+					rowNum := len(details) + 2
+					var cell interface{} = d.AmountRub
+					hours, _ := payload["academic_hours"].(float64)
+					code := map[string]string{"vuz": tariffs.TeacherHourVuz, "kolledj": tariffs.TeacherHourKolledj}[d.Audience]
+					perHour, rateErr := tariffs.Default().Float(code)
+					if hoursCol >= 0 && hours > 0 && d.CostMethod == "average" && code != "" && rateErr == nil {
+						row = append(row, perHour)
+						cell = xlsx.Formula{Expr: fmt.Sprintf("ROUND(%s*%s,2)", xlsx.Ref(hoursCol, rowNum), xlsx.Ref(rateCol, rowNum)), Value: d.AmountRub}
+					} else {
+						row = append(row, "")
+					}
+					row = append(row, cell)
+				} else {
+					row = append(row, d.AmountRub)
+				}
 				details = append(details, row)
 			}
 			wb.AddSheet("Детализация", cols, details)

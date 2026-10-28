@@ -21,6 +21,23 @@ type Sheet struct {
 	Rows    [][]interface{} // string | float64 | int
 }
 
+// Formula - ячейка с живой формулой Excel. Expr без ведущего "=", Value -
+// кэшированный результат, который видят программы без пересчёта.
+type Formula struct {
+	Expr  string
+	Value money.Amount
+}
+
+// SumFormula строит SUM по столбцу col (с нуля) для строк from..to (номера строк Excel).
+func SumFormula(col, from, to int) string {
+	return fmt.Sprintf("SUM(%s%d:%s%d)", colLetter(col), from, colLetter(col), to)
+}
+
+// Ref - адрес ячейки по индексам столбца (с нуля) и номеру строки Excel.
+func Ref(col, row int) string {
+	return fmt.Sprintf("%s%d", colLetter(col), row)
+}
+
 type Workbook struct {
 	Sheets []Sheet
 }
@@ -112,6 +129,8 @@ func (s Sheet) sheetXML() string {
 		for colIdx, v := range values {
 			ref := fmt.Sprintf("%s%d", colLetter(colIdx), rowIdx+1)
 			switch val := v.(type) {
+			case Formula:
+				fmt.Fprintf(&b, `<c r="%s"><f>%s</f><v>%s</v></c>`, ref, escapeXML(val.Expr), val.Value.String())
 			case money.Amount:
 				fmt.Fprintf(&b, `<c r="%s"><v>%s</v></c>`, ref, val.String())
 			case float64:
