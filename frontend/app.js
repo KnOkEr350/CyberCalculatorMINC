@@ -1236,6 +1236,7 @@ async function openStaffMembersDialog(onChange) {
   const canConfirm = ["super_admin", "holding_admin", "org_admin"].includes(role);
   const drawer = CyberCalcUI.openDrawer({
     id: "staff-members-drawer",
+    draftKey: canManage ? `cybercalc:drawer-draft:v1:${state.me?.id || ""}:staff-members` : "",
     title: "ИТ-специалисты — потенциальные преподаватели",
     mode: canManage ? "edit" : "view",
     wide: true,
@@ -1314,6 +1315,7 @@ async function openTeachingPayoutsDialog() {
   const teachingEntries = (state.entries || []).filter((item) => item.category_code === "teachers");
   const drawer = CyberCalcUI.openDrawer({
     id: "teaching-payouts-drawer",
+    draftKey: canManage ? `cybercalc:drawer-draft:v1:${state.me?.id || ""}:teaching-payouts:${state.year}` : "",
     title: "График компенсаций",
     mode: canManage ? "edit" : "view",
     wide: true,
@@ -1417,7 +1419,7 @@ function clearEntryDrafts() {
   if (!storage) return;
   try {
     Object.keys(storage)
-      .filter((key) => key.startsWith("cybercalc:entry-draft:"))
+      .filter((key) => /^cybercalc:(entry|drawer)-draft:/.test(key))
       .forEach((key) => storage.removeItem(key));
   } catch {
     /* ничего не делаем */

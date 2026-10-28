@@ -272,6 +272,62 @@
     focusable[next].focus();
   }
 
+  // Черновик шторки: введённое сохраняется в браузере при каждом изменении и
+  // возвращается при повторном открытии. Закрытие кликом мимо, Esc и крестиком
+  // черновик сохраняет; программное close() (после сохранения или «Отмена») —
+  // удаляет. Пароли, файлы и скрытые поля не сохраняются.
+  const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function bindDrawerDraft(root, key) {
+    const storage = (() => { try { return globalThis.localStorage || null; } catch { return null; } })();
+    if (!storage || !key) return { clear() {} };
+    const controls = () => Array.from(root.querySelectorAll("input,select,textarea"))
+      .filter((control) => (control.name || control.id) && !["password", "file", "hidden", "button", "submit"].includes(control.type));
+    const idOf = (control) => control.name || control.id;
+    const snapshot = () => Object.fromEntries(controls().map((control) => [idOf(control), control.type === "checkbox" ? control.checked : control.value]));
+    const apply = (values) => controls().forEach((control) => {
+      if (!(idOf(control) in values)) return;
+      const value = values[idOf(control)];
+      if (control.type === "checkbox") control.checked = Boolean(value);
+      else if (control.tagName === "SELECT" && !Array.from(control.options).some((option) => option.value === value)) return;
+      else control.value = value;
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const clear = () => { try { storage.removeItem(key); } catch { /* ничего не делаем */ } };
+    const pristine = snapshot();
+    const pristineJSON = JSON.stringify(pristine);
+    let draft = null;
+    try { draft = JSON.parse(storage.getItem(key) || "null"); } catch { draft = null; }
+    if (draft && (typeof draft.values !== "object" || Date.now() - Number(draft.saved_at || 0) > DRAFT_TTL_MS)) { clear(); draft = null; }
+    if (draft) {
+      apply(draft.values);
+      const notice = root.ownerDocument.createElement("p");
+      notice.className = "notice";
+      notice.dataset.draftNotice = "";
+      notice.append("Восстановлены данные, которые вы вводили ранее и не сохранили. ");
+      const reset = root.ownerDocument.createElement("button");
+      reset.type = "button";
+      reset.className = "btn secondary";
+      reset.textContent = "Начать заново";
+      reset.addEventListener("click", () => { clear(); apply(pristine); notice.remove(); });
+      notice.append(reset);
+      const form = root.querySelector("form");
+      (form || root.querySelector(".ui-drawer-body") || root).prepend(notice);
+    }
+    const persist = () => {
+      // Правка существующей записи (заполненное скрытое поле id) не черновик.
+      if (root.querySelector('input[name="id"]')?.value) { clear(); return; }
+      const values = snapshot();
+      if (JSON.stringify(values) === pristineJSON) { clear(); return; }
+      try { storage.setItem(key, JSON.stringify({ values, saved_at: Date.now() })); } catch { /* хранилище недоступно */ }
+    };
+    root.addEventListener("input", persist);
+    root.addEventListener("change", persist);
+    // form.reset() после успешного сохранения не порождает событий ввода.
+    root.addEventListener("reset", () => setTimeout(persist, 0));
+    return { clear };
+  }
+
   function openDrawer(options = {}) {
     const doc = options.document || global.document;
     if (!doc) throw new Error("document is required");
@@ -280,21 +336,25 @@
     const backdrop = template.content.firstElementChild;
     const drawer = backdrop.querySelector(".ui-drawer");
     const previous = doc.activeElement;
-    const close = () => {
+    let draft = { clear() {} };
+    const finish = (keepDraft) => {
       if (options.canClose && options.canClose() === false) return;
+      if (!keepDraft) draft.clear();
       backdrop.remove();
       if (previous?.focus) previous.focus();
       options.onClose?.();
     };
-    backdrop.querySelector("[data-drawer-close]").addEventListener("click", close);
-    backdrop.addEventListener("click", (event) => { if (event.target === backdrop) close(); });
+    const dismiss = () => finish(true);
+    backdrop.querySelector("[data-drawer-close]").addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (event) => { if (event.target === backdrop) dismiss(); });
     backdrop.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") dismiss();
       else trapFocus(event, drawer);
     });
     doc.body.appendChild(backdrop);
+    if (options.draftKey) draft = bindDrawerDraft(backdrop, options.draftKey);
     drawer.focus();
-    return { element: backdrop, close };
+    return { element: backdrop, close: () => finish(false) };
   }
 
   function uploadField(options = {}) {
