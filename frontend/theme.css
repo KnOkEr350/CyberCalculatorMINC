@@ -343,13 +343,19 @@ table { background: #fff; font-size: 11px; }
 .confirmed-partner { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 7px; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fbfd; color: var(--text); text-align: left; }
 .confirmed-partner:hover, .confirmed-partner:focus-visible { border-color: var(--blue); background: #eef6fc; }
 .confirmed-partner span { color: var(--muted); font-size: 10px; }
-.partner-list-table { min-width: 760px; }
-.partner-expand-control { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--border); border-radius: 50%; cursor: pointer; }
-.partner-expand-control input { position: absolute; opacity: 0; pointer-events: none; }
+.partner-list-table { min-width: 760px; width: 100%; table-layout: fixed; }
+.partner-list-table th:nth-child(1) { width: 76px; }
+.partner-list-table th:nth-child(3) { width: 150px; }
+.partner-list-table th:nth-child(4) { width: 230px; }
+.partner-list-table td { overflow-wrap: anywhere; }
+.partner-expand-control { position: relative; display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--border); border-radius: 50%; cursor: pointer; }
+.partner-expand-control input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+.partner-expand-control:focus-within { outline: 2px solid #216bc4; outline-offset: 2px; }
 .partner-expand-control span { transition: transform .16s ease; }
 .partner-expand-control.expanded span { transform: rotate(180deg); }
-.partner-detail-row td { padding: 0 !important; background: #f7fafc; }
-.partner-lazy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--border); }
+.partner-detail-row td { padding: 0 !important; background: #f7fafc; overflow: hidden; }
+.partner-detail-row [data-partner-detail] { min-width: 0; max-width: 100%; }
+.partner-lazy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--border); }
 .partner-lazy-grid section { display: flex; min-height: 128px; flex-direction: column; align-items: flex-start; gap: 7px; padding: 15px; background: #f7fafc; }
 .partner-lazy-grid section > b { color: var(--navy); font-size: 22px; }
 .partner-lazy-grid section p { margin: 0 0 auto; color: var(--muted); }
