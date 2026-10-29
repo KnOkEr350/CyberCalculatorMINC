@@ -13,7 +13,20 @@ import (
 
 // ReadFirst reads values, never executes formulas or fetches external links.
 // Bounds apply to compressed input (HTTP) and uncompressed archive members.
+// Imports reject formula cells so that a user cannot submit a value that
+// differs from what the cell would compute.
 func ReadFirst(data []byte) ([][]string, error) {
+	return readFirst(data, false)
+}
+
+// ReadFirstCachedValues reads a workbook produced by this package, such as a
+// report export, where totals are live formulas: it takes the value stored
+// next to each formula and still never evaluates it.
+func ReadFirstCachedValues(data []byte) ([][]string, error) {
+	return readFirst(data, true)
+}
+
+func readFirst(data []byte, cachedFormulas bool) ([][]string, error) {
 	z, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("нужен файл .xlsx (не .xls и не CSV)")
@@ -153,7 +166,7 @@ func ReadFirst(data []byte) ([][]string, error) {
 				return nil, fmt.Errorf("некорректные или лишние столбцы")
 			}
 			used[col] = true
-			if c.Formula != nil {
+			if c.Formula != nil && !cachedFormulas {
 				return nil, fmt.Errorf("строка %d: замените формулы значениями перед импортом", n)
 			}
 			s := c.Value

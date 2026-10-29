@@ -1,6 +1,6 @@
 module cybercalc
 
-go 1.27.1
+go 1.27.3
 
 // Runtime-зависимости ограничены драйвером PostgreSQL и потоковым zstd-кодеком
 // для CAS (STORE-03). ORM, роутеры и web-фреймворки не используются.

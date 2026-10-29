@@ -455,7 +455,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	create(companyClient, p1, agreement1, "internship", "fact", internship, 400)
 	expectPreliminaryExport := func(client *http.Client, marker string) {
 		t.Helper()
-		rows, err := xlsx.ReadFirst(call(client, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 200))
+		rows, err := xlsx.ReadFirstCachedValues(call(client, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 200))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -598,7 +598,7 @@ func TestWorkspaceIntegration(t *testing.T) {
 	call(partnerClient, "POST", transitionPath, map[string]interface{}{"status": "verified", "comment": "Перечень рассмотрен и согласован"}, 200)
 	call(admin, "POST", transitionPath, map[string]interface{}{"status": "approved", "comment": "Утверждено администратором"}, 200)
 	report := call(partnerClient, "GET", "/reports/export?report_year=2026&period_type=fact", nil, 200)
-	reportRows, e := xlsx.ReadFirst(report)
+	reportRows, e := xlsx.ReadFirstCachedValues(report)
 	if e != nil {
 		t.Fatal(e)
 	}

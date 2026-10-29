@@ -138,7 +138,7 @@ func Evaluate(category, period string, payload map[string]interface{}, documentT
 		if fmt.Sprint(payload["employment_form"]) == "Договор пожертвования" {
 			require("donation_usage_report", "Отчёт об использовании пожертвования", has("donation_usage_report_reference"), false)
 		}
-		require("appointment_order", "Приказ о допуске к преподаванию", hasDoc("appointment_order", "appointment_order_reference"), false)
+		require("appointment_order", "Приказ о допуске к работе", hasDoc("appointment_order", "appointment_order_reference"), false)
 		require("individual_plan", "Индивидуальный план и расписание", hasDoc("individual_plan", "individual_plan_reference") && has("class_schedule"), false)
 	case "ood_rpd":
 		require("program_project", "Проект ООП/РПД", hasDoc("program_project", "project_document_reference"), blockDocuments)

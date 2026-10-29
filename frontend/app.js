@@ -16,6 +16,14 @@ const AGREEMENT_KIND_LABELS = {
   education_organization: "С образовательной организацией",
   roiv: "С РОИВ",
 };
+const SIGNATURE_METHOD_LABELS = {
+  unsigned: "Не подписано",
+  paper: "Бумажный документ",
+  qualified_electronic: "УКЭП",
+  goskey: "Госключ",
+  edo: "ЭДО",
+  gosedo: "ГосЭДО",
+};
 const CHART_COLORS = ["#216bc4", "#9ac02f", "#0466e5", "#00214e", "#7fa6d8", "#e0a92a", "#d74d57", "#b7c4d8"];
 
 const VALUE_LABELS = {
@@ -554,10 +562,155 @@ async function renderSettingsOverview(box) {
   });
 }
 
+function mentorOptionLabel(m) {
+  return `${m.full_name}${m.position ? ` · ${m.position}` : ""}${m.archived ? " · в архиве" : ""}`;
+}
+
+function mentorOptionsFor(keepID) {
+  return (state.mentors || []).filter((m) => m.id === keepID || !m.archived);
+}
+
+async function renderMentorDirectory(box, { partnerID = "", onChange } = {}) {
+  const canDelete = state.me?.role === "super_admin";
+  const canEdit = state.me?.entity_type !== "edu_institution" || state.me?.role !== "user";
+  box.innerHTML = `
+    ${canEdit ? `<form class="card" data-mentor-form><input type="hidden" name="id"><h2 data-mentor-form-title>Новый наставник</h2><div class="grid cols-3">
+      <div class="field" ${partnerID ? "hidden" : ""}><label>Учебное заведение *</label><select name="partner_id" ${partnerID ? "" : "required"}></select></div>
+      <div class="field"><label>Фамилия *</label><input name="last_name" maxlength="100" required></div>
+      <div class="field"><label>Имя *</label><input name="first_name" maxlength="100" required></div>
+      <div class="field"><label>Отчество</label><input name="middle_name" maxlength="100"></div>
+      <div class="field"><label>Должность *</label><input name="position" maxlength="200" required placeholder="Ведущий разработчик"></div>
+    </div><div class="flex"><button class="btn" type="submit">Сохранить</button><button class="btn secondary" type="button" data-mentor-reset>Новый наставник</button></div><p class="error" data-mentor-error></p></form>` : ""}
+    <div class="card"><div class="flex between"><h2>Наставники</h2><span class="count-badge" data-mentor-count></span></div>
+    <div class="grid cols-3"><div class="field"><label>Поиск</label><input type="search" data-mentor-filter placeholder="ФИО или должность"></div>${partnerID ? "" : '<div class="field"><label>Учебное заведение</label><select data-mentor-partner-filter><option value="">Все</option></select></div>'}</div>
+    <div data-mentor-list>Загрузка…</div></div>`;
+  const form = box.querySelector("[data-mentor-form]");
+  let items = [];
+  let partners = [];
+  const reset = () => {
+    if (!form) return;
+    form.reset();
+    form.elements.id.value = "";
+    if (partnerID) form.elements.partner_id.value = partnerID;
+    form.querySelector("[data-mentor-form-title]").textContent = "Новый наставник";
+  };
+  const paint = () => {
+    const term = box.querySelector("[data-mentor-filter]").value.trim().toLocaleLowerCase("ru");
+    const scope = box.querySelector("[data-mentor-partner-filter]")?.value || "";
+    const shown = items.filter((item) => (!scope || item.partner_id === scope) && (!term || `${item.full_name} ${item.position}`.toLocaleLowerCase("ru").includes(term)));
+    box.querySelector("[data-mentor-count]").textContent = `${shown.length} из ${items.length}`;
+    box.querySelector("[data-mentor-list]").innerHTML = shown.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Наставник</th><th>Должность</th>${partnerID ? "" : "<th>Учебное заведение</th>"}<th></th></tr></thead><tbody>${shown.map((item) => `<tr><td><b>${escapeHTML(item.full_name)}</b></td><td>${escapeHTML(item.position || "-")}</td>${partnerID ? "" : `<td><small>${escapeHTML(item.partner_name || "")}</small></td>`}<td><div class="flex">${canEdit ? `<button class="btn secondary" type="button" data-mentor-edit="${item.id}">Изменить</button>` : ""}${canDelete ? `<button class="btn secondary danger" type="button" data-mentor-delete="${item.id}">Удалить</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="muted">${items.length ? "По выбранным условиям никого нет." : "Наставники ещё не добавлены."}</p>`;
+    box.querySelectorAll("[data-mentor-edit]").forEach((button) => button.onclick = () => {
+      const item = items.find((value) => value.id === button.dataset.mentorEdit);
+      if (!item || !form) return;
+      reset();
+      ["last_name", "first_name", "middle_name", "position"].forEach((key) => { form.elements[key].value = item[key] || ""; });
+      form.elements.partner_id.value = item.partner_id;
+      form.elements.partner_id.disabled = true;
+      form.elements.id.value = item.id;
+      form.querySelector("[data-mentor-form-title]").textContent = `Изменить: ${item.full_name}`;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    box.querySelectorAll("[data-mentor-delete]").forEach((button) => button.onclick = async () => {
+      const item = items.find((value) => value.id === button.dataset.mentorDelete);
+      if (!item || !confirm(`Удалить наставника «${item.full_name}»? Если он уже указан в стажировках или практике, он будет перенесён в архив, а записи сохранятся.`)) return;
+      button.disabled = true;
+      try {
+        const result = await api(`/mentors/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        showToast(result.result === "archived" ? "Наставник перенесён в архив: он указан в мероприятиях" : "Наставник удалён", "success");
+        await reload();
+        await onChange?.();
+      } catch (error) {
+        showToast(error.message);
+        button.disabled = false;
+      }
+    });
+  };
+  const reload = async () => {
+    items = await api(partnerID ? `/mentors?partner_id=${encodeURIComponent(partnerID)}` : "/mentors");
+    paint();
+  };
+  box.querySelector("[data-mentor-filter]").oninput = paint;
+  try {
+    const [, partnerList] = await Promise.all([reload(), partnerID ? Promise.resolve([]) : api("/partners")]);
+    partners = (Array.isArray(partnerList) ? partnerList : []).filter((partner) => ["vuz", "kolledj"].includes(partner.partner_kind));
+    const options = partners.map((partner) => `<option value="${escapeHTML(partner.id)}">${escapeHTML(partner.name)}</option>`).join("");
+    if (form) form.elements.partner_id.innerHTML = partnerID ? `<option value="${escapeHTML(partnerID)}"></option>` : `<option value="">- Выберите -</option>${options}`;
+    const filter = box.querySelector("[data-mentor-partner-filter]");
+    if (filter) {
+      filter.innerHTML = `<option value="">Все</option>${options}`;
+      filter.onchange = paint;
+    }
+    if (form && partnerID) form.elements.partner_id.value = partnerID;
+  } catch (error) {
+    box.querySelector("[data-mentor-list]").innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+  }
+  if (!form) return;
+  box.querySelector("[data-mentor-reset]").onclick = () => {
+    reset();
+    form.elements.partner_id.disabled = false;
+  };
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const errorBox = form.querySelector("[data-mentor-error]");
+    const id = form.elements.id.value;
+    const body = {
+      partner_id: form.elements.partner_id.value,
+      last_name: form.elements.last_name.value,
+      first_name: form.elements.first_name.value,
+      middle_name: form.elements.middle_name.value,
+      position: form.elements.position.value,
+    };
+    submit.disabled = true;
+    errorBox.textContent = "";
+    try {
+      const saved = await api(id ? `/mentors/${encodeURIComponent(id)}` : "/mentors", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+      showToast(id ? "Наставник сохранён" : "Наставник добавлен", "success");
+      reset();
+      form.elements.partner_id.disabled = false;
+      await reload();
+      await onChange?.(saved);
+    } catch (error) { errorBox.textContent = error.message; }
+    finally { submit.disabled = false; }
+  };
+}
+
+function openMentorDirectoryDrawer(partnerID, onChange) {
+  const drawer = CyberCalcUI.openDrawer({
+    id: "mentor-directory-drawer",
+    title: `Наставники: ${partnerName(partnerID)}`,
+    mode: "edit",
+    wide: true,
+    content: '<div id="mentor-directory"></div>',
+  });
+  return renderMentorDirectory(drawer.element.querySelector("#mentor-directory"), { partnerID, onChange });
+}
+
+async function renderSettingsMentors(box) {
+  if (!state.me?.it_company_id) {
+    box.innerHTML = '<div class="card notice">Назначьте профилю ИТ-компанию («Пользователи и доступ»), чтобы вести список наставников.</div>';
+    return;
+  }
+  box.innerHTML = '<p class="notice">Наставники закрепляются за вузом или колледжем и выбираются в стажировках и практике. Учётная запись в системе для них не нужна.</p><div id="settings-mentor-directory"></div>';
+  await renderMentorDirectory(box.querySelector("#settings-mentor-directory"));
+}
+
+async function renderSettingsTeachers(box) {
+  if (!state.me?.it_company_id) {
+    box.innerHTML = '<div class="card notice">Назначьте профилю ИТ-компанию («Пользователи и доступ»), чтобы вести список преподавателей.</div>';
+    return;
+  }
+  box.innerHTML = '<div id="settings-staff-directory"></div>';
+  await renderStaffDirectory(box.querySelector("#settings-staff-directory"), { teachersView: true });
+}
+
 async function renderSettingsScreen(root) {
   const screen = CyberCalcScreens.get("settings");
   const isAdmin = state.me.role === "super_admin";
-  const tabs = [{ id: "context", label: "Контекст и безопасность" }, { id: "tasks", label: "Задачи и эскалации" }, ...(canManageITCompanies() ? [{ id: "it-companies", label: "Реестр ИТ-компаний" }] : []), ...(isAdmin ? [{ id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
+  const tabs = [{ id: "context", label: "Контекст и безопасность" }, { id: "tasks", label: "Задачи и эскалации" }, ...(canManageITCompanies() ? [{ id: "it-companies", label: "Реестр ИТ-компаний" }] : []), ...(isAdmin ? [{ id: "teachers", label: "Преподаватели" }, { id: "mentors", label: "Наставники" }, { id: "users", label: "Пользователи и доступ" }, { id: "okz", label: "Классификатор ОКЗ" }, { id: "settings", label: "Хранение" }, { id: "logs", label: "Audit Trail" }] : [])];
   if (!tabs.some((tab) => tab.id === state.settingsTab)) state.settingsTab = "context";
   root.innerHTML = `<section class="page-heading screen-heading"><div><span class="eyebrow">Экран ${screen.number}</span><h1>${escapeHTML(screen.title)}</h1></div></section><div class="admin-layout settings-layout"><nav class="admin-nav" aria-label="Разделы настроек">${tabs.map((tab) => `<button data-settings-tab="${tab.id}" class="${tab.id === state.settingsTab ? "active" : ""}"><b>${escapeHTML(tab.label)}</b></button>`).join("")}</nav><div id="settings-content"></div></div>`;
   const content = root.querySelector("#settings-content");
@@ -566,6 +719,8 @@ async function renderSettingsScreen(root) {
     root.querySelectorAll("[data-settings-tab]").forEach((button) => button.classList.toggle("active", button.dataset.settingsTab === tab));
     if (tab === "context") return renderSettingsOverview(content);
     if (tab === "tasks") return renderSettingsTasks(content);
+    if (tab === "teachers") return renderSettingsTeachers(content);
+    if (tab === "mentors") return renderSettingsMentors(content);
     await renderAdminTab(content, tab);
   };
   root.querySelectorAll("[data-settings-tab]").forEach((button) => { button.onclick = () => show(button.dataset.settingsTab).catch((error) => showToast(error.message)); });
@@ -949,9 +1104,223 @@ function currentCategory() {
   return state.categories.find((c) => c.code === state.categoryCode);
 }
 
+let specialtyCatalogPromise = null;
+function loadSpecialtyCatalog() {
+  specialtyCatalogPromise ||= api("/specialties")
+    .then((items) => (Array.isArray(items) ? items : [])
+      .map((item) => ({ code: item.code, title: item.title && item.title !== item.code ? item.title : "", system: item.education_system, level: item.qualification_level || "" }))
+      .sort((a, b) => a.code.localeCompare(b.code) || a.level.localeCompare(b.level, "ru")))
+    .catch((error) => {
+      specialtyCatalogPromise = null;
+      throw error;
+    });
+  return specialtyCatalogPromise;
+}
+
+function specialtyLabel(item) {
+  return item.title ? `${item.code} ${item.title}` : item.code;
+}
+
+function specialtySystemForAudience(audience) {
+  return audience === "kolledj" ? "secondary_vocational" : audience === "vuz" ? "higher" : "";
+}
+
+function attachSpecialtyCombobox(input, { system = "", onPick } = {}) {
+  const list = el('<div class="combo-list" role="listbox" hidden></div>');
+  input.after(list);
+  input.setAttribute("autocomplete", "off");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "false");
+  if (!input.placeholder) input.placeholder = "Начните вводить код или название направления";
+  let shown = [];
+  let active = -1;
+  const close = () => {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+  };
+  const pick = (item) => {
+    input.value = specialtyLabel(item);
+    close();
+    onPick?.(item);
+  };
+  const paint = async () => {
+    let catalog = [];
+    try {
+      catalog = await loadSpecialtyCatalog();
+    } catch (error) {
+      list.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+      list.hidden = false;
+      return;
+    }
+    const term = input.value.trim().toLocaleLowerCase("ru");
+    const scope = typeof system === "function" ? system() : system;
+    shown = catalog
+      .filter((item) => (!scope || item.system === scope) && (!term || specialtyLabel(item).toLocaleLowerCase("ru").includes(term)))
+      .slice(0, 60);
+    list.innerHTML = shown.length
+      ? shown.map((item, index) => `<button type="button" role="option" data-combo-index="${index}" class="${index === active ? "active" : ""}"><span><b>${escapeHTML(item.code)}</b> ${escapeHTML(item.title)}</span><small>${escapeHTML(item.level)}</small></button>`).join("")
+      : '<p class="muted">Направление не найдено в перечне приказа № 27</p>';
+    list.querySelectorAll("[data-combo-index]").forEach((button) => {
+      button.onmousedown = (event) => {
+        event.preventDefault();
+        pick(shown[Number(button.dataset.comboIndex)]);
+      };
+    });
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  };
+  input.addEventListener("focus", () => {
+    active = -1;
+    paint();
+  });
+  input.addEventListener("input", () => {
+    active = -1;
+    onPick?.(null);
+    paint();
+  });
+  input.addEventListener("blur", () => setTimeout(close, 120));
+  input.addEventListener("keydown", (event) => {
+    if (list.hidden && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+      paint();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!shown.length) return;
+      active = (active + (event.key === "ArrowDown" ? 1 : -1) + shown.length) % shown.length;
+      list.querySelectorAll("[data-combo-index]").forEach((button, index) => button.classList.toggle("active", index === active));
+      list.querySelector(".active")?.scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter" && !list.hidden && active >= 0) {
+      event.preventDefault();
+      pick(shown[active]);
+    } else if (event.key === "Escape") {
+      close();
+    }
+  });
+  return { refresh: paint };
+}
+
+function specialtyFieldMarkup(f, val) {
+  if (f.key === "specialty_code") {
+    return `<div class="combo"><input type="text" class="combo-input" data-combo-for="${escapeHTML(f.key)}" value="${escapeHTML(val)}"><input type="hidden" data-key="${escapeHTML(f.key)}" data-kind="text" value="${escapeHTML(val)}"></div>`;
+  }
+  return `<div class="combo"><input type="text" class="combo-input" maxlength="${f.max_length || 1000}" data-key="${escapeHTML(f.key)}" data-kind="text" value="${escapeHTML(val)}" ${f.required ? "required" : ""}></div>`;
+}
+
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const SCHEDULE_ITEM = /^(Пн|Вт|Ср|Чт|Пт|Сб|Вс)\s+([0-2]\d:[0-5]\d)\s*[–-]\s*([0-2]\d:[0-5]\d)$/;
+
+function parseWeeklySchedule(value) {
+  const days = {};
+  const text = String(value || "").trim();
+  if (!text) return { days, legacy: "" };
+  for (const part of text.split(/;\s*/).filter(Boolean)) {
+    const match = part.trim().match(SCHEDULE_ITEM);
+    if (!match) return { days: {}, legacy: text };
+    days[match[1]] = { from: match[2], to: match[3] };
+  }
+  return { days, legacy: "" };
+}
+
+function formatWeeklySchedule(days) {
+  return WEEKDAYS.filter((day) => days[day]).map((day) => `${day} ${days[day].from}–${days[day].to}`).join("; ");
+}
+
+function weeklyScheduleMarkup(f, val) {
+  const { days, legacy } = parseWeeklySchedule(val);
+  const rows = WEEKDAYS.map((day) => {
+    const item = days[day];
+    return `<div class="schedule-row" data-schedule-day="${day}"><label class="check-row"><input type="checkbox" data-schedule-on ${item ? "checked" : ""}> <span>${day}</span></label><input type="time" data-schedule-from value="${escapeHTML(item?.from || "")}" ${item ? "" : "disabled"} aria-label="${day}: начало"><span>–</span><input type="time" data-schedule-to value="${escapeHTML(item?.to || "")}" ${item ? "" : "disabled"} aria-label="${day}: окончание"></div>`;
+  }).join("");
+  return `<div class="schedule-widget"><input type="hidden" data-key="${escapeHTML(f.key)}" data-kind="text" value="${escapeHTML(val)}"><button type="button" class="schedule-toggle" aria-expanded="false"><span data-schedule-summary>${escapeHTML(formatWeeklySchedule(days) || legacy || "Не заполнено")}</span><i aria-hidden="true">▾</i></button><div class="schedule-panel" hidden>${legacy ? `<p class="field-hint">Прежнее значение: ${escapeHTML(legacy)}. Отметьте дни ниже, чтобы заменить его.</p>` : ""}${rows}<div class="flex"><button type="button" class="btn secondary" data-schedule-copy>Время первого дня — на все отмеченные</button><button type="button" class="btn secondary" data-schedule-clear>Очистить</button></div></div></div>`;
+}
+
+function wireWeeklySchedule(widget, readOnly) {
+  const hidden = widget.querySelector("[data-key]");
+  const toggle = widget.querySelector(".schedule-toggle");
+  const panel = widget.querySelector(".schedule-panel");
+  const summary = widget.querySelector("[data-schedule-summary]");
+  toggle.onclick = () => {
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute("aria-expanded", String(!panel.hidden));
+  };
+  if (readOnly) {
+    panel.querySelectorAll("input,button").forEach((input) => { input.disabled = true; });
+    return;
+  }
+  const sync = () => {
+    const days = {};
+    let invalid = false;
+    let touched = false;
+    widget.querySelectorAll("[data-schedule-day]").forEach((row) => {
+      const on = row.querySelector("[data-schedule-on]").checked;
+      const from = row.querySelector("[data-schedule-from]");
+      const to = row.querySelector("[data-schedule-to]");
+      from.disabled = !on;
+      to.disabled = !on;
+      const bad = on && (!from.value || !to.value || to.value <= from.value);
+      row.classList.toggle("invalid", bad);
+      if (on) touched = true;
+      if (bad) invalid = true;
+      else if (on) days[row.dataset.scheduleDay] = { from: from.value, to: to.value };
+    });
+    widget.dataset.invalid = invalid ? "1" : "";
+    if (touched || !widget.querySelector(".schedule-panel .field-hint")) hidden.value = formatWeeklySchedule(days);
+    summary.textContent = hidden.value || "Не заполнено";
+  };
+  widget.querySelectorAll("[data-schedule-on],[data-schedule-from],[data-schedule-to]").forEach((input) => input.addEventListener("input", sync));
+  widget.querySelectorAll("[data-schedule-on]").forEach((input) => input.addEventListener("change", sync));
+  widget.querySelector("[data-schedule-copy]").onclick = () => {
+    const rows = [...widget.querySelectorAll("[data-schedule-day]")].filter((row) => row.querySelector("[data-schedule-on]").checked);
+    const first = rows.find((row) => row.querySelector("[data-schedule-from]").value && row.querySelector("[data-schedule-to]").value);
+    if (!first) return;
+    rows.forEach((row) => {
+      row.querySelector("[data-schedule-from]").value = first.querySelector("[data-schedule-from]").value;
+      row.querySelector("[data-schedule-to]").value = first.querySelector("[data-schedule-to]").value;
+    });
+    sync();
+  };
+  widget.querySelector("[data-schedule-clear]").onclick = () => {
+    widget.querySelectorAll("[data-schedule-on]").forEach((input) => { input.checked = false; });
+    widget.querySelectorAll('input[type="time"]').forEach((input) => { input.value = ""; });
+    widget.querySelector(".schedule-panel .field-hint")?.remove();
+    sync();
+  };
+}
+
+function academicPeriodLabel(period) {
+  const date = (value) => String(value || "").split("-").reverse().join(".");
+  return `${period.title} (${date(period.starts_on)}–${date(period.ends_on)})`;
+}
+
+function academicPeriodMarkup(f, val) {
+  const periods = Array.isArray(state.academicPeriods) ? state.academicPeriods : [];
+  const options = periods.map((period) => academicPeriodLabel(period));
+  if (val && !options.includes(val)) options.unshift(val);
+  return `<select data-key="${escapeHTML(f.key)}" data-kind="select"><option value="">-</option>${options.map((label) => `<option value="${escapeHTML(label)}" ${label === val ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select>`;
+}
+
+function weeksBetween(start, end) {
+  const from = Date.parse(`${start}T00:00:00Z`);
+  const to = Date.parse(`${end}T00:00:00Z`);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return "";
+  return String(Math.ceil((Math.round((to - from) / 86400000) + 1) / 7));
+}
+
+function staffMemberOptionLabel(m) {
+  return `${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}${m.archived ? " · в архиве" : ""}`;
+}
+
+function teacherOptionsFor(partnerID, keepID) {
+  return (state.staffMembers || []).filter((m) => m.id === keepID || (m.is_teacher !== false && !m.archived && (!(m.partner_ids || []).length || m.partner_ids.includes(partnerID))));
+}
+
 function fieldInput(f, value, audience) {
   const val = value === undefined || value === null ? "" : value;
   const partners = Array.isArray(state.partners) ? state.partners : [];
+  if (f.widget === "specialty") return specialtyFieldMarkup(f, val);
+  if (f.widget === "weekly_schedule") return weeklyScheduleMarkup(f, val);
+  if (f.widget === "academic_period") return academicPeriodMarkup(f, val);
   if (f.type === "select") {
     const opts =
       f.key === "org_name"
@@ -959,11 +1328,11 @@ function fieldInput(f, value, audience) {
             .filter((p) => !audience || p.partner_kind === audience)
             .map((p) => ({ v: p.id, l: p.name }))
         : f.key === "mentor_id"
-          ? state.mentors.map((m) => ({ v: m.id, l: m.full_name }))
+          ? mentorOptionsFor(val).map((m) => ({ v: m.id, l: mentorOptionLabel(m) }))
           : f.key === "staff_member_id"
-            ? (state.staffMembers || []).map((m) => ({
+            ? teacherOptionsFor(state.entryPartnerID, val).map((m) => ({
                 v: m.id,
-                l: `${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}`,
+                l: staffMemberOptionLabel(m),
               }))
           : (f.options || []).map((o) => ({
               v: o,
@@ -1082,6 +1451,14 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
       setFieldError(input, message);
       firstInvalid ||= input;
     }
+  });
+
+  fieldsBox.querySelectorAll(".schedule-widget").forEach((widget) => {
+    if (widget.dataset.invalid !== "1") return;
+    const input = widget.querySelector("[data-key]");
+    setFieldError(input, "Для отмеченных дней укажите время начала и окончания (окончание позже начала)");
+    widget.querySelector(".schedule-panel").hidden = false;
+    firstInvalid ||= widget.querySelector(".schedule-toggle");
   });
 
   const requirePositive = (key, message) => {
@@ -1230,19 +1607,14 @@ function collectAndValidateEntryPayload(fieldsBox, category) {
   return { payload, valid: !firstInvalid };
 }
 
-async function openStaffMembersDialog(onChange) {
+async function renderStaffDirectory(box, { onChange, teachersView = false } = {}) {
   const role = state.me?.role;
   const canManage = ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(role);
   const canConfirm = ["super_admin", "holding_admin", "org_admin"].includes(role);
-  const drawer = CyberCalcUI.openDrawer({
-    id: "staff-members-drawer",
-    draftKey: canManage ? `cybercalc:drawer-draft:v1:${state.me?.id || ""}:staff-members` : "",
-    title: "ИТ-специалисты - потенциальные преподаватели",
-    mode: canManage ? "edit" : "view",
-    wide: true,
-    content: `
-    <p class="notice">Добавьте ИТ-специалиста в кадровый список кандидатов. Педагогическая нагрузка и часы назначаются отдельно после выбора специалиста.</p>
-    ${canManage ? `<form id="staff-form"><input type="hidden" name="id"><div class="grid cols-3">
+  const canDelete = role === "super_admin";
+  box.innerHTML = `
+    <p class="notice">${teachersView ? "Сотрудники ИТ-компании с отметкой «Преподаватель» доступны для выбора в разделе «Преподаватели». Учётная запись в системе для них не нужна." : "Добавьте ИТ-специалиста в кадровый список кандидатов. Педагогическая нагрузка и часы назначаются отдельно после выбора специалиста."}</p>
+    ${canManage ? `<form id="staff-form" class="card"><input type="hidden" name="id"><h2 data-staff-form-title>Новый сотрудник</h2><div class="grid cols-3">
       <div class="field"><label>ФИО *</label><input name="fio" maxlength="200" required></div>
       <div class="field"><label>Должность *</label><input name="company_position" maxlength="200" required></div>
       <div class="field"><label>Подразделение</label><input name="company_department" maxlength="200"></div>
@@ -1250,63 +1622,165 @@ async function openStaffMembersDialog(onChange) {
       <div class="field"><label>ИТ-стаж за 5 лет, дней *</label><input name="it_experience_days" type="number" min="0" max="1827" required></div>
       <div class="field"><label>Статус</label><select name="record_status" ${canConfirm ? "" : "disabled"}><option value="unconfirmed_by_admin">Ожидает подтверждения</option><option value="confirmed">Подтверждён</option></select></div>
       <div class="field"><label>Документ о стаже</label><input name="experience_document_reference" maxlength="1000" placeholder="СТД-Р / трудовая книжка, номер и дата"></div>
-    </div><div class="flex"><button class="btn" type="submit">Добавить ИТ-специалиста</button><button class="btn secondary" type="button" data-staff-reset>Новый кандидат</button></div><p class="error" data-staff-error></p></form>` : ""}
-    <div id="staff-list">Загрузка…</div>
-  `,
-  });
-  const backdrop = drawer.element;
-  const form = backdrop.querySelector("#staff-form");
+      <div class="field"><label>&nbsp;</label><label class="check-row"><input type="checkbox" name="is_teacher" checked> <span>Преподаватель</span></label></div>
+    </div>
+    <div class="field"><label>Направления подготовки</label><div class="chip-list" data-staff-directions></div><div class="combo"><input type="text" class="combo-input" data-staff-direction-search></div><div class="field-hint">Выберите одно или несколько направлений из перечня приказа № 27.</div></div>
+    <div class="field"><label>Учебные заведения (вуз / колледж)</label><input type="search" data-staff-partner-search placeholder="Поиск по названию"><div class="check-grid" data-staff-partners></div><div class="field-hint">Если не выбрано ни одного, преподаватель доступен для всех вузов и колледжей.</div></div>
+    <div class="flex"><button class="btn" type="submit">Сохранить</button><button class="btn secondary" type="button" data-staff-reset>Новый сотрудник</button></div><p class="error" data-staff-error></p></form>` : ""}
+    <div class="card"><div class="flex between"><h2>${teachersView ? "Преподаватели" : "Сотрудники"}</h2><span class="count-badge" data-staff-count></span></div>
+    <div class="grid cols-3"><div class="field"><label>Поиск</label><input type="search" data-staff-filter placeholder="ФИО или должность"></div><div class="field"><label>Показывать</label><select data-staff-scope><option value="teachers" ${teachersView ? "selected" : ""}>Только преподавателей</option><option value="all" ${teachersView ? "" : "selected"}>Всех сотрудников</option></select></div></div>
+    <div id="staff-list">Загрузка…</div></div>
+  `;
+  const form = box.querySelector("#staff-form");
   let items = [];
+  let directions = [];
+  let teachingPartners = [];
+  const paintDirections = () => {
+    if (!form) return;
+    const holder = form.querySelector("[data-staff-directions]");
+    loadSpecialtyCatalog().catch(() => []).then((catalog) => {
+      holder.innerHTML = directions.length
+        ? directions.map((code) => {
+            const item = catalog.find((value) => value.code === code);
+            return `<span class="chip">${escapeHTML(item ? specialtyLabel(item) : code)}<button type="button" data-remove-direction="${escapeHTML(code)}" aria-label="Убрать ${escapeHTML(code)}">×</button></span>`;
+          }).join("")
+        : '<span class="muted">Не выбрано</span>';
+      holder.querySelectorAll("[data-remove-direction]").forEach((button) => button.onclick = () => {
+        directions = directions.filter((code) => code !== button.dataset.removeDirection);
+        paintDirections();
+      });
+    });
+  };
+  const paintPartnerChoices = (selected = []) => {
+    if (!form) return;
+    const term = form.querySelector("[data-staff-partner-search]").value.trim().toLocaleLowerCase("ru");
+    const checked = new Set([...form.querySelectorAll("[data-staff-partner]:checked")].map((input) => input.value).concat(selected));
+    const visible = teachingPartners.filter((partner) => checked.has(partner.id) || !term || partner.name.toLocaleLowerCase("ru").includes(term));
+    form.querySelector("[data-staff-partners]").innerHTML = visible.length
+      ? visible.map((partner) => `<label class="check-row"><input type="checkbox" data-staff-partner value="${escapeHTML(partner.id)}" ${checked.has(partner.id) ? "checked" : ""}> <span>${escapeHTML(partner.name)} <small>${escapeHTML(AUDIENCE_LABELS[partner.partner_kind] || "")}</small></span></label>`).join("")
+      : '<span class="muted">Вузов и колледжей среди партнёров нет.</span>';
+  };
   const reset = () => {
     if (!form) return;
     form.reset();
     form.elements.id.value = "";
     form.elements.record_status.value = "unconfirmed_by_admin";
+    form.elements.is_teacher.checked = true;
+    form.querySelector("[data-staff-form-title]").textContent = "Новый сотрудник";
+    form.querySelector("[data-staff-partners]").querySelectorAll("input").forEach((input) => { input.checked = false; });
+    directions = [];
+    paintDirections();
+    paintPartnerChoices();
   };
   const paint = () => {
-    backdrop.querySelector("#staff-list").innerHTML = items.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Должность</th><th>ОКЗ</th><th>Стаж</th><th>Статус</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${escapeHTML(item.fio)}</b><br><small>${escapeHTML(item.company_department || "-")}</small></td><td>${escapeHTML(item.company_position)}</td><td><code>${escapeHTML(item.okz_code)}</code><br><small>${escapeHTML(item.okz_name)}</small></td><td>${item.it_experience_days} дн.</td><td><span class="status-badge ${item.eligible ? "active" : "inactive"}">${item.eligible ? "Подтверждён" : "Не подтверждён"}</span></td><td>${canManage ? `<button class="btn secondary" data-staff-edit="${item.id}">Изменить</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
-      : '<p class="muted">Потенциальные преподаватели ещё не добавлены.</p>';
-    backdrop.querySelectorAll("[data-staff-edit]").forEach((button) => button.onclick = () => {
+    const term = box.querySelector("[data-staff-filter]").value.trim().toLocaleLowerCase("ru");
+    const scope = box.querySelector("[data-staff-scope]").value;
+    const shown = items.filter((item) => (scope === "all" || item.is_teacher) && (!term || `${item.fio} ${item.company_position}`.toLocaleLowerCase("ru").includes(term)));
+    box.querySelector("[data-staff-count]").textContent = `${shown.length} из ${items.length}`;
+    box.querySelector("#staff-list").innerHTML = shown.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Должность</th><th>ОКЗ</th><th>Стаж</th><th>Направления</th><th>Учебные заведения</th><th>Статус</th><th></th></tr></thead><tbody>${shown.map((item) => `<tr><td><b>${escapeHTML(item.fio)}</b>${item.is_teacher ? ' <span class="status-badge active">Преподаватель</span>' : ""}<br><small>${escapeHTML(item.company_department || "-")}</small></td><td>${escapeHTML(item.company_position)}</td><td><code>${escapeHTML(item.okz_code)}</code><br><small>${escapeHTML(item.okz_name)}</small></td><td>${item.it_experience_days} дн.</td><td><small>${escapeHTML((item.training_direction_labels || []).join("; ") || "-")}</small></td><td><small>${escapeHTML((item.partner_names || []).join("; ") || "Все")}</small></td><td><span class="status-badge ${item.eligible ? "active" : "inactive"}">${item.eligible ? "Подтверждён" : "Не подтверждён"}</span></td><td><div class="flex">${canManage ? `<button class="btn secondary" data-staff-edit="${item.id}">Изменить</button>` : ""}${canDelete ? `<button class="btn secondary danger" data-staff-delete="${item.id}">Удалить</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="muted">${items.length ? "По выбранным условиям никого нет." : "Сотрудники ещё не добавлены."}</p>`;
+    box.querySelectorAll("[data-staff-edit]").forEach((button) => button.onclick = () => {
       const item = items.find((value) => value.id === button.dataset.staffEdit);
       if (!item || !form) return;
-      Object.keys(item).forEach((key) => { if (form.elements[key]) form.elements[key].value = item[key] ?? ""; });
+      reset();
+      ["fio", "company_position", "company_department", "okz_code", "it_experience_days", "record_status", "experience_document_reference"].forEach((key) => { form.elements[key].value = item[key] ?? ""; });
+      form.elements.is_teacher.checked = item.is_teacher !== false;
       form.elements.id.value = item.id;
+      form.querySelector("[data-staff-form-title]").textContent = `Изменить: ${item.fio}`;
+      directions = [...(item.training_directions || [])];
+      paintDirections();
+      paintPartnerChoices(item.partner_ids || []);
       form.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    box.querySelectorAll("[data-staff-delete]").forEach((button) => button.onclick = async () => {
+      const item = items.find((value) => value.id === button.dataset.staffDelete);
+      if (!item || !confirm(`Удалить «${item.fio}» из списка? Если сотрудник уже указан в мероприятиях, он будет перенесён в архив, а записи сохранятся.`)) return;
+      button.disabled = true;
+      try {
+        const result = await api(`/staff-members/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        showToast(result.result === "archived" ? "Сотрудник перенесён в архив: он указан в мероприятиях" : "Сотрудник удалён", "success");
+        await reload();
+        await onChange?.();
+      } catch (error) {
+        showToast(error.message);
+        button.disabled = false;
+      }
     });
   };
   const reload = async () => { items = await api("/staff-members"); paint(); };
+  box.querySelector("[data-staff-filter]").oninput = paint;
+  box.querySelector("[data-staff-scope]").onchange = paint;
   try {
-    const [, okz] = await Promise.all([reload(), canManage ? api("/okz?level=4&limit=100") : Promise.resolve({ items: [] })]);
-    if (form) backdrop.querySelector("#staff-okz").innerHTML = okz.items.map((item) => `<option value="${escapeHTML(item.code)}">${escapeHTML(item.name)}</option>`).join("");
+    const [, okz, partners] = await Promise.all([
+      reload(),
+      canManage ? api("/okz?level=4&limit=100") : Promise.resolve({ items: [] }),
+      canManage ? api("/partners") : Promise.resolve([]),
+    ]);
+    teachingPartners = (Array.isArray(partners) ? partners : []).filter((partner) => ["vuz", "kolledj"].includes(partner.partner_kind));
+    if (form) {
+      box.querySelector("#staff-okz").innerHTML = okz.items.map((item) => `<option value="${escapeHTML(item.code)}">${escapeHTML(item.name)}</option>`).join("");
+      paintPartnerChoices();
+      paintDirections();
+    }
     if (form && !okz.items.length) {
       form.before(el(`<p class="notice" data-okz-empty>Справочник ОКЗ пуст, поэтому сотрудника добавить нельзя: код ОКЗ проверяется по справочнику. ${role === "super_admin" ? "Загрузите CSV в разделе «Настройки → Классификатор ОКЗ»." : "Попросите главного администратора загрузить справочник ОКЗ (Настройки → Классификатор ОКЗ)."}</p>`));
     }
   } catch (error) {
-    backdrop.querySelector("#staff-list").innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+    box.querySelector("#staff-list").innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
   }
   if (!form) return;
-  backdrop.querySelector("[data-staff-reset]").onclick = reset;
+  attachSpecialtyCombobox(form.querySelector("[data-staff-direction-search]"), {
+    onPick: (item) => {
+      if (!item) return;
+      if (!directions.includes(item.code)) directions.push(item.code);
+      form.querySelector("[data-staff-direction-search]").value = "";
+      paintDirections();
+    },
+  });
+  form.querySelector("[data-staff-partner-search]").oninput = () => paintPartnerChoices();
+  box.querySelector("[data-staff-reset]").onclick = reset;
   form.onsubmit = async (event) => {
     event.preventDefault();
     const submit = form.querySelector('button[type="submit"]');
     const errorBox = form.querySelector("[data-staff-error]");
     const id = form.elements.id.value;
-    const body = Object.fromEntries(new FormData(form));
-    delete body.id;
-    body.it_experience_days = Number(body.it_experience_days);
-    if (!canConfirm) body.record_status = "unconfirmed_by_admin";
+    const body = {
+      fio: form.elements.fio.value,
+      company_position: form.elements.company_position.value,
+      company_department: form.elements.company_department.value,
+      okz_code: form.elements.okz_code.value,
+      it_experience_days: Number(form.elements.it_experience_days.value),
+      experience_document_reference: form.elements.experience_document_reference.value,
+      record_status: canConfirm ? form.elements.record_status.value : "unconfirmed_by_admin",
+      is_teacher: form.elements.is_teacher.checked,
+      training_directions: directions,
+      partner_ids: [...form.querySelectorAll("[data-staff-partner]:checked")].map((input) => input.value),
+    };
     submit.disabled = true;
     errorBox.textContent = "";
     try {
       await api(id ? `/staff-members/${id}` : "/staff-members", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
-      showToast("ИТ-специалист добавлен в список потенциальных преподавателей", "success");
+      showToast(id ? "Сотрудник сохранён" : "Сотрудник добавлен", "success");
       reset();
       await reload();
       await onChange?.();
     } catch (error) { errorBox.textContent = error.message; }
     finally { submit.disabled = false; }
   };
+}
+
+async function openStaffMembersDialog(onChange) {
+  const canManage = ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(state.me?.role);
+  const drawer = CyberCalcUI.openDrawer({
+    id: "staff-members-drawer",
+    draftKey: canManage ? `cybercalc:drawer-draft:v1:${state.me?.id || ""}:staff-members` : "",
+    title: "ИТ-специалисты - потенциальные преподаватели",
+    mode: canManage ? "edit" : "view",
+    wide: true,
+    content: '<div id="staff-directory"></div>',
+  });
+  await renderStaffDirectory(drawer.element.querySelector("#staff-directory"), { onChange, teachersView: true });
 }
 
 async function openTeachingPayoutsDialog() {
@@ -1465,9 +1939,15 @@ async function openEntryModal(entry, readOnly = false) {
   }
   try {
     state.mentors = await api(
-      `/mentors?partner_id=${encodeURIComponent(partner.id)}`,
+      `/mentors?partner_id=${encodeURIComponent(partner.id)}&include_archived=1`,
     );
-    if (cat.code === "teachers") state.staffMembers = await api("/staff-members");
+    state.entryPartnerID = partner.id;
+    if (cat.code === "teachers") {
+      [state.staffMembers, state.academicPeriods] = await Promise.all([
+        api("/staff-members?include_archived=1"),
+        partner.partner_kind === "school" ? Promise.resolve([]) : api(`/partners/${encodeURIComponent(partner.id)}/academic-periods`),
+      ]);
+    }
   } catch (e) {
     showToast(e.message);
     return;
@@ -1585,29 +2065,63 @@ async function openEntryModal(entry, readOnly = false) {
       const add = readOnly ? null : el(
         '<button type="button" class="btn secondary">+ Наставник</button>',
       );
-      if (add) add.onclick = async () => {
-        const name = prompt("Фамилия, имя, отчество наставника (при наличии)");
-        if (!name) return;
-        add.disabled = true;
-        try {
-          const mentor = await api("/mentors", {
-            method: "POST",
-            body: JSON.stringify({ partner_id: partner.id, full_name: name }),
-          });
-          state.mentors.push(mentor);
-          select.append(new Option(mentor.full_name, mentor.id));
-          select.value = mentor.id;
-          select.onchange();
-        } catch (e) {
-          showToast(e.message);
-        } finally {
-          add.disabled = false;
-        }
-      };
+      if (add) add.onclick = () => openMentorDirectoryDrawer(partner.id, async (saved) => {
+        state.mentors = await api(`/mentors?partner_id=${encodeURIComponent(partner.id)}&include_archived=1`);
+        const keep = saved?.id && !select.value ? saved.id : select.value;
+        const options = mentorOptionsFor(keep);
+        select.innerHTML = '<option value="">-</option>' + options.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(mentorOptionLabel(m))}</option>`).join("");
+        select.value = options.some((m) => m.id === keep) ? keep : "";
+        select.onchange();
+      });
       if (add) row.appendChild(add);
     }
-    if (cat.code === "teachers" && ["teacher_full_name", "employee_position", "okz_code", "it_experience_days", "it_experience_reference"].includes(f.key)) {
+    if (cat.code === "teachers" && ["teacher_full_name", "employee_position", "okz_code", "it_experience_days", "it_experience_reference", "specialty_code"].includes(f.key)) {
       row.hidden = true;
+    }
+    if (f.widget === "weekly_schedule") wireWeeklySchedule(row.querySelector(".schedule-widget"), readOnly);
+    if (f.widget === "specialty" && !readOnly && !financialOnly) {
+      const visible = row.querySelector(".combo-input");
+      const hidden = row.querySelector('input[type="hidden"][data-key]');
+      const system = () => {
+        if (cat.code === "teachers") {
+          const level = fieldsBox.querySelector('[data-key="education_level"]')?.value;
+          if (level === "spo") return "secondary_vocational";
+          if (level) return "higher";
+        }
+        return specialtySystemForAudience(audience);
+      };
+      attachSpecialtyCombobox(visible, {
+        system,
+        onPick: (item) => {
+          if (hidden) hidden.value = item ? item.code : /^\d{2}\.\d{2}\.\d{2}$/.test(visible.value.trim()) ? visible.value.trim() : "";
+          if (cat.code === "teachers" && f.key === "training_direction") {
+            const code = fieldsBox.querySelector('[data-key="specialty_code"]');
+            if (code) code.value = item ? item.code : (visible.value.trim().match(/^\d{2}\.\d{2}\.\d{2}/) || [""])[0];
+          }
+        },
+      });
+      if (hidden && hidden.value) {
+        loadSpecialtyCatalog().then((catalog) => {
+          const match = catalog.find((item) => item.code === hidden.value);
+          if (match && visible.value === hidden.value) visible.value = specialtyLabel(match);
+        }).catch(() => {});
+      }
+    }
+    if (f.widget === "academic_period") {
+      const select = row.querySelector("select");
+      const hint = el(`<div class="field-hint">${(state.academicPeriods || []).length ? "Даты и длительность семестра подставляются из учебного периода." : "У учебного заведения не заданы учебные периоды: добавьте их в карточке партнёра («Партнёры» → раскрыть → «Учебные периоды») или укажите даты вручную."}</div>`);
+      row.appendChild(hint);
+      select.addEventListener("change", () => {
+        const period = (state.academicPeriods || []).find((item) => academicPeriodLabel(item) === select.value);
+        if (!period) return;
+        const set = (key, value) => {
+          const input = fieldsBox.querySelector(`[data-key="${key}"]`);
+          if (input && !input.disabled) input.value = value;
+        };
+        set("semester_start", period.starts_on);
+        set("semester_end", period.ends_on);
+        set("semester_duration_weeks", String(period.duration_weeks || weeksBetween(period.starts_on, period.ends_on)));
+      });
     }
     if (f.key === "staff_member_id") {
       const select = row.querySelector("select");
@@ -1617,7 +2131,14 @@ async function openEntryModal(entry, readOnly = false) {
         hint.textContent = staff
           ? `${staff.record_status === "confirmed" ? "✓ Профиль подтверждён" : "⚠ Профиль пока не подтверждён: запись сохранится, но не попадёт в зачёт"}. Стаж: ${staff.it_experience_days} дней; ОКЗ ${staff.okz_code}.`
           : "Сначала добавьте сотрудника в справочник преподавателей.";
+        if (staff && (staff.training_direction_labels || []).length) hint.textContent += ` Направления: ${staff.training_direction_labels.join("; ")}.`;
         if (!staff) return;
+        const direction = fieldsBox.querySelector('[data-key="training_direction"]');
+        if (direction && !direction.value && !direction.disabled && (staff.training_direction_labels || []).length) {
+          direction.value = staff.training_direction_labels[0];
+          const code = fieldsBox.querySelector('[data-key="specialty_code"]');
+          if (code) code.value = staff.training_directions[0] || "";
+        }
         const values = { teacher_full_name: staff.fio, employee_position: staff.company_position, okz_code: staff.okz_code, it_experience_days: staff.it_experience_days, it_experience_reference: staff.experience_document_reference };
         Object.entries(values).forEach(([key, value]) => {
           const input = fieldsBox.querySelector(`[data-key="${key}"]`);
@@ -1630,10 +2151,11 @@ async function openEntryModal(entry, readOnly = false) {
       if (!readOnly && ["super_admin", "holding_admin", "org_admin", "hr_specialist"].includes(state.me?.role)) {
         const addStaff = el('<button type="button" class="btn secondary">+ ИТ-специалист</button>');
         addStaff.onclick = () => openStaffMembersDialog(async () => {
-          state.staffMembers = await api("/staff-members");
+          state.staffMembers = await api("/staff-members?include_archived=1");
           const keep = select.value;
-          select.innerHTML = '<option value="">-</option>' + state.staffMembers.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(`${m.fio} · ${m.company_position} · ОКЗ ${m.okz_code}${m.eligible ? " · подтверждён" : " · требует подтверждения"}`)}</option>`).join("");
-          select.value = state.staffMembers.some((m) => m.id === keep) ? keep : state.staffMembers[state.staffMembers.length - 1]?.id || "";
+          const options = teacherOptionsFor(partner.id, keep);
+          select.innerHTML = '<option value="">-</option>' + options.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(staffMemberOptionLabel(m))}</option>`).join("");
+          select.value = options.some((m) => m.id === keep) ? keep : options[options.length - 1]?.id || "";
           syncStaff();
         });
         row.appendChild(addStaff);
@@ -1646,6 +2168,7 @@ async function openEntryModal(entry, readOnly = false) {
     fieldsBox.querySelectorAll("[data-key]").forEach((input) => {
       if (!allowed.has(input.dataset.key)) input.disabled = true;
     });
+    fieldsBox.querySelectorAll(".combo-input,.schedule-panel input,.schedule-panel button").forEach((input) => { input.disabled = true; });
   }
   const documentType = backdrop.querySelector("#attach-document-type");
   if (documentType) {
@@ -1680,6 +2203,16 @@ async function openEntryModal(entry, readOnly = false) {
     };
     level.addEventListener("change", syncSemesterRange);
     syncSemesterRange();
+    const start = fieldsBox.querySelector('[data-key="semester_start"]');
+    const end = fieldsBox.querySelector('[data-key="semester_end"]');
+    const weeks = fieldsBox.querySelector('[data-key="semester_duration_weeks"]');
+    const syncWeeks = () => {
+      if (!weeks || weeks.disabled || !start?.value || !end?.value) return;
+      const value = weeksBetween(start.value, end.value);
+      if (value) weeks.value = value;
+    };
+    start?.addEventListener("change", syncWeeks);
+    end?.addEventListener("change", syncWeeks);
   }
 
   const draftKey = readOnly || financialOnly

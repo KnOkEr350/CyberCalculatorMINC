@@ -84,7 +84,8 @@ func TestTopITRejectsNonUniversityAudience(t *testing.T) {
 	}
 }
 
-// TCH-05: формы оформления привлечённого преподавателя перечислены в ТЗ §7.2.
+// TCH-05: формы оформления привлечённого преподавателя перечислены в ТЗ §7.2;
+// безвозмездный договор ГПХ добавлен по запросу заказчика 29.10.2026.
 func TestTeacherEmploymentFormsMatchOrder(t *testing.T) {
 	calc, err := Get("teachers")
 	if err != nil {
@@ -99,12 +100,13 @@ func TestTeacherEmploymentFormsMatchOrder(t *testing.T) {
 	want := []string{
 		"ТД по совместительству",
 		"ГПХ",
+		"Безвозмездный договор ГПХ",
 		"Трудовой договор с ИТ-компанией",
 		"Договор пожертвования",
 		"Прямой договор между ОО и ИТ-компанией",
 	}
 	if len(options) != len(want) {
-		t.Fatalf("форм оформления %d, ТЗ §7.2 перечисляет %d: %v", len(options), len(want), options)
+		t.Fatalf("форм оформления %d, ожидается %d: %v", len(options), len(want), options)
 	}
 	for i, value := range want {
 		if options[i] != value {

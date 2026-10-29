@@ -92,6 +92,16 @@ func Definitions() []Definition {
 	return append([]Definition(nil), definitions...)
 }
 
+// DefinitionOf возвращает описание ставки по коду.
+func DefinitionOf(code string) (Definition, bool) {
+	for _, definition := range definitions {
+		if definition.Code == code {
+			return definition, true
+		}
+	}
+	return Definition{}, false
+}
+
 // CategoryCodes перечисляет коды ставок вида активности. Практика
 // трудоустройства использует ставки стажировки.
 func CategoryCodes(category string) []string {

@@ -214,7 +214,7 @@ func (h *EntryHandlers) createEntry(w http.ResponseWriter, r *http.Request, u mi
 	if !ok {
 		return "", 0, false
 	}
-	staffMemberID, err := h.resolveTeachingStaff(r, req.CategoryCode, companyID, req.Payload, false)
+	staffMemberID, staffSnapshot, err := h.resolveTeachingStaff(r, req.CategoryCode, companyID, req.Payload, false)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return "", 0, false
@@ -227,6 +227,7 @@ func (h *EntryHandlers) createEntry(w http.ResponseWriter, r *http.Request, u mi
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return "", 0, false
 	}
+	mergeTeachingSnapshot(req.Payload, staffSnapshot)
 	// DATA-07: ставки берутся из версий, действующих на отчётный год записи.
 	tariffCard, err := tariffs.Load(r.Context(), h.DB, req.ReportYear)
 	if err != nil {
@@ -626,7 +627,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 	if !ok {
 		return
 	}
-	staffMemberID, err := h.resolveTeachingStaff(r, categoryCode, companyID, req.Payload, false)
+	staffMemberID, staffSnapshot, err := h.resolveTeachingStaff(r, categoryCode, companyID, req.Payload, false)
 	if err != nil {
 		middleware.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -639,6 +640,7 @@ func (h *EntryHandlers) Update(w http.ResponseWriter, r *http.Request, u middlew
 		middleware.WriteError(w, 400, "ошибка валидации: "+err.Error())
 		return
 	}
+	mergeTeachingSnapshot(req.Payload, staffSnapshot)
 	tariffCard, err := tariffs.Load(r.Context(), h.DB, reportYear)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "не удалось определить тариф: "+err.Error())

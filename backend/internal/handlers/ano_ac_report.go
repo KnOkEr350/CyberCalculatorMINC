@@ -69,13 +69,18 @@ func (h *ReportHandlers) exportAnoAc(w http.ResponseWriter, r *http.Request, u m
 	passport := [][]interface{}{
 		{"Вуз", partnerName}, {"Программа", program}, {"Федеральный проект", project}, {"Волна", wave},
 		{"Статус вуза", anoRoleLabels[role]}, {"Размер гранта, руб.", amount(grant)},
-		{"Норма вуза, руб. (" + fmt.Sprint(topit.UniversityNormPercent) + "% от гранта)", topit.UniversityNorm(amount(grant))},
+		{"Норма вуза, руб. (" + fmt.Sprint(topit.UniversityNormPercent) + "% от гранта)", xlsx.Formula{
+			Expr: fmt.Sprintf("ROUNDDOWN(B7*%d/100,2)", topit.UniversityNormPercent), Value: topit.UniversityNorm(amount(grant))}},
 		{"План софинансирования X, руб.", amount(planned)}, {"Отчётный год", year},
 		{"Примечание", "Структура листов по ТЗ 4.4 §9.3; официальная форма АНО АЦ в реестре нормативных источников не зарегистрирована."},
 	}
+	var progress interface{} = scale.Percent
+	if scale.Known {
+		progress = xlsx.NumberFormula{Expr: "ROUNDDOWN(B4*100/B2,1)", Value: scale.Percent}
+	}
 	cash := [][]interface{}{
-		{"План софинансирования X", amount(planned)}, {"Перечислено", amount(transferred)}, {"Фактически списано вузом (в зачёт)", amount(spent)},
-		{"Ход софинансирования, %", scale.Percent}, {"Шкала", scaleText}, {"Статья расходов", article},
+		{"План софинансирования X", xlsx.Formula{Expr: "'Паспорт'!$B$9", Value: amount(planned)}}, {"Перечислено", amount(transferred)}, {"Фактически списано вузом (в зачёт)", amount(spent)},
+		{"Ход софинансирования, %", progress}, {"Шкала", scaleText}, {"Статья расходов", article},
 		{"Договор", agreementRef}, {"Платёжное поручение", paymentRef}, {"Акт / отчёт о расходовании", actRef},
 	}
 	var support, scholarships, cases, rids [][]interface{}
@@ -95,6 +100,28 @@ func (h *ReportHandlers) exportAnoAc(w http.ResponseWriter, r *http.Request, u m
 				item.Authors, share(item.UniversitySharePct), share(item.CompanySharePct)})
 		}
 	}
+	totalRow := func(rows [][]interface{}, width int, labelCol int, cols ...int) [][]interface{} {
+		if len(rows) == 0 {
+			return rows
+		}
+		total := make([]interface{}, width)
+		for i := range total {
+			total[i] = ""
+		}
+		total[labelCol] = "ИТОГО"
+		for _, col := range cols {
+			var sum money.Amount
+			for _, row := range rows {
+				if value, ok := row[col].(money.Amount); ok {
+					sum, _ = money.Add(sum, value)
+				}
+			}
+			total[col] = xlsx.Formula{Expr: xlsx.SumFormula(col, 2, len(rows)+1), Value: sum}
+		}
+		return append(rows, total)
+	}
+	support = totalRow(support, 7, 0, 4, 5, 6)
+	scholarships = totalRow(scholarships, 8, 0, 5)
 	workbook := xlsx.New()
 	workbook.AddSheet("Паспорт", []string{"Показатель", "Значение"}, passport)
 	workbook.AddSheet("Денежное софинансирование", []string{"Показатель", "Значение"}, cash)

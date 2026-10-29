@@ -12,6 +12,7 @@ import (
 	"cybercalc/internal/money"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,42 @@ type Sheet struct {
 type Formula struct {
 	Expr  string
 	Value money.Amount
+}
+
+// NumberFormula - формула с числовым результатом, который не является суммой
+// в рублях: тысячи рублей, проценты, ставки в тыс. руб.
+type NumberFormula struct {
+	Expr  string
+	Value float64
+}
+
+// CellText - значение ячейки так, как его видит программа без пересчёта:
+// для формул это кэшированный результат. Нужно выгрузкам в Word и CSV.
+func CellText(value interface{}) string {
+	switch v := value.(type) {
+	case Formula:
+		return v.Value.String()
+	case NumberFormula:
+		return strconv.FormatFloat(v.Value, 'f', -1, 64)
+	case money.Amount:
+		return v.String()
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+// SheetRef - абсолютный адрес ячейки другого листа: 'Лист'!$C$5.
+func SheetRef(sheet string, col, row int) string {
+	return fmt.Sprintf("%s!$%s$%d", quoteSheet(sheet), colLetter(col), row)
+}
+
+// SheetColumn - весь столбец другого листа для SUMIFS: 'Лист'!$C:$C.
+func SheetColumn(sheet string, col int) string {
+	return fmt.Sprintf("%s!$%s:$%s", quoteSheet(sheet), colLetter(col), colLetter(col))
+}
+
+func quoteSheet(sheet string) string {
+	return "'" + strings.ReplaceAll(sanitizeSheetName(sheet), "'", "''") + "'"
 }
 
 // SumFormula строит SUM по столбцу col (с нуля) для строк from..to (номера строк Excel).
@@ -46,7 +83,9 @@ func New() *Workbook {
 	return &Workbook{}
 }
 
-func (wb *Workbook) AddSheet(name string, headers []string, rows [][]interface{}) {
+// AddSheet добавляет лист и возвращает итоговое имя (после очистки и
+// устранения дублей), по которому на лист можно ссылаться в формулах.
+func (wb *Workbook) AddSheet(name string, headers []string, rows [][]interface{}) string {
 	base := sanitizeSheetName(name)
 	candidate := base
 	for n := 2; ; n++ {
@@ -68,6 +107,7 @@ func (wb *Workbook) AddSheet(name string, headers []string, rows [][]interface{}
 		candidate = string(r) + suffix
 	}
 	wb.Sheets = append(wb.Sheets, Sheet{Name: candidate, Headers: headers, Rows: rows})
+	return candidate
 }
 
 func sanitizeSheetName(name string) string {
@@ -131,6 +171,8 @@ func (s Sheet) sheetXML() string {
 			switch val := v.(type) {
 			case Formula:
 				fmt.Fprintf(&b, `<c r="%s"><f>%s</f><v>%s</v></c>`, ref, escapeXML(val.Expr), val.Value.String())
+			case NumberFormula:
+				fmt.Fprintf(&b, `<c r="%s"><f>%s</f><v>%s</v></c>`, ref, escapeXML(val.Expr), strconv.FormatFloat(val.Value, 'f', -1, 64))
 			case money.Amount:
 				fmt.Fprintf(&b, `<c r="%s"><v>%s</v></c>`, ref, val.String())
 			case float64:
@@ -206,6 +248,7 @@ func (wb *Workbook) Encode(w io.Writer) error {
 	workbookXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheets>%s</sheets>
+<calcPr calcId="191029" fullCalcOnLoad="1"/>
 </workbook>`, workbookSheetsXML.String())
 
 	if err := write("[Content_Types].xml", fmt.Sprintf(contentTypesXML, overrides.String())); err != nil {

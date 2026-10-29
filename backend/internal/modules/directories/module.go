@@ -61,6 +61,18 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/academic-groups/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.partnerStructure.DeleteAcademicGroup(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("GET /api/partners/{partner_id}/academic-periods", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.ListAcademicPeriods(w, r, u, r.PathValue("partner_id"))
+	}))
+	mux.HandleFunc("POST /api/partners/{partner_id}/academic-periods", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.CreateAcademicPeriod(w, r, u, r.PathValue("partner_id"))
+	}))
+	mux.HandleFunc("PUT /api/academic-periods/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.UpdateAcademicPeriod(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("DELETE /api/academic-periods/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.partnerStructure.DeleteAcademicPeriod(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/partners/{partner_id}/specialty-codes", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.partnerStructure.SpecialtyCodes(w, r, u, r.PathValue("partner_id"))
 	}))
@@ -102,6 +114,12 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/mentors", middleware.RequireAuth(m.db, m.entryReferences.Mentors))
 	mux.HandleFunc("POST /api/mentors", middleware.RequireAuth(m.db, m.entryReferences.CreateMentor))
+	mux.HandleFunc("PUT /api/mentors/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.entryReferences.UpdateMentor(w, r, u, r.PathValue("id"))
+	}))
+	mux.HandleFunc("DELETE /api/mentors/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.entryReferences.DeleteMentor(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/admin/directory-template", middleware.RequireAuth(m.db, m.partners.DirectoryTemplate))
 	mux.HandleFunc("POST /api/admin/directory-import", middleware.RequireAuth(m.db, m.partners.ImportDirectory))
 	mux.HandleFunc("GET /api/organizations", middleware.RequireAuth(m.db, m.referenceCatalogs.Organizations))

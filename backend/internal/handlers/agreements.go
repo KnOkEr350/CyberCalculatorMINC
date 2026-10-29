@@ -110,7 +110,7 @@ func normalizeAgreement(req agreementWriteRequest) (normalizedAgreement, error) 
 	if !validStatuses[req.Status] {
 		return normalizedAgreement{}, fmt.Errorf("некорректный статус соглашения")
 	}
-	validSignatures := map[string]bool{"unsigned": true, "paper": true, "qualified_electronic": true, "goskey": true}
+	validSignatures := map[string]bool{"unsigned": true, "paper": true, "qualified_electronic": true, "goskey": true, "edo": true, "gosedo": true}
 	if !validSignatures[req.SignatureMethod] {
 		return normalizedAgreement{}, fmt.Errorf("некорректный способ подписания")
 	}

@@ -56,8 +56,8 @@ run "Контракт API"             bash -c 'cd backend && go test ./internal
 run "Фронтенд"                 node frontend/check.mjs
 
 # Линтеры CI. staticcheck ставится тем же способом, что и в конвейере.
-run "staticcheck backend"      bash -c 'cd backend && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...'
-run "staticcheck tests"        bash -c 'cd tests && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...'
+run "staticcheck backend"      bash -c 'cd backend && go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...'
+run "staticcheck tests"        bash -c 'cd tests && go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...'
 
 if command -v semgrep >/dev/null 2>&1; then
   run "Semgrep (severity ERROR)" semgrep scan --error --metrics=off --severity ERROR \

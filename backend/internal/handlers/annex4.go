@@ -15,6 +15,7 @@ import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
 	"cybercalc/internal/money"
+	"cybercalc/internal/tariffs"
 	"cybercalc/internal/xlsx"
 )
 
@@ -138,7 +139,9 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 	categoryRows.Close()
 
 	aggregates := map[string]*annex4Aggregate{}
-	rows, err := h.DB.QueryContext(r.Context(), `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(a.number,''),e.category_code,e.audience,e.payload,e.amount_rub
+	planEntries := map[string][]regulatoryRow{}
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(a.number,''),e.category_code,e.audience,e.payload,e.amount_rub,
+		e.formula_amount_rub,e.cost_method
 		FROM entries e LEFT JOIN partners p ON p.id=e.partner_id LEFT JOIN agreements a ON a.id=e.agreement_id
 		JOIN entry_eligibility eligibility ON eligibility.id=e.id AND eligibility.eligible
 		WHERE e.it_company_id::text=$1 AND e.report_year=$2 AND e.period_type='plan' ORDER BY e.partner_id,e.category_code,e.id`, companyID, year)
@@ -149,9 +152,9 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 	for rows.Next() {
 		var partnerID string
 		var payload json.RawMessage
-		var amount money.Amount
-		var partnerName, agreementNo, category, audience string
-		if rows.Scan(&partnerID, &partnerName, &agreementNo, &category, &audience, &payload, &amount) != nil {
+		var amount, formulaAmount money.Amount
+		var partnerName, agreementNo, category, audience, costMethod string
+		if rows.Scan(&partnerID, &partnerName, &agreementNo, &category, &audience, &payload, &amount, &formulaAmount, &costMethod) != nil {
 			rows.Close()
 			middleware.WriteError(w, 500, "не удалось прочитать утверждённый план")
 			return
@@ -162,6 +165,9 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 			item = &annex4Aggregate{PartnerName: partnerName, AgreementNo: agreementNo, Audience: audience, CategoryCode: category, CategoryName: categories[category]}
 			aggregates[key] = item
 		}
+		planEntries[key] = append(planEntries[key], regulatoryRow{PartnerID: partnerID, Partner: partnerName, Category: category,
+			CategoryName: categories[category], Period: "plan", Audience: audience, Amount: amount, FormulaAmount: formulaAmount,
+			CostMethod: costMethod, Payload: payload})
 		volume, reach, _ := activityMetrics(category, numericPayload(payload))
 		item.PlanVolume += volume
 		item.PlanReach += reach
@@ -221,11 +227,25 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 		return left.PartnerName < right.PartnerName
 	})
 	headers := annex4Headers
+	card, err := tariffs.Load(r.Context(), h.DB, year)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось загрузить ставки отчётного года")
+		return
+	}
+	book := newCalcBook(card)
 	data := make([][]interface{}, 0, len(keys)+1)
 	for index, key := range keys {
 		item := aggregates[key]
 		_, _, unit := activityMetrics(item.CategoryCode, nil)
-		data = append(data, []interface{}{index + 1, item.PartnerName, item.AgreementNo, officeValue(item.Audience), item.CategoryName, item.CategoryName, "до 31 декабря", unit, item.PlanVolume, item.FactVolume, item.PlanReach, item.FactReach, fmt.Sprintf("%.2f", float64(item.PlanAmount)/1000)})
+		for _, entry := range planEntries[key] {
+			book.add(calcEntryFromRegulatory(entry, index+1))
+		}
+		var planCell interface{} = thousandRub(item.PlanAmount)
+		if len(planEntries[key]) > 0 {
+			expr, amount := book.sumForm(index+1, "plan")
+			planCell = thousandFormula(expr, amount)
+		}
+		data = append(data, []interface{}{index + 1, item.PartnerName, item.AgreementNo, officeValue(item.Audience), item.CategoryName, item.CategoryName, "до 31 декабря", unit, item.PlanVolume, item.FactVolume, item.PlanReach, item.FactReach, planCell})
 	}
 	if len(data) == 0 {
 		middleware.WriteError(w, http.StatusConflict, "для Приложения № 4 нет плановых или зафиксированных фактических данных")
@@ -234,6 +254,7 @@ func (h *ReportHandlers) exportAnnex4(w http.ResponseWriter, r *http.Request, u 
 	data = append(data, []interface{}{"Источник факта", "Snapshot " + snapshotID, "SHA-256 " + snapshotHash, "", "", "", "", "", "", "", "", "", ""})
 	wb := xlsx.New()
 	wb.AddSheet("Приложение № 4", headers, data)
+	book.write(wb)
 	body, err := wb.Bytes()
 	if err != nil {
 		middleware.WriteError(w, 500, "не удалось сформировать Приложение № 4")

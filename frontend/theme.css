@@ -779,3 +779,24 @@ table th, .card h2, .dashboard-toolbar h2 { text-transform: none; letter-spacing
 .top-scale-bar i { background: #d74d57; box-shadow: none; }
 .top-scale.yellow .top-scale-bar i { background: #e0a92a; box-shadow: none; }
 .top-scale.green .top-scale-bar i { background: #9ac02f; box-shadow: none; }
+
+.btn.secondary.danger { background: transparent; color: var(--bad); border-color: var(--bad); }
+.combo { position: relative; }
+.combo-list { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 2px); max-height: 280px; overflow-y: auto; background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-small); }
+.combo-list button { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.combo-list button:hover, .combo-list button.active { background: var(--blue-soft); }
+.combo-list button small { color: var(--muted); white-space: nowrap; }
+.combo-list p { margin: 0; padding: 10px; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--blue-soft); border-radius: 12px; font-size: 12px; }
+.chip button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 16px; max-height: 220px; overflow-y: auto; padding: 8px 0; }
+.schedule-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--panel); color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.schedule-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
+.schedule-panel { margin-top: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-alt); }
+.schedule-row { display: grid; grid-template-columns: 70px 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 6px; }
+.schedule-row.invalid input[type="time"] { border-color: var(--bad); }
+.period-row { align-items: end; }
+.period-row .flex { flex-wrap: nowrap; }
+.period-row .flex input { flex: 1; min-width: 0; }
+.period-row .flex .btn { flex: none; }

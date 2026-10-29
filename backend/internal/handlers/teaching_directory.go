@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 type TeachingDirectoryHandlers struct{ DB *sql.DB }
@@ -19,13 +21,16 @@ type TeachingDirectoryHandlers struct{ DB *sql.DB }
 var fourDigitOKZ = regexp.MustCompile(`^[0-9]{4}$`)
 
 type staffMemberRequest struct {
-	FIO                         string `json:"fio"`
-	CompanyPosition             string `json:"company_position"`
-	CompanyDepartment           string `json:"company_department"`
-	OKZCode                     string `json:"okz_code"`
-	ITExperienceDays            int    `json:"it_experience_days"`
-	ExperienceDocumentReference string `json:"experience_document_reference"`
-	RecordStatus                string `json:"record_status"`
+	FIO                         string    `json:"fio"`
+	CompanyPosition             string    `json:"company_position"`
+	CompanyDepartment           string    `json:"company_department"`
+	OKZCode                     string    `json:"okz_code"`
+	ITExperienceDays            int       `json:"it_experience_days"`
+	ExperienceDocumentReference string    `json:"experience_document_reference"`
+	RecordStatus                string    `json:"record_status"`
+	IsTeacher                   *bool     `json:"is_teacher,omitempty"`
+	TrainingDirections          *[]string `json:"training_directions,omitempty"`
+	PartnerIDs                  *[]string `json:"partner_ids,omitempty"`
 }
 
 type teachingPayoutRequest struct {
@@ -42,16 +47,21 @@ type teachingPayoutRequest struct {
 // resolveTeachingStaff turns the typed profile into an immutable snapshot in
 // the activity payload. Reports therefore remain readable after a profile is
 // updated, while entries.staff_member_id keeps the relational link.
-func (h *EntryHandlers) resolveTeachingStaff(r *http.Request, category, companyID string, payload map[string]interface{}, required bool) (string, error) {
+// The department and confirmation flag are server-derived snapshot values that
+// are not part of the form schema, so they are returned separately and merged
+// only after the payload has passed ValidatePayload.
+func (h *EntryHandlers) resolveTeachingStaff(r *http.Request, category, companyID string, payload map[string]interface{}, required bool) (string, map[string]interface{}, error) {
 	if category != "teachers" {
-		return "", nil
+		return "", nil, nil
 	}
+	delete(payload, "employee_department")
+	delete(payload, "staff_member_verified")
 	staffID := strings.TrimSpace(fmt.Sprint(payload["staff_member_id"]))
 	if staffID == "" || staffID == "<nil>" {
 		if required {
-			return "", errors.New("выберите сотрудника из справочника преподавателей")
+			return "", nil, errors.New("выберите сотрудника из справочника преподавателей")
 		}
-		return "", nil
+		return "", nil, nil
 	}
 	var fio, position, department, okzCode, document, status string
 	var experience int
@@ -59,20 +69,27 @@ func (h *EntryHandlers) resolveTeachingStaff(r *http.Request, category, companyI
 		experience_document_reference,record_status FROM staff_members WHERE id::text=$1 AND it_company_id::text=$2`, staffID, companyID).
 		Scan(&fio, &position, &department, &okzCode, &experience, &document, &status)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", errors.New("сотрудник не найден в справочнике вашей ИТ-компании")
+		return "", nil, errors.New("сотрудник не найден в справочнике вашей ИТ-компании")
 	}
 	if err != nil {
-		return "", errors.New("не удалось проверить профиль сотрудника")
+		return "", nil, errors.New("не удалось проверить профиль сотрудника")
 	}
 	payload["staff_member_id"] = staffID
 	payload["teacher_full_name"] = fio
 	payload["employee_position"] = position
-	payload["employee_department"] = department
 	payload["okz_code"] = okzCode
 	payload["it_experience_days"] = experience
 	payload["it_experience_reference"] = document
-	payload["staff_member_verified"] = status == "confirmed"
-	return staffID, nil
+	return staffID, map[string]interface{}{
+		"employee_department":   department,
+		"staff_member_verified": status == "confirmed",
+	}, nil
+}
+
+func mergeTeachingSnapshot(payload, snapshot map[string]interface{}) {
+	for key, value := range snapshot {
+		payload[key] = value
+	}
 }
 
 func canManageStaffMembers(u middleware.AuthUser) bool {
@@ -133,6 +150,84 @@ func validateStaffMemberRequest(req *staffMemberRequest) string {
 	return ""
 }
 
+func normalizeStaffLinks(req *staffMemberRequest) string {
+	if req.TrainingDirections != nil {
+		seen := map[string]bool{}
+		codes := make([]string, 0, len(*req.TrainingDirections))
+		for _, code := range *req.TrainingDirections {
+			code = strings.TrimSpace(code)
+			if !catalogSpecialtyCodePattern.MatchString(code) {
+				return "код направления подготовки должен иметь вид 09.03.04"
+			}
+			if !seen[code] {
+				seen[code] = true
+				codes = append(codes, code)
+			}
+		}
+		if len(codes) > 50 {
+			return "не более 50 направлений подготовки"
+		}
+		req.TrainingDirections = &codes
+	}
+	if req.PartnerIDs != nil {
+		seen := map[string]bool{}
+		ids := make([]string, 0, len(*req.PartnerIDs))
+		for _, id := range *req.PartnerIDs {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				return "пустой идентификатор учебного заведения"
+			}
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) > 200 {
+			return "не более 200 учебных заведений"
+		}
+		req.PartnerIDs = &ids
+	}
+	return ""
+}
+
+func saveStaffLinks(r *http.Request, tx *sql.Tx, staffID, companyID string, req staffMemberRequest) (string, error) {
+	if req.TrainingDirections != nil {
+		var known int
+		if err := tx.QueryRowContext(r.Context(), `SELECT count(DISTINCT code) FROM active_specialties WHERE code=ANY($1)`,
+			pq.Array(*req.TrainingDirections)).Scan(&known); err != nil {
+			return "", err
+		}
+		if known != len(*req.TrainingDirections) {
+			return "направление подготовки отсутствует в справочнике приказа № 27", nil
+		}
+		if _, err := tx.ExecContext(r.Context(), `DELETE FROM staff_member_directions WHERE staff_member_id::text=$1`, staffID); err != nil {
+			return "", err
+		}
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO staff_member_directions(staff_member_id,specialty_code)
+			SELECT $1::uuid,unnest($2::text[])`, staffID, pq.Array(*req.TrainingDirections)); err != nil {
+			return "", err
+		}
+	}
+	if req.PartnerIDs != nil {
+		var allowed int
+		if err := tx.QueryRowContext(r.Context(), `SELECT count(*) FROM partners WHERE id::text=ANY($1)
+			AND it_company_id::text=$2 AND partner_kind IN ('vuz','kolledj')`, pq.Array(*req.PartnerIDs), companyID).Scan(&allowed); err != nil {
+			return "", err
+		}
+		if allowed != len(*req.PartnerIDs) {
+			return "преподавателя можно привязать только к вузу или колледжу из ваших партнёров", nil
+		}
+		if _, err := tx.ExecContext(r.Context(), `DELETE FROM staff_member_partners WHERE staff_member_id::text=$1`, staffID); err != nil {
+			return "", err
+		}
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO staff_member_partners(staff_member_id,partner_id)
+			SELECT $1::uuid,unnest($2::text[])::uuid`, staffID, pq.Array(*req.PartnerIDs)); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
 func (h *TeachingDirectoryHandlers) ListStaffMembers(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 	if !canReadTenantData(u) {
 		middleware.WriteError(w, http.StatusForbidden, "нет доступа к профилям сотрудников")
@@ -141,11 +236,26 @@ func (h *TeachingDirectoryHandlers) ListStaffMembers(w http.ResponseWriter, r *h
 	company := itCompanyScope(u)
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	teachersOnly := r.URL.Query().Get("teachers_only") == "1"
+	includeArchived := r.URL.Query().Get("include_archived") == "1"
+	partnerID := strings.TrimSpace(r.URL.Query().Get("partner_id"))
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT s.id,s.it_company_id,s.fio,s.company_position,s.company_department,
-		s.okz_code,o.name,s.it_experience_days,s.experience_document_reference,s.record_status,s.created_at,s.updated_at
+		s.okz_code,o.name,s.it_experience_days,s.experience_document_reference,s.record_status,s.is_teacher,
+		COALESCE(s.archived_at::text,''),s.created_at,s.updated_at,
+		ARRAY(SELECT d.specialty_code FROM staff_member_directions d WHERE d.staff_member_id=s.id ORDER BY 1),
+		ARRAY(SELECT COALESCE(NULLIF(sp.title,sp.code),'') FROM staff_member_directions d
+			LEFT JOIN LATERAL (SELECT code,title FROM active_specialties WHERE code=d.specialty_code LIMIT 1) sp ON true
+			WHERE d.staff_member_id=s.id ORDER BY d.specialty_code),
+		ARRAY(SELECT sp.partner_id::text FROM staff_member_partners sp JOIN partners p ON p.id=sp.partner_id
+			WHERE sp.staff_member_id=s.id ORDER BY p.name),
+		ARRAY(SELECT p.name FROM staff_member_partners sp JOIN partners p ON p.id=sp.partner_id
+			WHERE sp.staff_member_id=s.id ORDER BY p.name)
 		FROM staff_members s JOIN okz_occupations o ON o.version_id=s.okz_version_id AND o.code=s.okz_code
 		WHERE ($1='' OR s.it_company_id::text=$1) AND ($2='' OR s.fio ILIKE '%'||$2||'%' OR s.company_position ILIKE '%'||$2||'%')
-		AND ($3='' OR s.record_status=$3) ORDER BY s.fio LIMIT 500`, company, query, status)
+		AND ($3='' OR s.record_status=$3) AND (NOT $4 OR s.is_teacher) AND ($5 OR s.archived_at IS NULL)
+		AND ($6='' OR NOT EXISTS (SELECT 1 FROM staff_member_partners sp WHERE sp.staff_member_id=s.id)
+			OR EXISTS (SELECT 1 FROM staff_member_partners sp WHERE sp.staff_member_id=s.id AND sp.partner_id::text=$6))
+		ORDER BY s.fio LIMIT 500`, company, query, status, teachersOnly, includeArchived, partnerID)
 	if err != nil {
 		middleware.WriteError(w, http.StatusInternalServerError, "не удалось загрузить сотрудников")
 		return
@@ -153,16 +263,29 @@ func (h *TeachingDirectoryHandlers) ListStaffMembers(w http.ResponseWriter, r *h
 	defer rows.Close()
 	items := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		var id, companyID, fio, position, department, code, okzName, document, recordStatus string
+		var id, companyID, fio, position, department, code, okzName, document, recordStatus, archivedAt string
 		var experience int
+		var isTeacher bool
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&id, &companyID, &fio, &position, &department, &code, &okzName, &experience, &document, &recordStatus, &createdAt, &updatedAt); err != nil {
+		var directions, directionTitles, partnerIDs, partnerNames pq.StringArray
+		if err := rows.Scan(&id, &companyID, &fio, &position, &department, &code, &okzName, &experience, &document, &recordStatus,
+			&isTeacher, &archivedAt, &createdAt, &updatedAt, &directions, &directionTitles, &partnerIDs, &partnerNames); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "не удалось прочитать сотрудника")
 			return
+		}
+		labels := make([]string, 0, len(directions))
+		for index, direction := range directions {
+			label := direction
+			if index < len(directionTitles) && directionTitles[index] != "" {
+				label += " " + directionTitles[index]
+			}
+			labels = append(labels, label)
 		}
 		items = append(items, map[string]interface{}{"id": id, "it_company_id": companyID, "fio": fio, "company_position": position,
 			"company_department": department, "okz_code": code, "okz_name": okzName, "it_experience_days": experience,
 			"experience_document_reference": document, "record_status": recordStatus, "eligible": recordStatus == "confirmed" && experience >= 365,
+			"is_teacher": isTeacher, "archived": archivedAt != "", "training_directions": []string(directions), "training_direction_labels": labels,
+			"partner_ids": []string(partnerIDs), "partner_names": []string(partnerNames),
 			"created_at": createdAt, "updated_at": updatedAt})
 	}
 	if err := rows.Err(); err != nil {
@@ -190,17 +313,31 @@ func (h *TeachingDirectoryHandlers) CreateStaffMember(w http.ResponseWriter, r *
 		middleware.WriteError(w, http.StatusBadRequest, message)
 		return
 	}
+	if message := normalizeStaffLinks(&req); message != "" {
+		middleware.WriteError(w, http.StatusBadRequest, message)
+		return
+	}
 	if req.RecordStatus == "confirmed" && !canConfirmStaffMember(u) {
 		middleware.WriteError(w, http.StatusForbidden, "подтвердить профиль может только администратор организации")
 		return
 	}
+	isTeacher := true
+	if req.IsTeacher != nil {
+		isTeacher = *req.IsTeacher
+	}
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка транзакции")
+		return
+	}
+	defer tx.Rollback()
 	var id string
-	err := h.DB.QueryRowContext(r.Context(), `INSERT INTO staff_members
-		(it_company_id,fio,company_position,company_department,okz_version_id,okz_code,it_experience_days,experience_document_reference,record_status,created_by)
-		SELECT $1,$2,$3,$4,v.id,$5,$6,$7,$8,$9 FROM okz_catalog_versions v
+	err = tx.QueryRowContext(r.Context(), `INSERT INTO staff_members
+		(it_company_id,fio,company_position,company_department,okz_version_id,okz_code,it_experience_days,experience_document_reference,record_status,is_teacher,created_by)
+		SELECT $1,$2,$3,$4,v.id,$5,$6,$7,$8,$9,$10 FROM okz_catalog_versions v
 		JOIN okz_occupations o ON o.version_id=v.id AND o.code=$5 WHERE v.status='active' RETURNING id`,
 		companyID, req.FIO, req.CompanyPosition, req.CompanyDepartment, req.OKZCode, req.ITExperienceDays,
-		req.ExperienceDocumentReference, req.RecordStatus, u.ID).Scan(&id)
+		req.ExperienceDocumentReference, req.RecordStatus, isTeacher, u.ID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		middleware.WriteError(w, http.StatusBadRequest, "код ОКЗ отсутствует в активном справочнике")
 		return
@@ -209,7 +346,21 @@ func (h *TeachingDirectoryHandlers) CreateStaffMember(w http.ResponseWriter, r *
 		middleware.WriteError(w, http.StatusConflict, "сотрудник с таким ФИО уже существует или данные не прошли проверку")
 		return
 	}
-	_ = logAudit(r.Context(), h.DB, "staff_member", id, "create", u.ID, "", nil, req)
+	if message, err := saveStaffLinks(r, tx, id, companyID, req); err != nil || message != "" {
+		if message == "" {
+			message = "не удалось сохранить направления и учебные заведения"
+		}
+		middleware.WriteError(w, http.StatusBadRequest, message)
+		return
+	}
+	if err := logAudit(r.Context(), tx, "staff_member", id, "create", u.ID, "", nil, req); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка аудита")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -231,15 +382,26 @@ func (h *TeachingDirectoryHandlers) UpdateStaffMember(w http.ResponseWriter, r *
 		middleware.WriteError(w, http.StatusBadRequest, message)
 		return
 	}
+	if message := normalizeStaffLinks(&req); message != "" {
+		middleware.WriteError(w, http.StatusBadRequest, message)
+		return
+	}
 	if req.RecordStatus == "confirmed" && !canConfirmStaffMember(u) {
 		middleware.WriteError(w, http.StatusForbidden, "подтвердить профиль может только администратор организации")
 		return
 	}
-	result, err := h.DB.ExecContext(r.Context(), `UPDATE staff_members s SET fio=$1,company_position=$2,company_department=$3,
-		okz_version_id=v.id,okz_code=$4,it_experience_days=$5,experience_document_reference=$6,record_status=$7,updated_by=$8,updated_at=now()
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка транзакции")
+		return
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(r.Context(), `UPDATE staff_members s SET fio=$1,company_position=$2,company_department=$3,
+		okz_version_id=v.id,okz_code=$4,it_experience_days=$5,experience_document_reference=$6,record_status=$7,updated_by=$8,updated_at=now(),
+		is_teacher=COALESCE($11,s.is_teacher)
 		FROM okz_catalog_versions v JOIN okz_occupations o ON o.version_id=v.id AND o.code=$4
-		WHERE s.id::text=$9 AND s.it_company_id::text=$10 AND v.status='active'`, req.FIO, req.CompanyPosition,
-		req.CompanyDepartment, req.OKZCode, req.ITExperienceDays, req.ExperienceDocumentReference, req.RecordStatus, u.ID, id, companyID)
+		WHERE s.id::text=$9 AND s.it_company_id::text=$10 AND s.archived_at IS NULL AND v.status='active'`, req.FIO, req.CompanyPosition,
+		req.CompanyDepartment, req.OKZCode, req.ITExperienceDays, req.ExperienceDocumentReference, req.RecordStatus, u.ID, id, companyID, req.IsTeacher)
 	if err != nil {
 		middleware.WriteError(w, http.StatusConflict, "не удалось сохранить профиль сотрудника")
 		return
@@ -249,8 +411,74 @@ func (h *TeachingDirectoryHandlers) UpdateStaffMember(w http.ResponseWriter, r *
 		middleware.WriteError(w, http.StatusNotFound, "сотрудник или код ОКЗ не найден")
 		return
 	}
-	_ = logAudit(r.Context(), h.DB, "staff_member", id, "update", u.ID, "", nil, req)
+	if message, err := saveStaffLinks(r, tx, id, companyID, req); err != nil || message != "" {
+		if message == "" {
+			message = "не удалось сохранить направления и учебные заведения"
+		}
+		middleware.WriteError(w, http.StatusBadRequest, message)
+		return
+	}
+	if err := logAudit(r.Context(), tx, "staff_member", id, "update", u.ID, "", nil, req); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка аудита")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка сохранения")
+		return
+	}
 	middleware.WriteJSON(w, http.StatusOK, map[string]string{"id": id})
+}
+
+// Сотрудник, на которого уже ссылаются мероприятия, не удаляется физически:
+// записи хранят ссылку и снимок профиля, поэтому профиль уходит в архив и
+// пропадает из списков выбора.
+func (h *TeachingDirectoryHandlers) DeleteStaffMember(w http.ResponseWriter, r *http.Request, u middleware.AuthUser, id string) {
+	if u.Role != models.RoleSuperAdmin || u.EntityType == models.EntityEduInst {
+		middleware.WriteError(w, http.StatusForbidden, "удалять преподавателей может только системный администратор")
+		return
+	}
+	companyID, ok := requireITCompanyForWrite(w, u)
+	if !ok {
+		return
+	}
+	tx, err := h.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка транзакции")
+		return
+	}
+	defer tx.Rollback()
+	var fio string
+	var used bool
+	err = tx.QueryRowContext(r.Context(), `SELECT s.fio,EXISTS(SELECT 1 FROM entries e WHERE e.staff_member_id=s.id)
+		FROM staff_members s WHERE s.id::text=$1 AND s.it_company_id::text=$2 AND s.archived_at IS NULL FOR UPDATE`, id, companyID).Scan(&fio, &used)
+	if errors.Is(err, sql.ErrNoRows) {
+		middleware.WriteError(w, http.StatusNotFound, "сотрудник не найден")
+		return
+	}
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось прочитать сотрудника")
+		return
+	}
+	mode := "deleted"
+	if used {
+		mode = "archived"
+		_, err = tx.ExecContext(r.Context(), `UPDATE staff_members SET archived_at=now(),updated_by=$2,updated_at=now() WHERE id::text=$1`, id, u.ID)
+	} else {
+		_, err = tx.ExecContext(r.Context(), `DELETE FROM staff_members WHERE id::text=$1`, id)
+	}
+	if err != nil {
+		middleware.WriteError(w, http.StatusConflict, "не удалось удалить сотрудника")
+		return
+	}
+	if err := logAudit(r.Context(), tx, "staff_member", id, "delete", u.ID, "", map[string]string{"fio": fio}, map[string]string{"mode": mode}); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка аудита")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "ошибка удаления")
+		return
+	}
+	middleware.WriteJSON(w, http.StatusOK, map[string]string{"id": id, "result": mode})
 }
 
 func validateTeachingPayoutRequest(req *teachingPayoutRequest) string {

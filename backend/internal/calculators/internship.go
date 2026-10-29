@@ -59,14 +59,13 @@ func (internshipCalc) Fields() []FieldSpec {
 		{Key: "period_end", Label: "Дата окончания", Type: "date"},
 		{Key: "mentor_assignment_start", Label: "Наставник назначен с", Type: "date", Required: true},
 		{Key: "mentor_assignment_end", Label: "Наставник назначен по", Type: "date", Required: true},
-		{Key: "specialty_code", Label: "Код ИТ-специальности по приказу № 27", Type: "text"},
+		{Key: "specialty_code", Label: "Код ИТ-специальности по приказу № 27", Type: "text", Widget: "specialty"},
 		{Key: "duration_months", Label: "Продолжительность, мес.", Type: "number", Required: true},
 		{Key: "student_load_hours_per_month", Label: "Нагрузка студента, ч/мес", Type: "number", Required: true},
 		{Key: "mentor_load_hours_per_month", Label: "Нагрузка наставника, ч/мес", Type: "number", Required: true},
 		{Key: "monthly_salary_rub", Label: "Заработная плата студента в месяц, руб.", Type: "number", Minimum: 0},
 		{Key: "internship_agreement_reference", Label: "Реквизиты договора о стажировке", Type: "text", MaxLength: 1000},
-		{Key: "labor_contract_number", Label: "Номер трудового договора", Type: "text", MaxLength: 100},
-		{Key: "labor_contract_date", Label: "Дата трудового договора", Type: "date"},
+		{Key: "mentor_supplementary_agreement_reference", Label: "Реквизиты доп. соглашения с наставником о стажировке", Type: "text", MaxLength: 1000},
 		{Key: "mentor_order_number", Label: "Номер приказа о наставнике", Type: "text", Required: true, MaxLength: 100},
 		{Key: "mentor_order_date", Label: "Дата приказа о наставнике", Type: "date", Required: true},
 		{Key: "mentor_order_reference", Label: "Дополнительные реквизиты приказа о наставнике", Type: "text", MaxLength: 1000},
@@ -84,17 +83,29 @@ func (internshipCalc) Validate(payload map[string]interface{}) error {
 }
 
 func (employmentPracticeCalc) Fields() []FieldSpec {
-	fields := internshipCalc{}.Fields()
+	base := internshipCalc{}.Fields()
+	fields := make([]FieldSpec, 0, len(base)+14)
 	// PRA-01: у практики есть самостоятельная карточка. Для неё курс,
 	// специальность и точный период - не пояснения, а обязательные
 	// типизированные реквизиты, как и сведения о срочном ТД.
-	for index := range fields {
-		switch fields[index].Key {
-		case "course", "period_start", "period_end", "specialty_code", "labor_contract_number", "labor_contract_date":
-			fields[index].Required = true
+	for _, field := range base {
+		switch field.Key {
+		case "mentor_supplementary_agreement_reference":
+			continue
+		case "course", "period_start", "period_end", "specialty_code":
+			field.Required = true
+		}
+		fields = append(fields, field)
+		if field.Key == "internship_agreement_reference" {
+			fields = append(fields,
+				FieldSpec{Key: "labor_contract_number", Label: "Номер трудового договора", Type: "text", Required: true, MaxLength: 100},
+				FieldSpec{Key: "labor_contract_date", Label: "Дата трудового договора", Type: "date", Required: true},
+			)
 		}
 	}
 	return append(fields,
+		FieldSpec{Key: "practice_order_number", Label: "Номер приказа о направлении на практику", Type: "text", MaxLength: 100},
+		FieldSpec{Key: "practice_order_date", Label: "Дата приказа о направлении на практику", Type: "date"},
 		FieldSpec{Key: "labor_contract_type", Label: "Тип трудового договора", Type: "select", Required: true, Options: []string{"fixed_term", "other"}},
 		FieldSpec{Key: "practice_agreement_number", Label: "Номер договора о практической подготовке", Type: "text", Required: true, MaxLength: 100},
 		FieldSpec{Key: "practice_agreement_date", Label: "Дата договора о практической подготовке", Type: "date", Required: true},

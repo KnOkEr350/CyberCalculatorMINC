@@ -110,6 +110,8 @@ type Partner struct {
 	LicenseNumber         string    `json:"license_number,omitempty"`
 	LicenseStatus         string    `json:"license_status,omitempty"`
 	InstitutionStatus     string    `json:"institution_status,omitempty"`
+	Region                string    `json:"region,omitempty"`
+	SignatureMethods      []string  `json:"signature_methods"`
 	OrgUnitsCount         int       `json:"org_units_count"`
 	AcademicGroupsCount   int       `json:"academic_groups_count"`
 	CreatedAt             time.Time `json:"created_at"`

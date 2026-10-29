@@ -54,11 +54,11 @@ jobs:
 
       - name: Staticcheck backend
         working-directory: backend
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
       - name: Staticcheck external tests
         working-directory: tests
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
       - name: Lint GitHub Actions workflow
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12

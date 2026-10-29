@@ -81,6 +81,9 @@ func (m *Module) registerTeachingRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/staff-members/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
 		m.teaching.UpdateStaffMember(w, r, u, r.PathValue("id"))
 	}))
+	mux.HandleFunc("DELETE /api/staff-members/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
+		m.teaching.DeleteStaffMember(w, r, u, r.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /api/teaching-payouts", middleware.RequireAuth(m.db, m.teaching.ListTeachingPayouts))
 	mux.HandleFunc("POST /api/teaching-payouts", middleware.RequireAuth(m.db, m.teaching.CreateTeachingPayout))
 	mux.HandleFunc("PUT /api/teaching-payouts/{id}", middleware.RequireAuth(m.db, func(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {

@@ -20,6 +20,7 @@ import (
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/money"
 	"cybercalc/internal/platform/activityprojection"
+	"cybercalc/internal/tariffs"
 	"cybercalc/internal/xlsx"
 	"github.com/lib/pq"
 )
@@ -27,6 +28,8 @@ import (
 type regulatoryRow struct {
 	PartnerID, Partner, AgreementID, Agreement, Category, CategoryName, Period, Audience string
 	Amount                                                                               money.Amount
+	FormulaAmount                                                                        money.Amount
+	CostMethod                                                                           string
 	Payload                                                                              []byte
 	Eligible                                                                             bool
 	Documents                                                                            []string
@@ -214,7 +217,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	}
 	// conds contains only fixed SQL fragments and $N placeholders; request values are in args.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
-	query := `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(e.agreement_id::text,''),COALESCE(a.number,''),e.category_code,c.name,e.period_type,e.audience,e.amount_rub,e.payload,eligibility.eligible,
+	query := `SELECT COALESCE(e.partner_id::text,''),COALESCE(p.name,''),COALESCE(e.agreement_id::text,''),COALESCE(a.number,''),e.category_code,c.name,e.period_type,e.audience,e.amount_rub,e.formula_amount_rub,e.cost_method,e.payload,eligibility.eligible,
 		ARRAY(SELECT DISTINCT att.document_type||':'||att.review_status FROM attachments att WHERE att.entry_id=e.id AND att.retention_expires_at>now())
 		FROM entries e JOIN entry_eligibility eligibility ON eligibility.id=e.id LEFT JOIN partners p ON p.id=e.partner_id LEFT JOIN agreements a ON a.id=e.agreement_id JOIN activity_categories c ON c.code=e.category_code WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY p.name,c.name,e.period_type,e.id`
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
@@ -227,7 +230,7 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 	for rows.Next() {
 		var item regulatoryRow
 		var documents pq.StringArray
-		if rows.Scan(&item.PartnerID, &item.Partner, &item.AgreementID, &item.Agreement, &item.Category, &item.CategoryName, &item.Period, &item.Audience, &item.Amount, &item.Payload, &item.Eligible, &documents) != nil {
+		if rows.Scan(&item.PartnerID, &item.Partner, &item.AgreementID, &item.Agreement, &item.Category, &item.CategoryName, &item.Period, &item.Audience, &item.Amount, &item.FormulaAmount, &item.CostMethod, &item.Payload, &item.Eligible, &documents) != nil {
 			middleware.WriteError(w, 500, "не удалось прочитать отчёт")
 			return
 		}
@@ -254,11 +257,19 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		middleware.WriteError(w, 400, "CSV доступен только для конструктора план-факт-дельта")
 		return
 	}
+	card, err := tariffs.Load(r.Context(), h.DB, year)
+	if err != nil {
+		middleware.WriteError(w, 500, "не удалось загрузить ставки отчётного года")
+		return
+	}
+	book := newCalcBook(card)
 	wb := xlsx.New()
 	filename := ""
 	switch kind {
 	case "annex1":
-		for _, sheet := range buildAnnex1Sheets(data) {
+		sheets := buildAnnex1Sheets(data)
+		formulizeAnnex1(sheets, data, book)
+		for _, sheet := range sheets {
 			wb.AddSheet(sheet.Name, regulatoryHeaders["annex1"], sheet.Rows)
 		}
 		filename = fmt.Sprintf("приложение_1_%d.xlsx", year)
@@ -266,19 +277,24 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 		// Режим «Отчёт по наставникам» - тот же набор данных в разрезе
 		// наставников (ТЗ, п. 9.2).
 		if strings.TrimSpace(r.URL.Query().Get("mode")) == "mentors" {
-			wb.AddSheet("Отчёт по наставникам", regulatoryHeaders["annex2_mentors"], buildMentorRows(data))
+			mentorRows := buildMentorRows(data)
+			formulizeMentors(mentorRows, data, book)
+			wb.AddSheet("Отчёт по наставникам", regulatoryHeaders["annex2_mentors"], mentorRows)
 			filename = fmt.Sprintf("отчет_по_наставникам_%d.xlsx", year)
 			break
 		}
-		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], buildAnnex2Rows(data))
+		annex2Rows := buildAnnex2Rows(data)
+		formulizeAnnex2(annex2Rows, data, book)
+		wb.AddSheet("Приложение № 2", regulatoryHeaders["annex2"], annex2Rows)
 		filename = fmt.Sprintf("приложение_2_%d.xlsx", year)
 	case "annex5":
 		var target sql.NullString
 		_ = h.DB.QueryRowContext(r.Context(), `SELECT target_amount_rub::text FROM organization_budget_targets WHERE it_company_id::text=$1 AND report_year=$2`, company, year).Scan(&target)
-		targetAmount, _ := money.Parse(target.String) // пустая/некорректная база 3% -> 0, процент по норме покажет "-"
-		out, planTotal, factTotal := buildAnnex5Rows(data, targetAmount)
+		targetAmount, targetErr := money.Parse(target.String) // пустая/некорректная база 3% -> 0, процент по норме покажет "-"
+		out, _, _ := buildAnnex5Rows(data, targetAmount)
+		normRow := formulizeAnnex5(out, data, book, year, targetAmount, target.Valid && targetErr == nil)
 		wb.AddSheet("Приложение № 5", regulatoryHeaders["annex5"], out)
-		wb.AddSheet("Норматив 3%", []string{"Год", "Норматив, руб.", "План, руб.", "Факт, руб."}, [][]interface{}{{year, target.String, planTotal, factTotal}})
+		wb.AddSheet("Норматив 3%", []string{"Год", "Норматив, руб.", "План, руб.", "Факт, руб."}, [][]interface{}{normRow})
 		filename = fmt.Sprintf("приложение_5_%d.xlsx", year)
 	case "plan_fact":
 		out := buildPlanFactRows(data)
@@ -292,12 +308,13 @@ func (h *ReportHandlers) ExportRegulatory(w http.ResponseWriter, r *http.Request
 				reportFilters("partner_id", partner, "agreement_id", agreement, "mode", strings.TrimSpace(r.URL.Query().Get("mode")), "risk_filter", riskFilter, "format", "csv"), year, body)
 			return
 		}
-		wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], out)
+		wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], formulizePlanFact(out, data, book))
 		filename = fmt.Sprintf("план_факт_дельта_%d.xlsx", year)
 	default:
 		middleware.WriteError(w, 400, "неизвестный тип регламентного отчёта")
 		return
 	}
+	book.write(wb)
 	body, err := wb.Bytes()
 	if err != nil {
 		middleware.WriteError(w, 500, "не удалось сформировать Excel")
@@ -362,7 +379,7 @@ func (h *ReportHandlers) exportPlanFactProjection(w http.ResponseWriter, r *http
 		return
 	}
 	wb := xlsx.New()
-	wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], out)
+	wb.AddSheet("План-Факт-Дельта", regulatoryHeaders["plan_fact"], formulizePlanFactProjection(out))
 	body, err := wb.Bytes()
 	if err != nil {
 		middleware.WriteError(w, 500, "не удалось сформировать Excel")
@@ -672,6 +689,8 @@ func tableCSV(headers []string, rows [][]interface{}) ([]byte, error) {
 		record := make([]string, len(row))
 		for i, value := range row {
 			switch v := value.(type) {
+			case xlsx.Formula, xlsx.NumberFormula:
+				record[i] = xlsx.CellText(v)
 			case money.Amount:
 				record[i] = v.String()
 			case float64:

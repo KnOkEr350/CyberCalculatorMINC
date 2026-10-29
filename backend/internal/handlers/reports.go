@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"cybercalc/internal/middleware"
+	"cybercalc/internal/models"
 	"cybercalc/internal/platform/activityprojection"
 	"cybercalc/internal/tariffs"
 	"cybercalc/internal/xlsx"
@@ -187,15 +188,39 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		return
 	}
 	audiences := map[string]string{"vuz": "Вуз", "kolledj": "СПО", "school": "Школа"}
+	card, err := tariffs.Load(r.Context(), h.DB, year)
+	if err != nil {
+		middleware.WriteError(w, http.StatusInternalServerError, "не удалось загрузить ставки отчётного года")
+		return
+	}
+	book := newCalcBook(card)
+	calcRows := make([]int, len(data))
+	payloads := make([]map[string]interface{}, len(data))
+	for i, d := range data {
+		payload := map[string]interface{}{}
+		_ = json.Unmarshal(d.Payload, &payload)
+		payloads[i] = payload
+		calcRows[i] = book.add(calcEntry{
+			Partner: d.PartnerName.String, CategoryCode: d.CategoryCode, CategoryName: categoryNames[d.CategoryCode],
+			Title: activityTitle(regulatoryRow{CategoryName: categoryNames[d.CategoryCode]}, payload), Audience: d.Audience,
+			Period: periodType, CostMethod: d.CostMethod, Payload: payload, Amount: d.AmountRub, FormulaAmount: d.FormulaAmountRub,
+		})
+	}
+	methodCell := func(i int) interface{} {
+		return xlsx.Formula{Expr: book.methodRef(calcRows[i]), Value: cellAmount(book.rows[calcRows[i]-2][calcColMethod])}
+	}
+	amountCell := func(i int) interface{} {
+		return xlsx.Formula{Expr: book.amountRef(calcRows[i]), Value: data[i].AmountRub}
+	}
 
 	wb := xlsx.New()
 	headers := []string{"Партнёр", "Соглашение", "Тип / статус соглашения", "РОИВ", "Группа лиц", "Договор о взаимодействии", "Категория активности", "Аудитория", "Метод стоимости", "Сумма по методике, руб.", "Сумма в отчёте, руб.", "Параметры", "Статус отчёта"}
 
 	// Сводный лист для МЦ - все партнёры вместе.
 	var consolidated [][]interface{}
-	var total money.Amount
+	var total, methodTotal money.Amount
 	preliminary := false
-	for _, d := range data {
+	for i, d := range data {
 		if d.ReportStatus != "approved" || !d.Eligible {
 			preliminary = true
 		}
@@ -204,7 +229,8 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			partnerName = d.PartnerName.String
 		}
 		costMethod := map[string]string{"average": "Средние значения", "actual": "Фактические затраты"}[d.CostMethod]
-		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), reportEntryStatus(d)})
+		consolidated = append(consolidated, []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, methodCell(i), amountCell(i), readablePayload(d.CategoryCode, d.Payload), reportEntryStatus(d)})
+		methodTotal, _ = money.Add(methodTotal, cellAmount(methodCell(i)))
 		var sumErr error
 		total, sumErr = money.Add(total, d.AmountRub)
 		if sumErr != nil {
@@ -216,11 +242,12 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 	if preliminary {
 		totalLabel, totalStatus = "ИТОГО (включая предварительные данные)", "Предварительная выгрузка"
 	}
-	var totalCell interface{} = total
+	var totalCell, methodTotalCell interface{} = total, methodTotal
 	if len(data) > 0 {
 		totalCell = xlsx.Formula{Expr: xlsx.SumFormula(10, 2, len(data)+1), Value: total}
+		methodTotalCell = xlsx.Formula{Expr: xlsx.SumFormula(9, 2, len(data)+1), Value: methodTotal}
 	}
-	consolidated = append(consolidated, []interface{}{totalLabel, "", "", "", "", "", "", "", "", "", totalCell, "", totalStatus})
+	consolidated = append(consolidated, []interface{}{totalLabel, "", "", "", "", "", "", "", "", methodTotalCell, totalCell, "", totalStatus})
 	wb.AddSheet("Сводный для МЦ", headers, consolidated)
 	groupIDs := map[string]bool{}
 	for _, row := range data {
@@ -267,7 +294,7 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 		for _, row := range consolidated {
 			cells := []string{}
 			for _, v := range row {
-				cells = append(cells, fmt.Sprint(v))
+				cells = append(cells, xlsx.CellText(v))
 			}
 			docRows = append(docRows, cells)
 		}
@@ -303,21 +330,17 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 					cols = append(cols, f.Label)
 				}
 			}
-			cols = append(cols, "Сумма, руб.")
-			hoursCol, rateCol := -1, -1
-			if categoryFilter == "teachers" {
-				for i, f := range fields {
-					if f.Key == "academic_hours" {
-						hoursCol = 3 + i
-					}
-				}
-				rateCol = len(cols) - 1
-				cols = append(cols[:rateCol], "Ставка, руб./ак.ч.", "Сумма, руб.")
+			cols = append(cols, "Расчёт по методике", "Сумма по методике, руб.", "Сумма в отчёте, руб.")
+			fieldCol := map[string]int{}
+			for i, f := range fields {
+				fieldCol[f.Key] = 3 + i
 			}
+			methodCol, amountCol := len(cols)-2, len(cols)-1
 			details := [][]interface{}{}
-			for _, d := range data {
-				var payload map[string]interface{}
-				json.Unmarshal(d.Payload, &payload)
+			var detailMethod, detailAmount money.Amount
+			for i, d := range data {
+				payload := payloads[i]
+				rowNum := len(details) + 2
 				row := []interface{}{d.PartnerName.String, d.AgreementNumber, d.RegionalAuthorityName}
 				for _, f := range fields {
 					v, ok := payload[f.Key]
@@ -325,27 +348,60 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 						v = ""
 					}
 					if text, ok := v.(string); ok {
-						v = officeValue(text)
+						if f.Type == "number" {
+							if number, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+								v = number
+							} else {
+								v = officeValue(text)
+							}
+						} else {
+							v = officeValue(text)
+						}
 					}
 					row = append(row, v)
 				}
-				if rateCol >= 0 {
-					rowNum := len(details) + 2
-					var cell interface{} = d.AmountRub
-					hours, _ := payload["academic_hours"].(float64)
-					code := map[string]string{"vuz": tariffs.TeacherHourVuz, "kolledj": tariffs.TeacherHourKolledj}[d.Audience]
-					perHour, rateErr := tariffs.Default().Float(code)
-					if hoursCol >= 0 && hours > 0 && d.CostMethod == "average" && code != "" && rateErr == nil {
-						row = append(row, perHour)
-						cell = xlsx.Formula{Expr: fmt.Sprintf("ROUND(%s*%s,2)", xlsx.Ref(hoursCol, rowNum), xlsx.Ref(rateCol, rowNum)), Value: d.AmountRub}
-					} else {
-						row = append(row, "")
+				method := methodCell(i)
+				description := fmt.Sprint(book.rows[calcRows[i]-2][8])
+				if breakdown, bErr := calculators.BreakdownWith(card, d.CategoryCode, models.Audience(d.Audience), payload); bErr == nil && breakdown.Amount == cellAmount(method) {
+					inline := true
+					expr := breakdown.Excel(func(index int) string {
+						input := breakdown.Inputs[index]
+						if input.IsRate() {
+							if rateRow, ok := book.rateRow[input.RateCode]; ok {
+								return xlsx.SheetRef(ratesSheetName, 2, rateRow)
+							}
+							inline = false
+							return ""
+						}
+						col, ok := fieldCol[input.Key]
+						if !ok {
+							inline = false
+							return ""
+						}
+						return xlsx.Ref(col, rowNum)
+					})
+					if inline {
+						method = xlsx.Formula{Expr: expr, Value: breakdown.Amount}
 					}
-					row = append(row, cell)
-				} else {
-					row = append(row, d.AmountRub)
 				}
+				var amount interface{} = d.AmountRub
+				if d.CostMethod != "actual" && d.AmountRub == cellAmount(method) {
+					amount = xlsx.Formula{Expr: xlsx.Ref(methodCol, rowNum), Value: d.AmountRub}
+				}
+				detailMethod, _ = money.Add(detailMethod, cellAmount(method))
+				detailAmount, _ = money.Add(detailAmount, d.AmountRub)
+				row = append(row, description, method, amount)
 				details = append(details, row)
+			}
+			if len(details) > 0 {
+				totalRow := make([]interface{}, len(cols))
+				for i := range totalRow {
+					totalRow[i] = ""
+				}
+				totalRow[0] = "ИТОГО"
+				totalRow[methodCol] = xlsx.Formula{Expr: xlsx.SumFormula(methodCol, 2, len(details)+1), Value: detailMethod}
+				totalRow[amountCol] = xlsx.Formula{Expr: xlsx.SumFormula(amountCol, 2, len(details)+1), Value: detailAmount}
+				details = append(details, totalRow)
 			}
 			wb.AddSheet("Детализация", cols, details)
 		}
@@ -353,8 +409,10 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 
 	// Отдельный лист по каждому партнёру.
 	byPartner := map[string][][]interface{}{}
+	partnerMethod := map[string]money.Amount{}
+	partnerAmount := map[string]money.Amount{}
 	var order []string
-	for _, d := range data {
+	for i, d := range data {
 		partnerName := "Без партнёра"
 		if d.PartnerName.Valid {
 			partnerName = d.PartnerName.String
@@ -364,11 +422,18 @@ func (h *ReportHandlers) Export(w http.ResponseWriter, r *http.Request, u middle
 			order = append(order, key)
 		}
 		costMethod := map[string]string{"average": "Средние значения", "actual": "Фактические затраты"}[d.CostMethod]
-		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, d.FormulaAmountRub, d.AmountRub, readablePayload(d.CategoryCode, d.Payload), reportEntryStatus(d)})
+		byPartner[key] = append(byPartner[key], []interface{}{partnerName, d.AgreementNumber, officeValue(d.AgreementKind) + " / " + officeValue(d.AgreementStatus), d.RegionalAuthorityName, d.LegalEntityGroup, d.InteractionAgreement, categoryNames[d.CategoryCode], audiences[d.Audience], costMethod, methodCell(i), amountCell(i), readablePayload(d.CategoryCode, d.Payload), reportEntryStatus(d)})
+		partnerMethod[key], _ = money.Add(partnerMethod[key], cellAmount(methodCell(i)))
+		partnerAmount[key], _ = money.Add(partnerAmount[key], d.AmountRub)
 	}
 	for _, key := range order {
-		wb.AddSheet(fmt.Sprint(byPartner[key][0][0]), headers, byPartner[key])
+		rows := byPartner[key]
+		rows = append(rows, []interface{}{"ИТОГО", "", "", "", "", "", "", "", "",
+			xlsx.Formula{Expr: xlsx.SumFormula(9, 2, len(rows)+1), Value: partnerMethod[key]},
+			xlsx.Formula{Expr: xlsx.SumFormula(10, 2, len(rows)+1), Value: partnerAmount[key]}, "", ""})
+		wb.AddSheet(fmt.Sprint(rows[0][0]), headers, rows)
 	}
+	book.write(wb)
 
 	body, err := wb.Bytes()
 	if err != nil {

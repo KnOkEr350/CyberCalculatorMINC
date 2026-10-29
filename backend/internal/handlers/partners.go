@@ -7,6 +7,8 @@ import (
 
 	"cybercalc/internal/middleware"
 	"cybercalc/internal/models"
+
+	"github.com/lib/pq"
 )
 
 type PartnerHandlers struct {
@@ -25,6 +27,9 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		 WHERE ap.partner_id=p.id AND a.status='active' AND CURRENT_DATE BETWEEN a.valid_from AND a.valid_until),
 		COALESCE(d.verification_status,'legacy_unverified'),COALESCE(d.inn,''),COALESCE(d.ogrn,''),
 		COALESCE(d.license_number,''),COALESCE(d.license_status,'unknown'),COALESCE(d.institution_status,'unknown'),
+		COALESCE(d.region,''),
+		ARRAY(SELECT DISTINCT a.signature_method FROM agreement_partners ap JOIN agreements a ON a.id=ap.agreement_id
+		 WHERE ap.partner_id=p.id ORDER BY 1),
 		(SELECT count(*) FROM org_units ou WHERE ou.partner_id=p.id),
 		(SELECT count(*) FROM academic_groups ag WHERE ag.partner_id=p.id)
 		FROM partners p
@@ -45,14 +50,16 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 		var p models.Partner
 		var agreementDate sql.NullTime
 		var otherAgreement sql.NullString
+		var signatureMethods pq.StringArray
 		if err := rows.Scan(&p.ID, &p.ITCompanyID, &p.Name, &p.PartnerKind, &p.DirectoryID, &p.AgreementNumber,
 			&agreementDate, &otherAgreement, &p.CreatedAt, &p.AgreementsCount, &p.ActiveAgreementsCount,
 			&p.VerificationStatus, &p.INN, &p.OGRN, &p.LicenseNumber, &p.LicenseStatus, &p.InstitutionStatus,
-			&p.OrgUnitsCount, &p.AcademicGroupsCount); err != nil {
+			&p.Region, &signatureMethods, &p.OrgUnitsCount, &p.AcademicGroupsCount); err != nil {
 			middleware.WriteError(w, http.StatusInternalServerError, "ошибка чтения")
 			return
 		}
 		p.OtherAgreement = otherAgreement.String
+		p.SignatureMethods = []string(signatureMethods)
 		if agreementDate.Valid {
 			date := agreementDate.Time.Format("2006-01-02")
 			p.AgreementDate = &date
@@ -67,8 +74,9 @@ func (h *PartnerHandlers) List(w http.ResponseWriter, r *http.Request, u middlew
 }
 
 type createPartnerRequest struct {
-	DirectoryID      string                 `json:"directory_id"`
-	InitialAgreement *agreementWriteRequest `json:"initial_agreement"`
+	DirectoryID      string                       `json:"directory_id"`
+	InitialAgreement *agreementWriteRequest       `json:"initial_agreement"`
+	AcademicPeriods  []academicPeriodWriteRequest `json:"academic_periods,omitempty"`
 }
 
 func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middleware.AuthUser) {
@@ -103,6 +111,16 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 		return
 	}
 	agreement.ITCompanyID = companyID
+	if len(req.AcademicPeriods) > 20 {
+		middleware.WriteError(w, 400, "не более 20 учебных периодов")
+		return
+	}
+	for index := range req.AcademicPeriods {
+		if err := normalizeAcademicPeriod(&req.AcademicPeriods[index]); err != nil {
+			middleware.WriteError(w, 400, err.Error())
+			return
+		}
+	}
 
 	tx, err := h.DB.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -148,6 +166,16 @@ func (h *PartnerHandlers) Create(w http.ResponseWriter, r *http.Request, u middl
 	if err != nil {
 		middleware.WriteError(w, 409, "не удалось сохранить первое соглашение")
 		return
+	}
+	if len(req.AcademicPeriods) > 0 && partnerKind != "vuz" && partnerKind != "kolledj" {
+		middleware.WriteError(w, 400, "учебные периоды задаются только для вуза или колледжа")
+		return
+	}
+	for _, period := range req.AcademicPeriods {
+		if _, err := insertAcademicPeriod(r.Context(), tx, partnerID, u.ID, period); err != nil {
+			middleware.WriteError(w, 409, err.Error())
+			return
+		}
 	}
 	if err := logAudit(r.Context(), tx, "partner", partnerID, "create", u.ID, "", nil, map[string]interface{}{
 		"directory_id": req.DirectoryID, "agreement_id": agreementID,

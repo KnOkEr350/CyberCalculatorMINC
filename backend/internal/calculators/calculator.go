@@ -36,6 +36,11 @@ type FieldSpec struct {
 	MaxLength int      `json:"max_length,omitempty"`
 	Minimum   float64  `json:"minimum,omitempty"`
 	Maximum   float64  `json:"maximum,omitempty"`
+	// Widget подсказывает интерфейсу специальный элемент ввода поверх
+	// базового типа: specialty - поиск по перечню приказа № 27,
+	// weekly_schedule - время по дням недели, academic_period - учебный
+	// период партнёра. Серверная проверка по-прежнему опирается на Type.
+	Widget string `json:"widget,omitempty"`
 }
 
 const (

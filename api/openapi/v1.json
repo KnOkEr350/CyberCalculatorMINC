@@ -1367,6 +1367,19 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "planning"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/teaching-payouts": {
@@ -2778,6 +2791,114 @@
           }
         }
       }
+    },
+    "/api/partners/{partner_id}/academic-periods": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PartnerID"
+        }
+      ],
+      "get": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AcademicPeriodWriteRequest"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/academic-periods/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "put": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AcademicPeriodWriteRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/mentors/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ID"
+        }
+      ],
+      "put": {
+        "tags": [
+          "directories"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateMentorRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "directories"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSONSuccess"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2956,7 +3077,8 @@
         "type": "object",
         "properties": {
           "directory_id": true,
-          "initial_agreement": true
+          "initial_agreement": true,
+          "academic_periods": true
         },
         "additionalProperties": false
       },
@@ -3132,7 +3254,11 @@
         "type": "object",
         "properties": {
           "partner_id": true,
-          "full_name": true
+          "full_name": true,
+          "last_name": true,
+          "first_name": true,
+          "middle_name": true,
+          "position": true
         },
         "additionalProperties": false
       },
@@ -3184,7 +3310,10 @@
           "okz_code": true,
           "it_experience_days": true,
           "experience_document_reference": true,
-          "record_status": true
+          "record_status": true,
+          "is_teacher": true,
+          "training_directions": true,
+          "partner_ids": true
         },
         "additionalProperties": false
       },
@@ -4157,6 +4286,19 @@
           "partner_id": true
         },
         "additionalProperties": false
+      },
+      "AcademicPeriodWriteRequest": {
+        "x-go-struct": {
+          "file": "backend/internal/handlers/academic_periods.go",
+          "name": "academicPeriodWriteRequest"
+        },
+        "type": "object",
+        "properties": {
+          "title": true,
+          "starts_on": true,
+          "ends_on": true
+        },
+        "additionalProperties": false
       }
     },
     "requestBodies": {
@@ -4717,6 +4859,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/CopyPlanToFactRequest"
+            }
+          }
+        }
+      },
+      "AcademicPeriodWriteRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicPeriodWriteRequest"
             }
           }
         }
